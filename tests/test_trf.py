@@ -5,7 +5,10 @@ format by column and misplaced fields fail silently or produce wrong pairings.
 """
 
 import pytest
+from tests.conftest import fixture
 
+from chess_results.parse import parse_pairings, parse_starting_rank
+from chess_results.tournament import Tournament
 from chess_results.trf import TrfError, to_trf
 
 
@@ -80,3 +83,40 @@ class TestTournamentFile:
     def test_unfinished_games_are_refused(self, british):
         with pytest.raises(TrfError, match="have no result"):
             to_trf(british, after=7)
+
+
+@pytest.fixture(scope="module")
+def five_rounds():
+    """Rounds 1-5, every game resulted, so the file can actually be written."""
+    event = Tournament(id="1452107", name="five")
+    event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
+    for rnd in range(1, 6):
+        event.add_round(parse_pairings(fixture(f"british2026_champ_r{rnd}.html"), rnd))
+    return event
+
+
+class TestRoundIsClamped:
+    """A round beyond the last one played must not widen the file.
+
+    Unclamped, ``after=99`` padded every player line with empty round columns
+    and wrote ``XXR 100``, which a pairing engine reads as a 100-round event.
+    """
+
+    def test_out_of_range_matches_the_last_round(self, five_rounds):
+        assert to_trf(five_rounds, after=99, total_rounds=9) == to_trf(five_rounds, after=5, total_rounds=9)
+
+    def test_player_lines_do_not_grow(self, five_rounds):
+        widest = max(
+            len(ln)
+            for ln in to_trf(five_rounds, after=99, total_rounds=9).splitlines()
+            if ln.startswith("001")
+        )
+        assert widest == 139
+
+    def test_xxr_is_not_inflated(self, five_rounds):
+        assert "XXR 6" in to_trf(five_rounds, after=99)
+
+    def test_the_clamp_is_reported_in_errors_too(self, played):
+        """The complaint names the real last round, not the one asked for."""
+        with pytest.raises(TrfError, match=r"rounds 1-7"):
+            to_trf(played, after=99)

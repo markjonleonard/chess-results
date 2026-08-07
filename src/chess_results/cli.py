@@ -27,6 +27,17 @@ def _fetch(args: argparse.Namespace) -> Tournament:
     )
 
 
+def _round(args: argparse.Namespace, event: Tournament) -> int:
+    """The round to report on, clamped to the rounds the tournament actually has.
+
+    ``--after 123`` on a seven-round event means "as it stands now", not a round
+    that does not exist, so it must not reach the heading or the scoring.
+    """
+    if args.after is None:
+        return event.last_round
+    return max(1, min(args.after, event.last_round))
+
+
 def _points(value: float | None) -> str:
     if value is None:
         return "-"
@@ -57,7 +68,7 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
 def cmd_standings(args: argparse.Namespace) -> int:
     event = _fetch(args)
-    after = args.after or event.last_round
+    after = _round(args, event)
     print(f"{event.name or event.id} — after round {after}")
     for rank, player in enumerate(event.ranking_order(after), start=1):
         print(
@@ -70,7 +81,7 @@ def cmd_standings(args: argparse.Namespace) -> int:
 def cmd_colours(args: argparse.Namespace) -> int:
     """Print the colour and float history that drives the next round's pairings."""
     event = _fetch(args)
-    after = args.after or event.last_round
+    after = _round(args, event)
     print(f"{event.name or event.id} — colour and float history after round {after}")
     print(f"{'Pts':>4} {'No':>4}  {'Name':<32} {'Colours':<10} {'Floats':<10} Due")
     for player in event.ranking_order(after):
@@ -150,13 +161,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="chess-results", description=__doc__, parents=[_shared()])
     sub = parser.add_subparsers(dest="command", required=True)
 
-    for name, handler, help_text in (
-        ("dump", cmd_dump, "write the whole tournament as JSON"),
-        ("standings", cmd_standings, "print the cross-round standings"),
-        ("colours", cmd_colours, "print colour and float histories"),
-        ("unfinished", cmd_unfinished, "list games without a result"),
+    for name, aliases, handler, help_text in (
+        ("dump", (), cmd_dump, "write the whole tournament as JSON"),
+        ("standings", (), cmd_standings, "print the cross-round standings"),
+        ("colours", ("colors",), cmd_colours, "print colour and float histories"),
+        ("unfinished", (), cmd_unfinished, "list games without a result"),
     ):
-        child = sub.add_parser(name, help=help_text, parents=[_shared(defaults=False)])
+        child = sub.add_parser(name, aliases=list(aliases), help=help_text, parents=[_shared(defaults=False)])
         child.add_argument("tournament_id", help="chess-results tournament id, e.g. 1452107")
         if name == "dump":
             child.add_argument("-o", "--output", help="write JSON here instead of stdout")

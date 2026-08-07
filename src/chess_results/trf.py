@@ -153,7 +153,9 @@ def to_trf(
     ``total_rounds`` becomes the ``XXR`` line -- the engine needs it to know
     whether it is pairing the final round, which changes the colour rules.
     """
-    after = after if after is not None else event.last_round
+    # Clamped: a round beyond the last one played would pad every player line
+    # with empty round columns and inflate XXR, which a pairing engine misreads.
+    after = event.last_round if after is None else max(1, min(after, event.last_round))
     unfinished = [
         (rnd, p)
         for rnd in range(1, after + 1)

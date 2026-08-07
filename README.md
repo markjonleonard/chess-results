@@ -27,8 +27,8 @@ Requires Python 3.10 or newer.
 
 ## Finding your tournament
 
-Every tournament on chess-results has a number. Open the event in your browser
-and it is the digits in the address bar:
+Every tournament on chess-results has a number, which appears in the address bar
+when you open the event:
 
 ```
 https://chess-results.com/tnr1452107.aspx
@@ -50,7 +50,10 @@ chess-results dump 1452107 -o event.json     # everything, as a data file
 ```
 
 Add `--after N` to any of them to see the tournament as it stood after a
-particular round, rather than as it stands now.
+particular round, rather than as it stands now. Ask for a round the tournament
+has not reached and you get the latest one.
+
+`colors` is accepted as a synonym for `colours`.
 
 ### standings
 
