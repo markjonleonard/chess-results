@@ -1,2 +1,178 @@
-# chess-results-
-chess-results.com scraper in Python 3
+# chess-results
+
+Look up a chess tournament on [chess-results.com](https://chess-results.com) and
+get the results back as text you can read, or as data you can work with.
+
+For each player it collects who they played, which colour they had, whether they
+floated up or down, and whether they took a bye — the things you need to follow a
+Swiss tournament, or to work out what the next round's pairings should be.
+
+> **Early days.** This works and is tested against real tournaments, but it has
+> not been released, has no automated builds yet, and has only been used against
+> a handful of events. Expect rough edges, and expect commands and options to
+> change. If you are relying on it for something that matters, check its answers
+> against the tournament's own pages.
+
+## Install
+
+Not on PyPI yet — install from a clone:
+
+```bash
+git clone https://github.com/markjonleonard/chess-results
+cd chess-results
+pip install -e .
+```
+
+Requires Python 3.10 or newer.
+
+## Finding your tournament
+
+Every tournament on chess-results has a number. Open the event in your browser
+and it is the digits in the address bar:
+
+```
+https://chess-results.com/tnr1452107.aspx
+                             ^^^^^^^
+```
+
+That number is what you pass to every command below. The examples all use
+`1452107`, the 2026 British Championship.
+
+## Command line
+
+Four commands. Each takes a tournament number.
+
+```bash
+chess-results standings 1452107              # who is winning
+chess-results colours 1452107                # colour and float history
+chess-results unfinished 1452107             # games still being played
+chess-results dump 1452107 -o event.json     # everything, as a data file
+```
+
+Add `--after N` to any of them to see the tournament as it stood after a
+particular round, rather than as it stands now.
+
+### standings
+
+Rank, score, starting number, title and name.
+
+```
+$ chess-results standings 1452107 --after 6
+2026 British Chess Championships: Championship — after round 6
+   1    5    2  GM  Adams, Michael
+   2    5    3  GM  Royal, Shreyas
+   3    5    4  IM  Grieve, Harry
+   4    5    6  IM  Bazakutsa, Svyatoslav
+   5   4½    7  IM  Harvey, Marcus R
+   6   4½    9  IM  Czopor, Maciej
+```
+
+### colours
+
+What the next round's pairing turns on: the colours each player has had, whether
+they floated up (`U`) or down (`D`) in each round, and which colour they are due
+next.
+
+```
+$ chess-results colours 1452107 --after 6
+2026 British Chess Championships: Championship — colour and float history after round 6
+ Pts   No  Name                             Colours    Floats     Due
+   5    2  Adams, Michael                   WBWBWB     ------     W (mild)
+   5    3  Royal, Shreyas                   BWBWWB     ----U-     W (mild)
+   5    4  Grieve, Harry                    WBWBWB     ------     W (mild)
+   5    6  Bazakutsa, Svyatoslav            WBWWBW     ----D-     B (absolute)
+  4½    7  Harvey, Marcus R                 BWBWBW     ------     B (mild)
+   …
+   4    1  Mcshane, Luke J                  BWBWBW     ------     B (mild)
+```
+
+A player due a colour "absolutely" must get it in the next round; "mild" means
+it is only a preference.
+
+### unfinished
+
+The games in the current round that have no result yet, with the scores each
+player brought into the round.
+
+```
+$ chess-results unfinished 1452107
+round 6: 6 game(s) still unfinished
+  bd2    Mcshane, Luke J (4) vs Waldhausen Gordon, Frederick (4)
+  bd18   Yao, Lan (3) vs Cancedda-Dupuis, Livio (3)
+  bd20   Balaji, Aaravamudhan (3) vs Fellowes, Billy (3)
+  bd25   Toma, Katarzyna (2½) vs Kanyamarala, Trisha (2½)
+  bd44   Terler, Bohdan (1½) vs Elgar, Tim (1½)
+  bd50   Varnam, Liam D (1) vs Vaddhireddy, Sai (1)
+```
+
+## From Python
+
+The same information, as objects:
+
+```python
+from chess_results import ChessResults
+
+event = ChessResults().tournament(1452107)           # 2026 British Championship
+mcshane = event.players["Mcshane, Luke J"]
+
+mcshane.score(after=6)                              # 4.0
+"".join(c.value for c in mcshane.colours(after=6))  # 'bwbwbw'
+mcshane.colour_preference(after=6)                  # (Colour.BLACK, Preference.MILD)
+```
+
+As on the command line, `after=N` pins a figure to a round; leave it off and you
+get everything scraped so far.
+
+## Predicting the next round
+
+The library can write your tournament out in the file format that FIDE pairing
+engines read, so a program like
+[bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) can work out
+what the next round's pairings ought to be. See `examples/predict_next_round.py`.
+
+It gets most pairings right and can get all of them right, but it cannot know who
+has quietly withdrawn — and one player leaving changes the pairings for everyone
+below them. Treat a prediction as a good guess, not an announcement.
+
+## A note on byes
+
+chess-results removes bye and "not paired" rows from a round's page as soon as
+the next round is published. Anything reading only those pages will miss byes
+taken in earlier rounds and score those players a point light. This library reads
+the crosstable as well and puts the missing rounds back, so the scores it reports
+agree with the tournament's published totals.
+
+## Being a good guest
+
+chess-results is a free service run for the chess community. This library pauses
+between requests, remembers pages it has already fetched so it does not ask
+twice, and identifies itself. Please leave those defaults alone unless you have a
+reason, and do not point it at large numbers of tournaments at once.
+
+## How it works
+
+[DESIGN.md](DESIGN.md) covers the internals: how the pages are parsed, how
+caching decides what to keep, how byes are recovered, and how the pairing
+predictions were tested.
+
+## Getting help
+
+If something looks wrong, please
+[open an issue](https://github.com/markjonleonard/chess-results/issues) and
+include the tournament number and the command you ran — that is usually enough to
+reproduce it. Tournaments vary more than you would expect in which columns they
+publish, so the most likely cause is a column layout this tool has not seen before.
+
+Bug reports and pull requests are both welcome.
+
+## What is planned
+
+[TODO.md](TODO.md) is the working list, roughly in the order things are worth
+doing.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). That covers this code only. It says nothing about
+chess-results.com's data or its terms of use, which are the site's to set; check
+them before pointing this at anything at scale. Not affiliated with
+chess-results.com. Please use it gently.
