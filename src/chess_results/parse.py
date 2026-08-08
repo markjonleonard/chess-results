@@ -35,6 +35,9 @@ _LEGEND = re.compile(r"(\*+\))\s*([A-Z][^.]{3,200}\.)")
 #: Wording chess-results uses for a player pinned to one board all event.
 _FIXED_BOARD = "fixed board"
 
+#: The site's own name, which every page title is prefixed with.
+_TITLE_PREFIX = re.compile(r"^Chess-Results Server\s+Chess-results\.com\s*-\s*", re.IGNORECASE)
+
 
 def clean_name(text: str) -> str:
     """Strip footnote markers and collapse whitespace in a player name."""
@@ -355,12 +358,24 @@ def parse_crosstable(html: str) -> dict[int, list[CrosstableEntry]]:
 
 
 def parse_tournament_name(html: str) -> str | None:
-    """Best-effort extraction of the tournament name from any page."""
+    """The tournament's name, as printed above the table.
+
+    Every view heads the page with the tournament name in the first ``h2``, and
+    names the view itself in a second one ("Starting rank", "Pairings/Results").
+    Reading the first heading of *any* level instead picks up the ``h3``
+    server-load banner that chess-results prints above the name on tournaments
+    more than five days old, and a round page's ``h3`` date line below it.
+
+    Falls back to the page title, which carries the same name behind the site's
+    own prefix -- but truncated, so it is a fallback and not the first choice.
+    """
     soup = BeautifulSoup(html, "html.parser")
-    for tag in soup.find_all(["h1", "h2", "h3"]):
+    for tag in soup.find_all("h2"):
         text = _text(tag)
         if text:
             return text
+    if soup.title:
+        return _TITLE_PREFIX.sub("", _text(soup.title)) or None
     return None
 
 

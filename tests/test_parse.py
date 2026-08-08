@@ -2,7 +2,14 @@ import pytest
 from tests.conftest import fixture
 
 from chess_results.models import PlayKind
-from chess_results.parse import clean_name, parse_pairings, parse_points, parse_result, parse_starting_rank
+from chess_results.parse import (
+    clean_name,
+    parse_pairings,
+    parse_points,
+    parse_result,
+    parse_starting_rank,
+    parse_tournament_name,
+)
 
 
 @pytest.mark.parametrize(
@@ -114,6 +121,46 @@ class TestStartingRank:
 
     def test_footnote_markers_are_stripped(self, entries):
         assert any(e.name == "Hebden, Mark L" for e in entries)
+
+
+class TestTournamentName:
+    """The name is the first ``h2``, never the first heading of any level.
+
+    chess-results prints a server-load banner in an ``h3`` above the name once a
+    tournament is more than five days old, and a round page carries its date in
+    another ``h3`` below. Both are headings, and neither is the tournament. The
+    view names itself in an ``h2`` too ("Pairings/Results", "Starting rank"),
+    which is why the first of them is the one to take.
+    """
+
+    BRITISH = "2026 British Chess Championships: Championship"
+    FROME = "Frome Chess Congress 2026 - Open"
+
+    @pytest.mark.parametrize(
+        "page",
+        [
+            "british2026_champ_startingrank.html",
+            "british2026_champ_r1.html",
+            "british2026_champ_crosstable.html",
+        ],
+    )
+    def test_every_view_yields_the_same_name(self, page):
+        """Each of these pages heads a different second ``h2``."""
+        assert parse_tournament_name(fixture(page)) == self.BRITISH
+
+    @pytest.mark.parametrize("page", ["frome2026_open_r1.html", "frome2026_open_crosstable.html"])
+    def test_the_server_load_banner_is_not_the_name(self, page):
+        assert parse_tournament_name(fixture(page)) == self.FROME
+
+    def test_falls_back_to_the_page_title_without_the_site_prefix(self):
+        html = "<title>Chess-Results Server Chess-results.com - Frome Chess Congress 2026 - Open</title>"
+        assert parse_tournament_name(html) == self.FROME, "a name may contain ' - ' itself"
+
+    def test_a_title_without_the_prefix_is_kept_whole(self):
+        assert parse_tournament_name("<title>Some Other Congress</title>") == "Some Other Congress"
+
+    def test_no_heading_and_no_title_is_none(self):
+        assert parse_tournament_name("<html><body><p>nothing here</p></body></html>") is None
 
 
 class TestRoundNotYetPaired:

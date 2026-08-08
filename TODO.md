@@ -15,6 +15,12 @@ Open work on chess-results, roughly in the order it is worth doing.
 
 ## Correctness and coverage
 
+- [x] **`parse_tournament_name` returned the server-load banner.** Fixed 2026-08-08. It took
+      the first heading of any level; chess-results prints an `h3` banner above the name once
+      a tournament is more than five days old, so every Frome section came back as "Note: To
+      reduce the server load...". The name is the first `h2`, with the page title (minus the
+      site's prefix) as a fallback. The existing Frome fixtures already reproduced it.
+
 - [ ] **Forfeits are untested against real pages.** No fixture in the repo contains one.
       `parse_result` has unit tests for `"+ -"` / `"- +"`, but the crosstable's forfeit
       branch in `_crosstable_cell` (`54b+`, `54b-`) has *no* coverage at all — it was
