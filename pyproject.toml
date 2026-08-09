@@ -59,4 +59,7 @@ line-length = 110
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+# ANN, D and S are deliberately absent: a test suite is meant to be full of bare
+# asserts, and `--select ALL` reports 549 findings of which only a handful were
+# ever actionable.
+select = ["E", "F", "I", "UP", "B", "SIM", "RET", "C4", "PTH", "RUF"]

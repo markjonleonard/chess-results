@@ -199,9 +199,10 @@ class Tournament:
         withdrawn = set()
         for name, player in self.players.items():
             plays = [player.play(rnd) for rnd in window]
-            if all(p is not None and p.kind is PlayKind.UNPAIRED for p in plays):
-                withdrawn.add(name)
-            elif not any(p.kind is not PlayKind.UNPAIRED for p in player.plays):
+            # The two signals the docstring describes, named so they stay distinguishable.
+            trailing_unpaired = all(p is not None and p.kind is PlayKind.UNPAIRED for p in plays)
+            never_played = not any(p.kind is not PlayKind.UNPAIRED for p in player.plays)
+            if trailing_unpaired or never_played:
                 withdrawn.add(name)
         return withdrawn
 

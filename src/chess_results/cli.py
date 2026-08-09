@@ -7,6 +7,7 @@ import dataclasses
 import json
 import os
 import sys
+from pathlib import Path
 from typing import TypeVar
 
 from . import __version__
@@ -137,8 +138,7 @@ def cmd_dump(args: argparse.Namespace) -> int:
     }
     text = json.dumps(payload, indent=2, ensure_ascii=False)
     if args.output:
-        with open(args.output, "w", encoding="utf-8") as handle:
-            handle.write(text)
+        Path(args.output).write_text(text, encoding="utf-8")
         print(f"wrote {args.output}", file=sys.stderr)
     else:
         print(text)

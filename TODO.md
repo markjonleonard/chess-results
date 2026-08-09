@@ -58,11 +58,21 @@ Open work on chess-results, roughly in the order it is worth doing.
       - `cli.main` returned `Any` from `args.func(args)`, argparse being untyped.
 
       No behaviour changed and no test needed amending; 165 still pass.
-- [ ] **Widen the ruff ruleset.** Currently `E, F, I, UP, B`. Adding `SIM, RET, C4, PTH,
-      RUF` is real value at low noise. Leave `ANN`, `D` and `S` off for `tests/` — a test
-      suite is meant to be full of bare asserts. `--select ALL` reports 549, of which only
-      four were ever actionable and two are threshold warnings worth keeping suppressed
-      (`parse_pairings` complexity 11, `trf.py` 7 returns).
+- [x] **Widen the ruff ruleset.** Done 2026-08-09. `select` is now `E, F, I, UP, B, SIM,
+      RET, C4, PTH, RUF`; `ANN`, `D` and `S` stay off. The whole tree — src, tests and
+      examples — produced exactly two findings, both fixed rather than suppressed, so no
+      per-file ignores were needed:
+
+      - `PTH123` in `cli.py`: `open(args.output, "w")` is now
+        `Path(args.output).write_text(text, encoding="utf-8")`, which drops the `with`
+        block entirely.
+      - `SIM114` in `tournament.likely_withdrawn`: two `if` arms both adding to the same
+        set. Combined behind two named conditions, `trailing_unpaired` and `never_played`,
+        which is what the docstring already called the two signals.
+
+      The two threshold warnings noted here as worth suppressing — `parse_pairings`
+      complexity 11 and `trf.py`'s 7 returns — come from `C901` and `PLR`, neither of which
+      is in the selection, so they never fire.
 - [ ] **Raise CLI coverage.** 86% overall, but `cli.py` sits at 45% while the library
       modules are 80–98%. The command handlers are barely exercised.
 - [ ] **No retry or backoff.** A transient 5xx from chess-results aborts a whole scrape.
