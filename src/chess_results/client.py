@@ -12,6 +12,8 @@ import time
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from .cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, SettledRounds, cached_session
 from .models import CrosstableEntry, Pairing, PlayKind, StartingRankEntry
@@ -37,6 +39,33 @@ ART_CROSSTABLE = 5
 #: Safety net for round auto-detection.
 MAX_ROUNDS = 30
 
+#: Transient conditions worth retrying: rate limiting, and the 5xx family a busy
+#: chess-results returns under load. 404 and the rest of 4xx are answers, not faults.
+RETRY_STATUSES = (429, 500, 502, 503, 504)
+#: Attempts after the first, and the urllib3 backoff factor between them. Three
+#: retries at 0.5 waits about 0.5s, 1s then 2s -- long enough to outlast a blip,
+#: short enough that a genuinely dead server fails the scrape promptly.
+RETRIES = 3
+BACKOFF_FACTOR = 0.5
+
+
+def retrying_adapter(retries: int = RETRIES, backoff_factor: float = BACKOFF_FACTOR) -> HTTPAdapter:
+    """An ``HTTPAdapter`` that retries idempotent requests on transient failures.
+
+    A scrape is one request per round plus the crosstable and the starting rank,
+    so a single 503 on a twelve-round event would otherwise lose the whole run.
+    ``Retry`` honours a ``Retry-After`` header when the server sends one.
+    """
+    return HTTPAdapter(
+        max_retries=Retry(
+            total=retries,
+            status_forcelist=RETRY_STATUSES,
+            allowed_methods=frozenset(["GET", "HEAD"]),
+            backoff_factor=backoff_factor,
+            respect_retry_after_header=True,
+        )
+    )
+
 
 def settled_rounds(event: Tournament) -> set[int]:
     """Rounds that will not change again, so their pages can be cached hard.
@@ -60,6 +89,10 @@ class ChessResults:
     (or a ``requests_cache.CachedSession`` as ``session``) to cache responses.
     With caching on, pages are given lifetimes according to how volatile they
     are: see :mod:`chess_results.cache`.
+
+    Sessions built here retry transient failures; ``retries=0`` turns that off.
+    A session passed in as ``session`` is left alone — its transport policy
+    belongs to whoever made it.
     """
 
     def __init__(
@@ -72,10 +105,17 @@ class ChessResults:
         cache: bool = False,
         cache_dir: str | None = None,
         live_ttl: int = LIVE_TTL,
+        retries: int = RETRIES,
+        backoff_factor: float = BACKOFF_FACTOR,
     ) -> None:
+        supplied = session is not None
         if session is None and cache:
             session = cached_session(cache_dir)
         self.session = session or requests.Session()
+        if not supplied and retries:
+            adapter = retrying_adapter(retries, backoff_factor)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
         self.session.headers.setdefault("User-Agent", USER_AGENT)
         self.base_url = base_url.rstrip("/")
         self.delay = delay

@@ -82,6 +82,23 @@ One caveat: requests-cache fixes a response's expiry when it stores it, so a
 round that settles between runs is fetched once more before it takes the long
 lifetime. It costs one extra fetch per round, once.
 
+## Retries
+
+A scrape is one request per round plus the crosstable and the starting rank, so a
+single transient failure part-way through loses the whole run. Sessions the client
+builds carry a urllib3 `Retry` on 429 and the 5xx family — three attempts, backing
+off about 0.5s, 1s, 2s, honouring `Retry-After`. GET and HEAD only, and 404 is
+excluded on purpose: that is chess-results answering that no such tournament
+exists, not failing.
+
+```python
+ChessResults(retries=0)                       # opt out
+ChessResults(session=mine)                    # your session, your transport policy
+```
+
+A session you pass in is never mounted over — `client.retrying_adapter()` is
+exported so you can mount it yourself if you want it.
+
 ## Predicting the next round
 
 `chess_results.trf` writes FIDE TRF(x), which

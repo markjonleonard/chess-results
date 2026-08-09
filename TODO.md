@@ -73,10 +73,22 @@ Open work on chess-results, roughly in the order it is worth doing.
       The two threshold warnings noted here as worth suppressing — `parse_pairings`
       complexity 11 and `trf.py`'s 7 returns — come from `C901` and `PLR`, neither of which
       is in the selection, so they never fire.
-- [ ] **Raise CLI coverage.** 86% overall, but `cli.py` sits at 45% while the library
-      modules are 80–98%. The command handlers are barely exercised.
-- [ ] **No retry or backoff.** A transient 5xx from chess-results aborts a whole scrape.
-      A `requests` `HTTPAdapter` with `Retry` on 429/5xx would fix it.
+- [x] **Raise CLI coverage.** Done 2026-08-09, and the figure recorded here was long out of
+      date: `cli.py` was at **86%**, not 45%, and the project at 91%, not 86% — the
+      `pairings`/`--limit` work had brought its own tests. Covering `dump` (both the stdout
+      and the `-o` file paths) and `unfinished` (empty, populated and truncated) takes
+      `cli.py` to **97%** and the project to **94%**, 182 tests. What is left uncovered is
+      `_fetch`, which needs a live client, and three process-level lines: `_silence_stdout`,
+      the `BrokenPipeError` arm and `__main__`. Not worth testing.
+- [x] **No retry or backoff.** Done 2026-08-09. `client.retrying_adapter` mounts a urllib3
+      `Retry` on 429 and the 5xx family — 3 attempts, `backoff_factor` 0.5, so roughly 0.5s,
+      1s, 2s — for GET and HEAD only, honouring `Retry-After`. 404 is deliberately not in
+      the list: it is chess-results answering that no such tournament exists.
+
+      Only sessions `ChessResults` builds itself are mounted on. A session passed in as
+      `session` keeps its own transport policy, which would otherwise be silently
+      overwritten — the adapter is exported so such a caller can mount it themselves.
+      `retries=0` opts out. Covered by `tests/test_client.py` without touching the network.
 - [ ] **Cross-check the crosstable instead of only filling gaps.** `add_crosstable`
       currently trusts the pairing pages wherever they have data. It could compare and warn
       on disagreement, which would catch a parse bug in either view.

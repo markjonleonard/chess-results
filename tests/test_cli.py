@@ -1,4 +1,5 @@
 import argparse
+import json
 import re
 
 import pytest
@@ -10,8 +11,10 @@ from chess_results.cli import (
     _state,
     build_parser,
     cmd_colours,
+    cmd_dump,
     cmd_pairings,
     cmd_standings,
+    cmd_unfinished,
     main,
 )
 from chess_results.models import Play, PlayKind
@@ -213,3 +216,61 @@ class TestRoundIsClamped:
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
         cmd_colours(argparse.Namespace(after=123, limit=None))
         assert "after round 7" in capsys.readouterr().out.splitlines()[0]
+
+
+class TestDump:
+    """``dump`` is the one command that writes a file rather than printing."""
+
+    def _run(self, event, monkeypatch, output):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
+        return cmd_dump(argparse.Namespace(output=output))
+
+    def test_without_an_output_the_json_goes_to_stdout(self, british, monkeypatch, capsys):
+        assert self._run(british, monkeypatch, None) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["id"] == "1452107"
+        assert len(payload["players"]) == 108
+        assert sorted(payload["rounds"]) == [str(rnd) for rnd in range(1, 8)]
+
+    def test_with_an_output_it_writes_the_file_and_says_so_on_stderr(
+        self, british, monkeypatch, capsys, tmp_path
+    ):
+        path = tmp_path / "event.json"
+        assert self._run(british, monkeypatch, str(path)) == 0
+        captured = capsys.readouterr()
+        # The path goes to stderr so that stdout stays pipeable when it is used.
+        assert captured.out == ""
+        assert captured.err.strip() == f"wrote {path}"
+        assert json.loads(path.read_text(encoding="utf-8"))["id"] == "1452107"
+
+    def test_names_survive_the_round_trip_unescaped(self, british, monkeypatch, tmp_path):
+        """ensure_ascii=False, so accented names stay readable in the file."""
+        path = tmp_path / "event.json"
+        self._run(british, monkeypatch, str(path))
+        assert "\\u" not in path.read_text(encoding="utf-8")
+
+
+class TestUnfinished:
+    """What is still being played in the latest round."""
+
+    def _run(self, event, monkeypatch, capsys, limit=None):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
+        assert cmd_unfinished(argparse.Namespace(limit=limit)) == 0
+        return capsys.readouterr().out.splitlines()
+
+    def test_a_paired_round_with_no_results_lists_every_board(self, british, monkeypatch, capsys):
+        lines = self._run(british, monkeypatch, capsys)
+        assert lines[0] == "round 7: 51 game(s) still unfinished"
+        assert len(lines) == 52
+        assert lines[1].startswith("  bd1   ")
+
+    def test_each_row_names_both_players_and_their_scores(self, british, monkeypatch, capsys):
+        assert re.fullmatch(r"  bd1\s+\S.*\(\S+\) vs .*\(\S+\)", self._run(british, monkeypatch, capsys)[1])
+
+    def test_a_settled_round_says_so_instead(self, british_played_out, monkeypatch, capsys):
+        assert self._run(british_played_out, monkeypatch, capsys) == ["round 8: all results in"]
+
+    def test_limit_truncates_and_says_how_many_are_left(self, british, monkeypatch, capsys):
+        lines = self._run(british, monkeypatch, capsys, limit=3)
+        assert len(lines) == 5
+        assert lines[-1] == "… and 48 more"
