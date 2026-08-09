@@ -16,10 +16,11 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from .cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, SettledRounds, cached_session
-from .models import CrosstableEntry, Pairing, PlayKind, StartingRankEntry
+from .models import CrosstableEntry, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
 from .parse import (
     has_pairings,
     parse_crosstable,
+    parse_not_paired,
     parse_pairings,
     parse_starting_rank,
     parse_tournament_name,
@@ -35,6 +36,9 @@ ART_ROUND_PAIRINGS = 2
 #: Starting-rank crosstable: every player's every round, keyed by starting
 #: number. The only view that keeps byes after the round has been superseded.
 ART_CROSSTABLE = 5
+#: "not paired": one row per player who has missed a round. Linked in the nav
+#: bar, undocumented, and it ignores ``rd`` -- there is only ever the current one.
+ART_NOT_PAIRED = 40
 
 #: Safety net for round auto-detection.
 MAX_ROUNDS = 30
@@ -205,6 +209,19 @@ class ChessResults:
     def crosstable(self, tournament_id: str | int) -> dict[int, list[CrosstableEntry]]:
         """The starting-rank crosstable, keyed by starting number."""
         return parse_crosstable(self.fetch(tournament_id, ART_CROSSTABLE, expire_after=self.live_ttl))
+
+    def not_paired(self, tournament_id: str | int) -> list[NotPairedEntry]:
+        """Everyone who has missed a round, from the "not paired" page.
+
+        One request against one page, where the same facts otherwise mean mining
+        the whole crosstable. It cannot tell a requested bye from an absence,
+        though, so the crosstable stays the authority on what a missed round was
+        worth: see :func:`chess_results.parse.parse_not_paired`.
+
+        Given the live lifetime because a marker appears as soon as its round is
+        paired.
+        """
+        return parse_not_paired(self.fetch(tournament_id, ART_NOT_PAIRED, expire_after=self.live_ttl))
 
     def tournament(
         self,

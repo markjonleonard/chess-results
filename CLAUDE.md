@@ -85,11 +85,23 @@ upload, and the crosstable still has the byes.
 
 The crosstable is not the only survivor. **`art=40`, linked in the nav bar as "not paired",
 lists every player who has missed a round** as a grid of one column per round, marking `*`
-not paired, `bye` a bye, `0F` a forfeit. Nothing parses it yet, but it is the most direct
-statement of the same facts and is a page rather than a whole crosstable to mine. What it
-does *not* do is warn you in advance: a marker appears only for a round that has already
-been paired, so it cannot help predict the round you are about to pair. See TODO.md for the
-full survey of `art=1`, `art=9` and `art=40`.
+not paired, `bye` a bye, `0F` a forfeit. `parse_not_paired` reads it. It is the most direct
+statement of the same facts and is a page rather than a whole crosstable to mine, but it
+does not replace the crosstable, for two reasons:
+
+- **A requested bye is indistinguishable from an absence.** Only a *pairing-allocated*
+  (full-point) bye prints `bye`; a requested half-point bye prints `*`, exactly as a
+  withdrawal does. Verified both ways against the crosstables — every one of Frome's round 1
+  half-point byes appears as `*`, and every British `bye` marker is a full point. Since
+  `likely_withdrawn` deliberately does not treat a requested bye as a signal, feeding this
+  page to it naively would invent a withdrawal for every half-point bye in the event.
+- **A forfeit lists only the player who defaulted.** The opponent takes the point without
+  appearing at all.
+
+It also does not warn you in advance: a marker appears only for a round that has already
+been paired, so it cannot help predict the round you are about to pair. And it ignores
+`&rd=` — there is one page, always current, so no mid-event state can be recovered
+afterwards. See TODO.md for the full survey of `art=1`, `art=9` and `art=40`.
 
 **An unpaired round still renders a table.** It contains only the withdrawn players' "not
 paired" rows. Round auto-detection therefore requires at least one `PlayKind.GAME`; without
@@ -158,6 +170,12 @@ anything asserting on real `to_trf` output, which refuses unfinished games) and
 `frome_round_one` (a congress section with a different column layout and twelve half-point
 byes; built from its round page alone — feeding the Frome crosstable to `parse_starting_rank`
 yields comma-less names that will not join).
+
+`british2026_champ_notpaired_final.html` and `frome2026_open_notpaired.html` are `art=40`
+captures, both taken after their events finished. That page ignores `&rd=`, so a mid-event
+capture of it cannot be made after the fact — there is only ever the current one. The two
+together are what prove the requested-bye limitation above: Frome has half-point byes and
+the British does not.
 
 To add a fixture, save the page with `curl -sL` (the `-L` matters) and `lan=1`.
 

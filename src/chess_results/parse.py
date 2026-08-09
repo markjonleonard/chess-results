@@ -17,7 +17,16 @@ import re
 
 from bs4 import BeautifulSoup, Tag
 
-from .models import Colour, CrosstableEntry, Pairing, PlayerRef, PlayKind, StartingRankEntry
+from .models import (
+    Absence,
+    Colour,
+    CrosstableEntry,
+    NotPairedEntry,
+    Pairing,
+    PlayerRef,
+    PlayKind,
+    StartingRankEntry,
+)
 
 #: chess-results marks its data tables with this class.
 TABLE_CLASS = "CRs1"
@@ -389,3 +398,72 @@ def parse_tournament_name(html: str) -> str | None:
 def has_pairings(html: str) -> bool:
     """True if the page contains a pairing table (used to detect the last round)."""
     return any(_header_row(t, "Bo.") for t in _data_tables(html))
+
+
+def parse_not_paired(html: str) -> list[NotPairedEntry]:
+    """Parse the "not paired" page (``art=40``).
+
+    One row per player who has missed at least one round, one column per round,
+    marked ``*`` not paired, ``bye`` a bye and ``0F`` a forfeit. It is the most
+    direct statement chess-results makes of who was absent when: a single page,
+    where the same facts otherwise have to be mined out of the whole crosstable.
+
+    Two things it does *not* tell you, both verified against the crosstables for
+    the 2026 British Championship and the 2026 Frome Open:
+
+    - **A requested bye is indistinguishable from an absence.** Only a
+      pairing-allocated (full-point) bye prints ``bye``. A requested half-point
+      bye prints ``*``, exactly as a withdrawal does -- every one of Frome's
+      round 1 half-point byes appears here as ``*``. The crosstable keeps the
+      distinction (``-½`` against ``-1``), so it remains the authority for
+      *what* a missed round was worth; this page is the authority for *which*
+      rounds were missed. Withdrawal inference cares about the difference: a
+      player sitting out on a half point has not withdrawn.
+    - **Only the defaulting player is listed for a forfeit.** Their opponent
+      collects the point without appearing here at all.
+
+    It also ignores ``&rd=``: there is one page, always current, so a past
+    round's view of it cannot be recovered afterwards.
+    """
+    for table in _data_tables(html):
+        found = _header_row(table, "SNo")
+        if found and any(_ROUND_COLUMN.fullmatch(h) for h in found[0]):
+            break
+    else:
+        return []
+
+    header, header_idx = found
+    cols = _Columns(header)
+    i_no = cols.index("SNo")
+    i_name = cols.index("Name")
+    if i_no is None or i_name is None:
+        return []
+    # The title is the unlabelled column immediately before the name.
+    i_title = i_name - 1 if i_name and not header[i_name - 1] else None
+    rounds = {i: int(match.group(1)) for i, h in enumerate(header) if (match := _ROUND_COLUMN.fullmatch(h))}
+
+    entries: list[NotPairedEntry] = []
+    for row in table.select("tr")[header_idx + 1 :]:
+        cells = [_text(c) for c in _cells(row)]
+        if len(cells) != len(header):
+            continue
+        start_no = _int(cols.value(cells, i_no))
+        if start_no is None:
+            continue
+        markers: dict[int, Absence] = {}
+        for i, rnd in rounds.items():
+            try:
+                markers[rnd] = Absence(cells[i].strip())
+            except ValueError:  # blank, or a marker this page has not shown before
+                continue
+        entries.append(
+            NotPairedEntry(
+                start_no=start_no,
+                name=clean_name(cols.value(cells, i_name)),
+                rating=_int(cols.value(cells, cols.index("Rtg"))),
+                title=cols.value(cells, i_title) or None,
+                federation=cols.value(cells, cols.index("FED")) or None,
+                markers=markers,
+            )
+        )
+    return entries

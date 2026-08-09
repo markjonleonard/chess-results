@@ -8,8 +8,10 @@
 
 from .client import ChessResults
 from .models import (
+    Absence,
     Colour,
     CrosstableEntry,
+    NotPairedEntry,
     Pairing,
     Play,
     Player,
@@ -18,13 +20,15 @@ from .models import (
     Preference,
     StartingRankEntry,
 )
-from .parse import parse_crosstable, parse_pairings, parse_starting_rank
+from .parse import parse_crosstable, parse_not_paired, parse_pairings, parse_starting_rank
 from .tournament import Tournament
 
 __all__ = [
+    "Absence",
     "ChessResults",
     "Colour",
     "CrosstableEntry",
+    "NotPairedEntry",
     "Pairing",
     "Play",
     "PlayKind",
@@ -34,6 +38,7 @@ __all__ = [
     "StartingRankEntry",
     "Tournament",
     "parse_crosstable",
+    "parse_not_paired",
     "parse_pairings",
     "parse_starting_rank",
 ]

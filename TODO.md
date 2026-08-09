@@ -149,9 +149,29 @@ Open work on chess-results, roughly in the order it is worth doing.
 
 ## Scope
 
+- [x] **Parse `art=40`.** Done 2026-08-09: `parse_not_paired` returns `NotPairedEntry`
+      rows (starting number, name, rating, title, federation, and a round → `Absence`
+      marker map), `ChessResults.not_paired()` fetches it on the live TTL, and
+      `tests/test_not_paired.py` covers both a British and a Frome capture.
+
+      **It does not replace the crosstable, which is not what this item assumed.** Checked
+      both ways against the crosstables: only a *pairing-allocated* full-point bye prints
+      `bye`, while a *requested* half-point bye prints `*`, exactly as a withdrawal does.
+      Every one of Frome's round 1 half-point byes appears as `*`; every British `bye`
+      marker is a full point. `likely_withdrawn` deliberately does not count a requested bye
+      as a signal, so feeding this page to it naively would invent a withdrawal for every
+      half-point bye. A forfeit is one-sided too: only the defaulting player is listed, not
+      the opponent who took the point.
+
+      So the division is: this page is the authority on *which* rounds were missed and is
+      one request rather than a whole crosstable to mine; the crosstable stays the authority
+      on *what* a missed round was worth. Deliberately **not** wired into
+      `add_crosstable` or `likely_withdrawn` — changing the withdrawal inference needs its
+      own validation run against rounds 7–9, which is the next thing to do here.
 - [ ] **More views.** Parsed today: round pairings (`art=2`), starting rank (`art=0`),
-      starting-rank crosstable (`art=5`). Not parsed: alphabetical (`art=3`), ranking
-      crosstable (`art=4`, same data as 5 but keyed by current rank). Three were inspected
+      starting-rank crosstable (`art=5`), not paired (`art=40`). Not parsed: alphabetical
+      (`art=3`), ranking crosstable (`art=4`, same data as 5 but keyed by current rank).
+      Three were inspected
       on 2026-08-09 against the 2026 British and are described here so nobody has to fetch
       them again:
 
@@ -167,12 +187,13 @@ Open work on chess-results, roughly in the order it is worth doing.
         `Rd. | Bo. | SNo | (title) | Name | Rtg | FED | Pts. | Res. | K | rtg+/- | PGN`,
         with a downloadable PGN per game. A round the player missed appears explicitly as a
         `not paired` row with opponent SNo `-2`. One request per player, so 108 for a field.
-      - **`art=40` — "not paired".** Undocumented and not linked from the views we already
-        use; found in the nav bar as *not paired*. The most interesting of the three: a
-        single page listing only the players who missed at least one round, as a grid of one
-        column per round with three markers — `*` not paired, `bye` a bye, `0F` a forfeit,
-        blank played. Fourteen rows covered the whole British field. It ignores `&rd=`.
-        Worth parsing as a cheaper, more explicit source than mining the crosstable.
+      - **`art=40` — "not paired".** Parsed as of 2026-08-09 by `parse_not_paired`, with
+        `ChessResults.not_paired()` to fetch it; see the item below for what it turned out
+        to be worth. Undocumented and not linked from the views we already use; found in the
+        nav bar as *not paired*. A single page listing only the players who missed at least
+        one round, as a grid of one column per round with three markers — `*` not paired,
+        `bye` a bye, `0F` a forfeit, blank played. Fifteen rows covered the whole British
+        field once the event finished. It ignores `&rd=`.
 - [ ] **Locale decimal commas.** The crosstable prints points as `1,5`. We do not currently
       read that column — the round-by-round tokens use `½` — but any ranking view will hit
       it, and `parse_points` does not handle a comma.

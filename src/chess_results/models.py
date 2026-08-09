@@ -110,6 +110,52 @@ class CrosstableEntry:
     forfeit: bool = False
 
 
+class Absence(str, Enum):
+    """A marker printed in a round column of the "not paired" page (``art=40``).
+
+    Deliberately *not* a :class:`PlayKind`. ``UNPLAYED`` covers both a genuine
+    absence and a requested half-point bye, which the page renders identically --
+    see :func:`chess_results.parse.parse_not_paired`.
+    """
+
+    #: The player did not occupy the round: withdrawn, a late entry, or a
+    #: requested bye. The page does not say which.
+    UNPLAYED = "*"
+    #: A pairing-allocated bye, worth a full point.
+    BYE = "bye"
+    #: The player forfeited: a game they were paired for but did not play.
+    FORFEIT = "0F"
+
+
+@dataclass(frozen=True)
+class NotPairedEntry:
+    """One player's row on the "not paired" page (``art=40``).
+
+    A single page listing everyone who missed at least one round, as a grid of
+    one column per round. Unlike the crosstable it names the player as well as
+    numbering them, so it joins to a name-keyed field without the starting-rank
+    list.
+    """
+
+    start_no: int
+    name: str
+    rating: int | None = None
+    title: str | None = None
+    federation: str | None = None
+    #: Round number to the marker printed for it. Rounds the player played are
+    #: simply absent.
+    markers: dict[int, Absence] = field(default_factory=dict)
+
+    def rounds(self, marker: Absence) -> set[int]:
+        """The rounds carrying one particular marker."""
+        return {rnd for rnd, value in self.markers.items() if value is marker}
+
+    @property
+    def missed(self) -> set[int]:
+        """Every round the player did not play, whatever the reason."""
+        return set(self.markers)
+
+
 @dataclass
 class Play:
     """What one player did in one round."""
