@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -236,15 +235,44 @@ class Player:
 
     @property
     def fixed_board_number(self) -> int | None:
-        """The board this player is pinned to, if any.
+        """The board this player is currently pinned to, if any.
 
         chess-results flags *that* a player has a fixed board but never says
-        which, so it is read back from the boards they actually played on.
+        which, so it has to be read back from the boards they actually played
+        on, and it is a guess however it is done.
+
+        The guess is the longest unbroken run of one board number, most recent
+        run winning a tie. A pin does not necessarily start at round 1 -- Hebden
+        played boards 23, 18 and 1 in the 2026 British before settling on 14 from
+        round 4 -- so the run is what identifies it. Taking the *modal* board
+        instead, as this used to, gets that case wrong for exactly as long as it
+        matters: after round 4, when the pin has just begun and every board has
+        been played once, the mode is 23.
+
+        A round with no board of its own, a bye, is skipped rather than treated
+        as breaking the run.
+
+        It cannot be made exact. Two rounds on the same board by coincidence look
+        just like a pin, and a pin the arbiter could not honour one round looks
+        like two shorter ones. Treat it as presentational, which is all a fixed
+        board ever is: it constrains where a game is played, never who plays whom.
         """
         if not self.fixed_board:
             return None
-        boards = [p.board for p in self.plays if p.counts_for_colour and p.board]
-        return Counter(boards).most_common(1)[0][0] if boards else None
+        played = sorted(self.plays, key=lambda p: p.round)
+        boards = [p.board for p in played if p.counts_for_colour and p.board]
+
+        best: int | None = None
+        best_length = 0
+        run_board: int | None = None
+        run_length = 0
+        for board in boards:
+            run_length = run_length + 1 if board == run_board else 1
+            run_board = board
+            # >= so that the most recent of equally long runs wins.
+            if run_length >= best_length:
+                best, best_length = board, run_length
+        return best
 
     def score(self, after: int | None = None) -> float:
         """Points scored, counting only rounds with a known result."""

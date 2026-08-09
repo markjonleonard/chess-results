@@ -134,9 +134,22 @@ Open work on chess-results, roughly in the order it is worth doing.
       crosstable has no `points_before`, so `_floats` cannot run on it. Only the
       bye-is-a-downfloat rule applies. The pre-round score could be reconstructed by summing
       earlier rounds if float history for those players ever matters.
-- [ ] **`fixed_board_number` takes the modal board.** Fine for Hebden (boards 23, 18, 1,
-      then 14 every round after), but it is a heuristic. chess-results flags *that* a player
-      has a fixed board and never says which.
+- [x] **`fixed_board_number` takes the modal board.** Fixed 2026-08-09 — and the modal board
+      was not merely inexact, it was **wrong on the one real example we have, at the moment
+      it mattered**. Hebden's pin starts at round 4 (boards 23, 18, 1, then 14 for the rest),
+      and after round 4 every board has been played exactly once, so `Counter.most_common`
+      returns the first inserted: **23**. It only came right at round 5. Round 4 is precisely
+      when you would ask — predicting round 5 from a live round 4.
+
+      Now the longest unbroken run of one board number, most recent run winning a tie, which
+      identifies a pin from the round it begins. A bye is skipped rather than treated as
+      breaking the run. Rounds 1-3 still answer 1, the last board played, because nothing in
+      them can know 14 is coming.
+
+      It stays a heuristic and the docstring now says why: two rounds on one board by
+      coincidence look like a pin, and a pin the arbiter could not honour one round looks
+      like two shorter ones. chess-results only ever flags *that* a player is pinned. The
+      tests fail against the old implementation, which is the point of them.
 
 ## Open questions from the round 7 validation
 

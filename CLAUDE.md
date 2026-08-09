@@ -214,8 +214,10 @@ Two more things that have already caused wrong conclusions:
   software afterwards. Always compare predicted against actual pairings *as sets* — comparing
   by board position produces a badly misleading match rate.
 - **Fixed boards** (`player.fixed_board`, flagged by a `*)` footnote and its legend) pin a
-  player to one board all event, usually on access grounds. Presentational only; it never
-  changes who plays whom.
+  player to one board, usually on access grounds. Presentational only; it never changes who
+  plays whom. *Which* board is never published, so `fixed_board_number` guesses it from the
+  longest unbroken run of one board number — and note the pin need not start at round 1:
+  Hebden played 23, 18 and 1 before settling on 14 from round 4.
 
 - **Withdrawals are the whole error term, from round 3 on.** Given the correct field,
   bbpPairings reproduces the 2026 British Championship exactly: rounds 7 and 8 at 51 of 51,

@@ -8,8 +8,9 @@ board numbers cannot be derived from scores.
 """
 
 import pytest
-from tests.conftest import fixture
+from tests.conftest import _british, fixture
 
+from chess_results.models import Colour, Play, Player, PlayKind
 from chess_results.parse import parse_legend, parse_pairings, split_name_marker
 
 
@@ -62,3 +63,56 @@ class TestPlayer:
 
     def test_players_without_a_fixed_board_have_no_number(self, british):
         assert british.players["Adams, Michael"].fixed_board_number is None
+
+
+class TestWhichBoardTheyArePinnedTo:
+    """chess-results says a player has a fixed board and never which one, so it
+    is read back from the boards they played. Hebden's pin starts at round 4:
+    boards 23, 18, 1, then 14 for the rest of the event."""
+
+    def _hebden(self, upto):
+        event = _british(crosstable=True, rounds=upto)
+        return event.players["Hebden, Mark L"]
+
+    @pytest.mark.parametrize("upto", [4, 5, 6, 7])
+    def test_the_pin_is_found_from_the_round_it_starts(self, upto):
+        """The modal board answered 23 at round 4 and only came right at round 5.
+
+        That is precisely when the answer matters -- a live prediction of the
+        next round -- so the run, not the count, is what identifies the pin.
+        """
+        assert self._hebden(upto).fixed_board_number == 14
+
+    def test_before_the_pin_begins_there_is_nothing_better_than_the_last_board(self):
+        """Rounds 1-3 are 23, 18, 1: no run, and no way to know 14 is coming."""
+        assert self._hebden(3).fixed_board_number == 1
+
+    def test_a_long_run_beats_a_more_recent_short_one(self):
+        player = Player(name="x", fixed_board=True)
+        for rnd, board in enumerate([7, 7, 7, 7, 9], start=1):
+            player.plays.append(
+                Play(round=rnd, kind=PlayKind.GAME, colour=Colour.WHITE, board=board, opponent="y")
+            )
+        assert player.fixed_board_number == 7
+
+    def test_the_most_recent_wins_a_tie(self):
+        player = Player(name="x", fixed_board=True)
+        for rnd, board in enumerate([3, 3, 8, 8], start=1):
+            player.plays.append(
+                Play(round=rnd, kind=PlayKind.GAME, colour=Colour.WHITE, board=board, opponent="y")
+            )
+        assert player.fixed_board_number == 8
+
+    def test_a_bye_does_not_break_the_run(self):
+        """A round with no board of its own says nothing about the pin."""
+        player = Player(name="x", fixed_board=True)
+        for rnd, board in enumerate([5, 5], start=1):
+            player.plays.append(
+                Play(round=rnd, kind=PlayKind.GAME, colour=Colour.WHITE, board=board, opponent="y")
+            )
+        player.plays.append(Play(round=3, kind=PlayKind.PAIRING_BYE, score=1.0))
+        player.plays.append(Play(round=4, kind=PlayKind.GAME, colour=Colour.WHITE, board=5, opponent="y"))
+        assert player.fixed_board_number == 5
+
+    def test_a_player_who_has_played_nothing_yet_has_no_number(self):
+        assert Player(name="x", fixed_board=True).fixed_board_number is None
