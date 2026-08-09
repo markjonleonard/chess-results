@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from tests.conftest import fixture
 
@@ -32,6 +34,48 @@ def test_parse_result(text, expected):
 @pytest.mark.parametrize("text,expected", [("4½", 4.5), ("½", 0.5), ("0", 0.0), ("3", 3.0), ("", None)])
 def test_parse_points(text, expected):
     assert parse_points(text) == expected
+
+
+class TestPointsInTheServerLocale:
+    """chess-results writes points two ways in the same tournament: the
+    round-by-round cells use ½, but a total is rendered in the server's locale
+    and comes back with a decimal comma."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [("4,5", 4.5), ("1,5", 1.5), ("0,5", 0.5), ("6,0", 6.0), (",5", 0.5), ("10,5", 10.5)],
+    )
+    def test_a_decimal_comma_is_read(self, text, expected):
+        assert parse_points(text) == expected
+
+    def test_both_spellings_of_the_same_score_agree(self):
+        assert parse_points("4,5") == parse_points("4½") == 4.5
+
+    def test_whole_numbers_are_unaffected(self):
+        assert parse_points("7") == 7.0
+
+    def test_it_used_to_return_none_which_reads_as_no_result(self):
+        """The regression this guards: unparseable is how an unplayed round looks."""
+        assert parse_points("4,5") is not None
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("0,5 - 0,5", (0.5, 0.5, False)),
+            ("1,0 - 0,0", (1.0, 0.0, False)),
+            ("0,0 - 1,0", (0.0, 1.0, False)),
+        ],
+    )
+    def test_a_result_written_with_commas_is_not_split_into_four_numbers(self, text, expected):
+        """Untreated, "0,5 - 0,5" reads as 0, 5, 0, 5 and scores the game 0-5."""
+        assert parse_result(text) == expected
+
+    def test_every_total_in_a_real_crosstable_parses(self):
+        """The TB1 column of the British crosstable, which is where commas appear."""
+        totals = re.findall(r">(\d+,\d)<", fixture("british2026_champ_crosstable.html"))
+        assert len(totals) >= 50
+        assert all(parse_points(t) is not None for t in totals)
+        assert {parse_points(t) % 1 for t in totals} == {0.5}
 
 
 def test_clean_name_strips_footnote_markers():

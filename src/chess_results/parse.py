@@ -72,8 +72,18 @@ def parse_legend(html: str) -> dict[str, str]:
 
 
 def parse_points(text: str) -> float | None:
-    """Parse a points cell such as ``4½``, ``½`` or ``0``."""
-    text = text.strip().replace("½", ".5")
+    """Parse a points cell such as ``4½``, ``½``, ``0`` or ``4,5``.
+
+    chess-results writes points two different ways in the same tournament. The
+    round-by-round cells use ``½``, but a total is rendered in the server's
+    locale and comes back with a decimal comma -- the crosstable's ``TB1``
+    column prints 4½ as ``4,5``. A comma here is always a decimal separator: no
+    points value is ever large enough to need a thousands separator.
+
+    Returns None for anything unparseable, which includes the empty cell of a
+    round not yet played.
+    """
+    text = text.strip().replace("½", ".5").replace(",", ".")
     if not text:
         return None
     if text.startswith("."):
@@ -89,8 +99,12 @@ def parse_result(text: str) -> tuple[float | None, float | None, bool]:
 
     Handles ``1 - 0``, ``0 - 1``, ``½ - ½``, forfeits rendered with ``+``/``-``,
     a single value (byes) and the empty string (not yet played).
+
+    Decimal commas are normalised first, as in :func:`parse_points`. Left alone,
+    ``0,5 - 0,5`` tokenises as four separate numbers and the first two -- 0 and
+    5 -- would be read as the two players' scores.
     """
-    text = text.strip()
+    text = text.strip().replace(",", ".")
     if not text:
         return None, None, False
     if text.startswith("+"):

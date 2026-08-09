@@ -281,9 +281,25 @@ Open work on chess-results, roughly in the order it is worth doing.
         one round, as a grid of one column per round with three markers — `*` not paired,
         `bye` a bye, `0F` a forfeit, blank played. Fifteen rows covered the whole British
         field once the event finished. It ignores `&rd=`.
-- [ ] **Locale decimal commas.** The crosstable prints points as `1,5`. We do not currently
-      read that column — the round-by-round tokens use `½` — but any ranking view will hit
-      it, and `parse_points` does not handle a comma.
+- [x] **Locale decimal commas.** Done 2026-08-09. `parse_points` now normalises a decimal
+      comma, so `4,5` reads as 4.5 exactly as `4½` does. A comma is always a decimal
+      separator here — no points value is ever large enough to need a thousands separator.
+
+      `parse_result` had the same latent bug and is fixed with it: untreated, `0,5 - 0,5`
+      tokenises as the four numbers 0, 5, 0, 5, and the first two would be taken as the two
+      players' scores, recording the game as 0-5. Neither failure was loud — `parse_points`
+      returned `None`, which is indistinguishable from a round not yet played.
+
+      Still latent in the pipeline: nothing we parse today emits commas, the round pages
+      using `½` throughout. The tests therefore sweep every `n,n` string in the British
+      crosstable (the `TB1` column) to prove the fix works on real data.
+- [ ] **Read the crosstable's published totals and check them.** `TB1` is the tournament's
+      own total for each player, printed with the decimal comma the item above now handles,
+      and nothing reads it. CLAUDE.md says to "verify score changes against the crosstable's
+      published totals; all 108 must agree" — which is a manual instruction that
+      `Tournament.disagreements` could now carry automatically. It is the strongest check
+      available on the scoring, since it compares against what the arbiter published rather
+      than against another of our own parsers.
 - [ ] **Team tournaments are untested.** Unknown whether `parse_pairings` copes with a team
       pairing table; do not claim support until there is a fixture.
 
