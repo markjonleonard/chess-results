@@ -32,6 +32,10 @@ class Tournament:
     name: str | None = None
     players: dict[str, Player] = field(default_factory=dict)
     rounds: dict[int, list[Pairing]] = field(default_factory=dict)
+    #: What a pairing-allocated bye is worth here. FIDE-rated Swisses award a
+    #: full point; some congresses award a half. The crosstable always prints a
+    #: PAB as 1, so a round recovered from it has to be rescored by this.
+    bye_value: float = 1.0
     #: Where a round page and the crosstable contradicted each other. Filled by
     #: :meth:`add_crosstable`; empty on every fixture in the suite.
     disagreements: list[Disagreement] = field(default_factory=list)
@@ -155,7 +159,9 @@ class Tournament:
                     kind=entry.kind,
                     colour=entry.colour,
                     opponent=names.get(entry.opponent_no) if entry.opponent_no else None,
-                    score=entry.score,
+                    # The crosstable prints every pairing-allocated bye as a full
+                    # point, whatever the tournament actually awards for one.
+                    score=self.bye_value if entry.kind is PlayKind.PAIRING_BYE else entry.score,
                     forfeit=entry.forfeit,
                     # A player given a bye is treated as a downfloater, as in add_round.
                     float_direction="D" if entry.kind is PlayKind.PAIRING_BYE else None,
@@ -295,7 +301,10 @@ def _compare(
         ("kind", play.kind, entry.kind),
         ("colour", play.colour, entry.colour),
         ("opponent", play.opponent, opponent),
-        ("score", play.score, entry.score),
+        # Not the bye: the crosstable prints a pairing-allocated bye as a full
+        # point even where the tournament awards a half, which is a difference of
+        # convention, not a contradiction.
+        *([] if play.kind is PlayKind.PAIRING_BYE else [("score", play.score, entry.score)]),
         # Booleans are never absent, so these always compare.
         ("forfeit", play.forfeit, entry.forfeit),
     ]

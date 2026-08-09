@@ -152,6 +152,12 @@ def to_trf(
 
     ``total_rounds`` becomes the ``XXR`` line -- the engine needs it to know
     whether it is pairing the final round, which changes the colour rules.
+
+    ``bye_value`` is written as a ``BBU`` line, bbpPairings' extension for what a
+    pairing-allocated bye is worth. It defaults to the tournament's own value and
+    is omitted for the standard full point, which needs no declaration. Getting
+    this wrong is not cosmetic: bbpPairings recomputes every player's score from
+    their results and refuses the file outright if the total disagrees.
     """
     # Clamped: a round beyond the last one played would pad every player line
     # with empty round columns and inflate XXR, which a pairing engine misreads.
@@ -181,6 +187,7 @@ def to_trf(
         for rank, player in enumerate(ranking, start=1)
     )
     lines.append(f"XXR {total_rounds or after + 1}")
-    if bye_value is not None:
+    bye_value = event.bye_value if bye_value is None else bye_value
+    if bye_value != 1.0:
         lines.append(f"BBU {bye_value:4.1f}")
     return "\n".join(lines) + "\n"

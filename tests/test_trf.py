@@ -120,3 +120,56 @@ class TestRoundIsClamped:
         """The complaint names the real last round, not the one asked for."""
         with pytest.raises(TrfError, match=r"rounds 1-7"):
             to_trf(played, after=99)
+
+
+class TestNonStandardByeValues:
+    """bbpPairings recomputes every score from the results and refuses a file
+    whose totals disagree, so what a bye is worth has to be stated."""
+
+    def _event(self, bye_value):
+        from chess_results.parse import parse_crosstable
+
+        finished = {6: "british2026_champ_r6_finished", 7: "british2026_champ_r7_finished"}
+        event = Tournament(id="1452107", name="British", bye_value=bye_value)
+        event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
+        for rnd in range(1, 9):
+            name = finished.get(rnd, f"british2026_champ_r{rnd}")
+            event.add_round(parse_pairings(fixture(f"{name}.html"), rnd, bye_value=bye_value))
+        event.add_crosstable(parse_crosstable(fixture("british2026_champ_crosstable_final.html")))
+        return event
+
+    def test_a_bye_recovered_from_the_crosstable_takes_the_tournament_value(self):
+        """The crosstable prints every pairing-allocated bye as 1, whatever is awarded.
+
+        All four of the British byes reach the history this way -- their round
+        pages had been superseded -- so before this was honoured the bye value
+        had no effect on that event at all.
+        """
+        half = self._event(0.5)
+        cooke = half.players["Cooke, Suzy G"]
+        assert cooke.play(8).score == 0.5
+        assert cooke.play(8).from_crosstable
+
+    def test_the_full_point_case_is_unchanged(self):
+        assert self._event(1.0).players["Cooke, Suzy G"].play(8).score == 1.0
+
+    def test_the_score_moves_with_it(self):
+        full = self._event(1.0).players["Cooke, Suzy G"].score(8)
+        assert self._event(0.5).players["Cooke, Suzy G"].score(8) == full - 0.5
+
+    def test_bbu_declares_a_half_point_bye(self):
+        lines = to_trf(self._event(0.5), after=8, total_rounds=9).splitlines()
+        assert "BBU  0.5" in lines
+
+    def test_a_full_point_bye_needs_no_declaration(self):
+        """It is the default, and a redundant line is one more thing to get wrong."""
+        lines = to_trf(self._event(1.0), after=8).splitlines()
+        assert not [line for line in lines if line.startswith("BBU")]
+
+    def test_an_explicit_argument_still_wins(self):
+        lines = to_trf(self._event(1.0), after=8, bye_value=0.5).splitlines()
+        assert "BBU  0.5" in lines
+
+    def test_the_convention_difference_is_not_reported_as_a_disagreement(self):
+        """The crosstable's 1.0 against the tournament's 0.5 is convention, not conflict."""
+        assert self._event(0.5).disagreements == []

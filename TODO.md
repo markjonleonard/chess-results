@@ -155,11 +155,36 @@ Open work on chess-results, roughly in the order it is worth doing.
       mid-event state cannot be recovered after the fact. Settle it by fetching `art=40`
       during a live round and checking whether a `*` ever appears for a round that is not yet
       paired. Until then, treat 132/152 as the ceiling.
-- [ ] **Check the TRF we emit against TRF-2026.** `trf.py` writes TRF(x). bbpPairings'
-      README says it targets TRF-2026 and reads TRF(bx)/TRF(x) for backwards compatibility,
-      including its own extension codes (`BBW`/`BBD` for point values, acceleration via
-      `XXA`). Worth confirming we are not relying on an inference that a stricter reader
-      would reject.
+- [x] **Check the TRF we emit against TRF-2026.** Done 2026-08-09, and it found a real bug.
+      Checked empirically rather than by reading alone: bbpPairings has a check mode
+      (`--dutch file -c`) that parses a whole tournament and lists discrepancies.
+
+      **The format is accepted.** Rounds 1-8 of the British parse cleanly, exit 0, no
+      complaint about columns, `XXR`, the `Z` entries used for withdrawals, or the `+`/`-`
+      forfeit characters. We rely on no inference a stricter reader would reject: no `XXA`
+      (no acceleration, which is the Dutch default anyway), and no `BBW`/`BBD`, which are
+      only needed for a non-standard win/draw value.
+
+      **But `bye_value` was doing nothing.** The crosstable prints every pairing-allocated
+      bye as a full point whatever the event awards, and `add_crosstable` copied that
+      straight through — so on the British, where all four byes reach the history from the
+      crosstable because their round pages had been superseded, `--bye-value 0.5` changed
+      no score at all. Fixed: `Tournament.bye_value` rescores a recovered bye, the client
+      passes it through, and `to_trf` now emits the `BBU` line automatically when the value
+      is not a full point. This matters because bbpPairings recomputes every score from the
+      results and **refuses the file** when the totals disagree — which is exactly what it
+      did when handed the old output with a `BBU 0.5` line: *"The score for player 104 does
+      not match the game results."* The crosstable's convention is deliberately exempt from
+      the disagreement check; it is a difference of convention, not a contradiction.
+- [ ] **bbpPairings' checker disagrees with the published round 2 on six boards.** Found
+      2026-08-09 while running the check above. Rounds 1 and 3-8 reproduce exactly; round 2
+      differs on boards involving players 79-108, the tail of the field. Player 108 (Brown)
+      is in the differing set and did not play round 1, so the likely explanation is how a
+      late entrant's missing round 1 is represented — we write `0000 - Z`, a zero-point bye,
+      and the arbiter's software may treat a late entry differently. Worth settling, since
+      it is the one place the engine and the published pairings diverge on a field we
+      believe to be correct. Do not confuse it with the withdrawal error term, which is a
+      different thing entirely.
 
 ## Scope
 

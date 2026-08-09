@@ -243,7 +243,7 @@ class ChessResults:
         wrong for anyone who took one.
         """
         html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
-        event = Tournament(id=str(tournament_id), name=parse_tournament_name(html))
+        event = Tournament(id=str(tournament_id), name=parse_tournament_name(html), bye_value=bye_value)
         event.add_starting_rank(parse_starting_rank(html))
 
         wanted = range(1, rounds + 1) if isinstance(rounds, int) else rounds

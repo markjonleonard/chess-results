@@ -205,8 +205,13 @@ labels and the words "bye" and "not paired".
 - **Byes are ambiguous in the source.** An opponent shown as `bye` is a
   pairing-allocated bye, worth a full point in a FIDE Swiss but a half at some
   congresses — hence `bye_value`. `not paired` with a value shown is a requested
-  bye and keeps whatever the page displays. The crosstable is unambiguous, and
-  is the authority wherever a round page has dropped the row.
+  bye and keeps whatever the page displays. The crosstable is unambiguous about
+  *what happened*, and is the authority wherever a round page has dropped the
+  row, but it prints every pairing-allocated bye as a full point regardless of
+  what the event awards, so a bye recovered from it is rescored to
+  `Tournament.bye_value`. That is not cosmetic: `to_trf` declares a non-standard
+  value as bbpPairings' `BBU` line, and the engine recomputes every player's
+  score from their results and refuses the file if the totals disagree.
 - **Be polite.** The client sleeps between requests (`delay`, default 1s), only
   pacing requests that actually reach the server, and identifies itself.
 

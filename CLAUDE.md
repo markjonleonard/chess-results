@@ -191,7 +191,17 @@ To add a fixture, save the page with `curl -sL` (the `-L` matters) and `lan=1`.
 ## Pairing prediction
 
 `trf.py` writes FIDE TRF(x), which bbpPairings and JaVaFo read; `examples/predict_next_round.py`
-shells out to bbpPairings. Two things that have already caused wrong conclusions:
+shells out to bbpPairings. `bbpPairings.exe --dutch <file> -c` is a check mode that parses a
+whole tournament and lists discrepancies — use it to verify the format, not just to pair.
+
+**bbpPairings recomputes every player's score from their results and refuses the file if the
+total disagrees.** That makes `bye_value` a correctness matter, not a display option: the
+crosstable prints every pairing-allocated bye as a full point whatever the event awards, so
+a bye recovered from it is rescored to `Tournament.bye_value`, and `to_trf` declares a
+non-standard value as a `BBU` line. Get either half wrong and the engine rejects the file
+outright.
+
+Two more things that have already caused wrong conclusions:
 
 - **Engines emit a set of pairs, not an ordering.** Board numbers come from the arbiter's
   software afterwards. Always compare predicted against actual pairings *as sets* — comparing
