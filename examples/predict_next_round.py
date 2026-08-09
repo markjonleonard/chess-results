@@ -46,6 +46,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="NAME",
         help="player who will not be paired next round",
     )
+    parser.add_argument(
+        "--no-infer-withdrawals",
+        action="store_true",
+        help="do not add players who look to have left the event (see Tournament.likely_withdrawn)",
+    )
     parser.add_argument("--total-rounds", type=int, help="rounds in the tournament (XXR)")
     parser.add_argument("--bye-value", type=float, default=1.0)
     parser.add_argument("--trf", help="keep the generated TRF here")
@@ -83,10 +88,21 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{event.name} — {len(event.players)} players, {event.last_round} rounds scraped", file=sys.stderr)
     apply_assumptions(event, assumptions)
 
+    withdrawn = set(args.withdrawn)
+    if not args.no_infer_withdrawals:
+        inferred = event.likely_withdrawn() - withdrawn
+        if inferred:
+            print(
+                f"inferring {len(inferred)} withdrawal(s) from unpaired rounds: "
+                f"{', '.join(sorted(inferred))}",
+                file=sys.stderr,
+            )
+        withdrawn |= inferred
+
     trf = to_trf(
         event,
         total_rounds=args.total_rounds,
-        withdrawn=set(args.withdrawn),
+        withdrawn=withdrawn,
     )
     trf_path = Path(args.trf) if args.trf else Path(tempfile.mkstemp(suffix=".trf")[1])
     trf_path.write_text(trf)

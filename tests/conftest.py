@@ -37,3 +37,17 @@ def british() -> Tournament:
 def british_rounds_only() -> Tournament:
     """Round pages alone, so tests can show what the crosstable adds."""
     return _british(crosstable=False)
+
+
+@pytest.fixture(scope="session")
+def frome_round_one() -> Tournament:
+    """A congress section after one round, whose field took twelve half-point byes.
+
+    The only fixture with requested byes. Built from the round page alone: there
+    is no starting-rank fixture for Frome, and the crosstable is not a substitute
+    -- its name column omits the comma ("Norris Zack" against the round page's
+    "Norris, Zack"), so joining the two by name silently doubles the field.
+    """
+    event = Tournament(id="frome", name="Frome Chess Congress 2026 - Open")
+    event.add_round(parse_pairings(fixture("frome2026_open_r1.html"), 1))
+    return event

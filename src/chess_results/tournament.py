@@ -166,6 +166,41 @@ class Tournament:
         rnd = rnd or self.last_round
         return [p for p in self.rounds.get(rnd, []) if p.kind is PlayKind.GAME and p.white_score is None]
 
+    def likely_withdrawn(self, after: int | None = None, consecutive: int = 1) -> set[str]:
+        """Players who look to have left the event, for ``to_trf(withdrawn=...)``.
+
+        Withdrawals are the entire error term in pairing prediction: given the
+        right field bbpPairings reproduces a round exactly, and every miss without
+        it is a player who had stopped playing. chess-results never says who has
+        withdrawn, and the round pages delete their "not paired" rows as soon as a
+        later round is paired -- so this reads the crosstable-reconciled histories
+        instead, where the record survives.
+
+        A player is flagged when their last ``consecutive`` rounds are all
+        ``UNPAIRED``, or when they never occupied a round at all (an entrant who
+        never turned up). A *requested* bye is deliberately not a signal: a player
+        sitting out one round on a half point is still in the tournament.
+
+        This is a heuristic and cannot be otherwise. A player who withdraws after
+        the last round we can see leaves no trace to find -- three of the eight
+        absent from round 9 of the 2026 British played round 8 -- and one who is
+        unpaired for a round and returns is a false positive. ``consecutive=1``
+        measured best on rounds 7-9 of that event: 12 of 18 found, 1 false alarm.
+        Raising it trades recall for precision.
+        """
+        after = after if after is not None else self.last_round
+        if after < 1:
+            return set()
+        window = range(max(1, after - consecutive + 1), after + 1)
+        withdrawn = set()
+        for name, player in self.players.items():
+            plays = [player.play(rnd) for rnd in window]
+            if all(p is not None and p.kind is PlayKind.UNPAIRED for p in plays):
+                withdrawn.add(name)
+            elif not any(p.kind is not PlayKind.UNPAIRED for p in player.plays):
+                withdrawn.add(name)
+        return withdrawn
+
 
 def _floats(white_before: float | None, black_before: float | None) -> tuple[str | None, str | None]:
     if white_before is None or black_before is None or white_before == black_before:

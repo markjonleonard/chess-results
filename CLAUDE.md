@@ -25,15 +25,26 @@ The local checkout directory name is incidental — nothing reads it — so it m
 not match.
 
 `pyproject.toml` sets `pythonpath = ["src", "."]`, so pytest resolves imports without an
-install — and the package has not in fact been installed here. Ad-hoc `python -c` and
-`python -m chess_results.cli` invocations therefore need `PYTHONPATH=src`.
+install. The package *is* also installed editable into the global pyenv 3.13.3 — the
+install is one `.pth` in site-packages holding the single line
+`/Users/mark.leonard/repos/personal/chess-results/src`, so `import chess_results` and the
+`chess-results` console script both work from any directory and `PYTHONPATH=src` is
+redundant. Two consequences worth holding on to:
+
+- It resolves to the **working tree**, not a commit: uncommitted edits are live, and
+  checking out another branch silently swaps the code under every project on that
+  interpreter. There is no venv isolating this.
+- Only metadata changes need a re-run of `pip install -e ".[dev]"` — new or changed
+  dependencies, entry points, or a `__version__` bump. Until then `pip show` and
+  `importlib.metadata.version` report the stale version while the imported code is current.
+  Editing modules under `src/chess_results/` needs nothing.
 
 Live smoke test against a real tournament (1452107 is the 2026 British Championship, the
 event the fixtures come from):
 
 ```bash
-python -m chess_results.cli standings 1452107
-python -m chess_results.cli colours 1452107 --after 6
+chess-results standings 1452107              # console script, same as python -m chess_results.cli
+chess-results colours 1452107 --after 6
 ```
 
 ## Architecture
@@ -71,6 +82,14 @@ tracker or changelog, and the Swiss-Manager manuals do not mention it. So this i
 undocumented behaviour — do not go looking for a citation, there isn't one. It is not
 Swiss-Manager losing the data, though: the crosstable and the round pages come from the same
 upload, and the crosstable still has the byes.
+
+The crosstable is not the only survivor. **`art=40`, linked in the nav bar as "not paired",
+lists every player who has missed a round** as a grid of one column per round, marking `*`
+not paired, `bye` a bye, `0F` a forfeit. Nothing parses it yet, but it is the most direct
+statement of the same facts and is a page rather than a whole crosstable to mine. What it
+does *not* do is warn you in advance: a marker appears only for a round that has already
+been paired, so it cannot help predict the round you are about to pair. See TODO.md for the
+full survey of `art=1`, `art=9` and `art=40`.
 
 **An unpaired round still renders a table.** It contains only the withdrawn players' "not
 paired" rows. Round auto-detection therefore requires at least one `PlayKind.GAME`; without
@@ -139,7 +158,22 @@ shells out to bbpPairings. Two things that have already caused wrong conclusions
   player to one board all event, usually on access grounds. Presentational only; it never
   changes who plays whom.
 
-Reproducing round 7 of the 2026 British Championship from rounds 1–6 gives 47 of 52 pairings
-exactly right including colours. The five differences are in the bottom two scoregroups;
-the untested hypothesis is that bbpPairings implements the 2025 Dutch rules while the event
-was paired under an earlier version.
+- **Withdrawals are the whole error term.** Given the correct field, bbpPairings reproduces
+  the 2026 British Championship exactly: rounds 7 and 8 at 51 of 51, round 9 at 50 of 50,
+  colours and bye included. Blind — with no withdrawal information, which is what a live
+  prediction actually has — the same rounds give 37/51, 44/51 and 42/50. Every single miss
+  is a player who had stopped playing and whom the scraper could not see, because the round
+  pages delete the evidence. Do not reach for a rules-version or engine-disagreement
+  explanation for a mismatch until the field has been checked; that hypothesis was
+  entertained once, on a since-retracted "47 of 52" figure that does not reproduce.
+  `Tournament.likely_withdrawn` guesses the field from trailing `UNPAIRED` rounds and takes
+  those three to 39/51, 49/51 and 44/50. It only works on crosstable-reconciled histories:
+  run it against round pages alone and it finds *nobody* for any superseded round, because
+  those are exactly the rows chess-results has deleted.
+
+Predictions made mid-round need a result for every unfinished game, and those assumptions
+dominate the outcome below the top boards. On 2026-08-08, round 9 predicted from a live
+round 8 with ten games filled in as draws got the top 12 boards exactly right, in the
+arbiter's own order, but only 29 of 50 overall — five of the ten filler draws were wrong,
+and each wrong score moves a player into a different scoregroup. Trust the scoregroups whose
+games are settled; say so explicitly about the rest.

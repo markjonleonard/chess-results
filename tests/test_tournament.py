@@ -89,3 +89,59 @@ class TestUnfinished:
 
     def test_a_paired_but_unplayed_round_is_entirely_unfinished(self, british):
         assert len(british.unfinished(rnd=7)) == 51
+
+
+class TestLikelyWithdrawn:
+    """Guessing who has left, since chess-results never says.
+
+    The evidence only survives in the crosstable: a round page deletes its "not
+    paired" rows as soon as a later round is paired, so the signal these read is
+    exactly what ``add_crosstable`` restores.
+    """
+
+    def test_players_unpaired_in_the_latest_round_are_flagged(self, british):
+        assert british.likely_withdrawn(after=6) == {
+            "Badacsonyi, Frankie",
+            "Brown, Stephanie",
+            "Mannion, Steve R",
+        }
+
+    def test_it_defaults_to_the_last_round_scraped(self, british):
+        assert british.likely_withdrawn() == british.likely_withdrawn(after=british.last_round)
+
+    def test_requiring_more_rounds_trades_recall_for_precision(self, british):
+        """Badacsonyi played round 4, so a three-round window no longer flags them."""
+        loose = british.likely_withdrawn(after=6, consecutive=1)
+        strict = british.likely_withdrawn(after=6, consecutive=3)
+        assert strict < loose
+        assert "Badacsonyi, Frankie" in loose - strict
+
+    def test_the_window_cannot_run_off_the_front_of_the_event(self, british):
+        """consecutive=9 at round 6 must not silently flag the whole field."""
+        assert british.likely_withdrawn(after=6, consecutive=9) == british.likely_withdrawn(
+            after=6, consecutive=6
+        )
+
+    def test_before_any_round_nobody_is_withdrawn(self, british):
+        assert british.likely_withdrawn(after=0) == set()
+
+    def test_the_signal_is_lost_without_the_crosstable(self, british, british_rounds_only):
+        """Round pages alone find nobody once the round has been superseded.
+
+        Round 5's "not paired" rows were deleted when round 6 was paired, so the
+        round pages carry no trace of three players who had already stopped. The
+        crosstable is the only reason this works at all.
+        """
+        assert british_rounds_only.likely_withdrawn(after=5) == set()
+        assert len(british.likely_withdrawn(after=5)) == 3
+
+    def test_a_current_round_still_shows_its_own_unpaired_rows(self, british, british_rounds_only):
+        """The mid-round round-6 capture keeps them, so both views agree there."""
+        assert british_rounds_only.likely_withdrawn(after=6) == british.likely_withdrawn(after=6)
+
+    def test_a_requested_bye_is_not_a_withdrawal(self, frome_round_one):
+        """A half-point bye is a player sitting out one round, not leaving."""
+        assert frome_round_one.likely_withdrawn(after=1) == set()
+        assert any(
+            p.kind is PlayKind.REQUESTED_BYE for pl in frome_round_one.players.values() for p in pl.plays
+        )

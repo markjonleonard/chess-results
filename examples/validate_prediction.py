@@ -48,6 +48,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--engine", required=True, help="path to bbpPairings.exe")
     parser.add_argument("--total-rounds", type=int, help="rounds in the tournament (XXR)")
     parser.add_argument("--bye-value", type=float, default=1.0)
+    parser.add_argument(
+        "--consecutive",
+        type=int,
+        default=1,
+        help="unpaired rounds needed before inferring a withdrawal (default 1)",
+    )
     return parser.parse_args(argv)
 
 
@@ -166,15 +172,33 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\n{len(absent)} player(s) absent from round {rnd}:")
     for name in sorted(absent):
         print(f"    {name}")
+
+    guessed = before.likely_withdrawn(after=rnd - 1, consecutive=args.consecutive)
+    print(
+        f"\ninferred from rounds 1-{rnd - 1} alone: {len(guessed)} flagged, "
+        f"{len(guessed & absent)} correct, {len(guessed - absent)} false, {len(absent - guessed)} missed"
+    )
+    for name in sorted(guessed - absent):
+        print(f"    false alarm: {name} (played round {rnd} after all)")
+    for name in sorted(absent - guessed):
+        print(f"    missed: {name}")
+    inferred = report(
+        f"round {rnd} with inferred withdrawals -- no hindsight:",
+        *predict(before, rnd - 1, args.engine, args.total_rounds, guessed),
+        actual,
+        actual_bye,
+    )
+
     informed = report(
-        f"round {rnd} with those withdrawals supplied:",
+        f"round {rnd} with the true withdrawals supplied:",
         *predict(before, rnd - 1, args.engine, args.total_rounds, absent),
         actual,
         actual_bye,
     )
     print(
-        f"\n{blind}/{len(actual)} exact blind, {informed}/{len(actual)} once withdrawals "
-        "are known. The second figure uses hindsight."
+        f"\n{blind}/{len(actual)} exact blind, {inferred}/{len(actual)} inferred, "
+        f"{informed}/{len(actual)} once withdrawals are known. Only the last uses hindsight; "
+        "the inferred figure is what a live prediction can actually achieve."
     )
     return 0
 

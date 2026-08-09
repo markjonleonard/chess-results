@@ -11,7 +11,9 @@ Open work on chess-results, roughly in the order it is worth doing.
 - [x] **Compare the round 8 prediction against the published pairings.** Done 2026-08-07 with
       `examples/validate_prediction.py`. Rounds 7 and 8 both reproduce **51 of 51 exactly,
       colours and bye included**, once withdrawals are supplied; 37/51 and 44/51 respectively
-      without them. Withdrawals are the entire error term.
+      without them. Withdrawals are the entire error term. Round 9 re-confirmed this on
+      2026-08-09: **50 of 50** with withdrawals, 42/50 blind, and all 8 blind misses trace to
+      the 8 absent players. Three rounds, same result — see the withdrawal-inference item below.
 
 ## Correctness and coverage
 
@@ -60,11 +62,39 @@ Open work on chess-results, roughly in the order it is worth doing.
       withdrawn player the scraper could not see. The earlier "47 of 52" figure does not
       reproduce and has been dropped from the README. Running JaVaFo is no longer needed to
       separate "our data is wrong" from "the engines disagree" — it was the data.
-- [ ] **Infer withdrawals rather than requiring `--withdrawn`.** Now the only source of
-      prediction error. A player who has stopped appearing is detectable from the crosstable
-      (`-0` in the latest rounds) even though the round pages have deleted the evidence.
-      A heuristic — absent from the last N rounds, or `-0` in the most recent — would close
-      most of the 44/51 to 51/51 gap without hindsight.
+- [x] **Infer withdrawals rather than requiring `--withdrawn`.** Done 2026-08-09 as
+      `Tournament.likely_withdrawn`: a player is flagged when their last `consecutive`
+      rounds are all `UNPAIRED`, or when they never occupied a round at all. A *requested*
+      bye is deliberately not a signal. `predict_next_round.py` applies it by default
+      (`--no-infer-withdrawals` opts out); `validate_prediction.py` now scores three ways.
+      Measured on the 2026 British, exact pairings including colours:
+
+      | round | blind | inferred | true field |
+      | --- | --- | --- | --- |
+      | 7 | 37/51 | **39/51** | 51/51 |
+      | 8 | 44/51 | **49/51** | 51/51 |
+      | 9 | 42/50 | **44/50** | 50/50 |
+
+      12 of the 18 absent players found across the three rounds, one false alarm (Elgar,
+      unpaired in round 7 and back in round 8 — and it cost almost nothing: round 8 still
+      scored 49/51). `consecutive=1` beat 2 and 3 on the same data.
+
+- [ ] **The residual withdrawal gap looks irreducible.** `likely_withdrawn` closes 9 of the
+      29 missed pairings above; the rest are players with *no signal to find*. Three of the
+      eight absent from round 9 — Dupuis, Jermy, Majeed — played round 8 in full and simply
+      never came back, so rounds 1–8 contain nothing to detect.
+
+      Checked on 2026-08-09: **no view marks a withdrawal in advance.** `art=1` ranks
+      withdrawn players in place with no marker at all. `art=9` shows a `not paired` row per
+      player, and `art=40` consolidates every absence onto one page — but both record a round
+      that has already been paired. All three name Dupuis, Jermy and Majeed only under round
+      9, which is the round we were trying to predict. So they are contemporaneous, not
+      predictive, and add nothing the crosstable does not already have.
+
+      This is inference from the semantics, not observation: `art=40` ignores `&rd=`, so its
+      mid-event state cannot be recovered after the fact. Settle it by fetching `art=40`
+      during a live round and checking whether a `*` ever appears for a round that is not yet
+      paired. Until then, treat 132/152 as the ceiling.
 - [ ] **Check the TRF we emit against TRF-2026.** `trf.py` writes TRF(x). bbpPairings'
       README says it targets TRF-2026 and reads TRF(bx)/TRF(x) for backwards compatibility,
       including its own extension codes (`BBW`/`BBD` for point values, acceleration via
@@ -74,9 +104,29 @@ Open work on chess-results, roughly in the order it is worth doing.
 ## Scope
 
 - [ ] **More views.** Parsed today: round pairings (`art=2`), starting rank (`art=0`),
-      starting-rank crosstable (`art=5`). Not parsed: ranking (`art=1`), alphabetical
-      (`art=3`), ranking crosstable (`art=4`, same data as 5 but keyed by current rank),
-      player info (`art=9`).
+      starting-rank crosstable (`art=5`). Not parsed: alphabetical (`art=3`), ranking
+      crosstable (`art=4`, same data as 5 but keyed by current rank). Three were inspected
+      on 2026-08-09 against the 2026 British and are described here so nobody has to fetch
+      them again:
+
+      - **`art=1` — ranking list.** One row per player, in rank order, after the latest
+        round; `&rd=N` gives the standing after round N. Columns
+        `Rk. | SNo | (flag) | (title) | Name | Typ | sex | FED | Rtg | TB1 | K | rtg+/-`,
+        where TB1 is the score. It lists withdrawn players in place with their frozen score
+        (Mannion 108th on 0) and **carries no withdrawal marker of any kind**. Note the
+        score is printed with a decimal comma — `6,5` — which is the locale item below.
+      - **`art=9` — player info.** Needs `&snr=<starting number>`; without one it renders an
+        empty shell. Gives a bio table (performance rating, FIDE rtg +/-, club, Ident-Number,
+        Fide-ID, year of birth) and a per-round table
+        `Rd. | Bo. | SNo | (title) | Name | Rtg | FED | Pts. | Res. | K | rtg+/- | PGN`,
+        with a downloadable PGN per game. A round the player missed appears explicitly as a
+        `not paired` row with opponent SNo `-2`. One request per player, so 108 for a field.
+      - **`art=40` — "not paired".** Undocumented and not linked from the views we already
+        use; found in the nav bar as *not paired*. The most interesting of the three: a
+        single page listing only the players who missed at least one round, as a grid of one
+        column per round with three markers — `*` not paired, `bye` a bye, `0F` a forfeit,
+        blank played. Fourteen rows covered the whole British field. It ignores `&rd=`.
+        Worth parsing as a cheaper, more explicit source than mining the crosstable.
 - [ ] **Locale decimal commas.** The crosstable prints points as `1,5`. We do not currently
       read that column — the round-by-round tokens use `½` — but any ranking view will hit
       it, and `parse_points` does not handle a comma.
