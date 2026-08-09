@@ -1,5 +1,7 @@
 # chess-results
 
+[![CI](https://github.com/markjonleonard/chess-results/actions/workflows/ci.yml/badge.svg)](https://github.com/markjonleonard/chess-results/actions/workflows/ci.yml)
+
 Look up a chess tournament on [chess-results.com](https://chess-results.com) and
 get the results back as text you can read, or as data you can work with.
 
@@ -8,7 +10,7 @@ floated up or down, and whether they took a bye — the things you need to follo
 Swiss tournament, or to work out what the next round's pairings should be.
 
 > **Early days.** This works and is tested against real tournaments, but it has
-> not been released, has no automated builds yet, and has only been used against
+> not been released and has only been used against
 > a handful of events. Expect rough edges, and expect commands and options to
 > change. If you are relying on it for something that matters, check its answers
 > against the tournament's own pages.

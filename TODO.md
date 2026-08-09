@@ -4,8 +4,13 @@ Open work on chess-results, roughly in the order it is worth doing.
 
 ## Before this goes anywhere
 
-- [ ] **CI.** GitHub Actions running `ruff check` and `pytest` on 3.10–3.13. The suite is
-      fully offline, so it needs no secrets and no network allowance.
+- [x] **CI.** Done 2026-08-09 as `.github/workflows/ci.yml`. Two jobs on push to `main`,
+      every pull request and `workflow_dispatch`: `lint` runs `ruff check` and
+      `ruff format --check` on 3.13 only, `test` runs `pytest` across 3.10–3.13 with
+      `fail-fast: false`. Both were already clean locally, so the format gate is safe to
+      enforce. No secrets and no network allowance — the suite is fixtures only. `mypy` is
+      deliberately *not* wired in yet; it still fails (see below) and would red the badge
+      from the first run.
 - [ ] **Publish to PyPI as `chess-results`.** Free as at 2026-08-07; re-check at publish
       time.
 - [x] **Compare the round 8 prediction against the published pairings.** Done 2026-08-07 with
@@ -36,7 +41,8 @@ Open work on chess-results, roughly in the order it is worth doing.
       will clear with the stubs installed. Two are real: `cache.py` types `**kwargs: object`,
       too loose to forward to `CachedSession`, and `client.py` builds `params` as
       `dict[str, object]` where `requests` wants stricter values. The package advertises
-      `Typing :: Typed` and ships `py.typed`, so this ought to be clean.
+      `Typing :: Typed` and ships `py.typed`, so this ought to be clean. Add it to the CI
+      `lint` job once it passes.
 - [ ] **Widen the ruff ruleset.** Currently `E, F, I, UP, B`. Adding `SIM, RET, C4, PTH,
       RUF` is real value at low noise. Leave `ANN`, `D` and `S` off for `tests/` — a test
       suite is meant to be full of bare asserts. `--select ALL` reports 549, of which only
