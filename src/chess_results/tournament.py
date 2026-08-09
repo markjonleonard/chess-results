@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from .models import Colour, CrosstableEntry, Pairing, Play, Player, PlayKind, StartingRankEntry
+from .models import (
+    Absence,
+    Colour,
+    CrosstableEntry,
+    NotPairedEntry,
+    Pairing,
+    Play,
+    Player,
+    PlayKind,
+    StartingRankEntry,
+)
 
 
 @dataclass
@@ -170,7 +181,28 @@ class Tournament:
         """Games with no result yet, for the given round or the latest one."""
         return [p for p in self.games(rnd) if p.white_score is None]
 
-    def likely_withdrawn(self, after: int | None = None, consecutive: int = 1) -> set[str]:
+    def _unoccupied_rounds(self, entries: Iterable[NotPairedEntry], after: int) -> dict[str, set[int]]:
+        """Rounds each player did not occupy, per the "not paired" page.
+
+        Joined through the starting number where the tournament publishes one,
+        as the crosstable is, and by name otherwise. Rounds after ``after`` are
+        dropped: that page is always current, so using a later capture of it to
+        reason about an earlier round would be reading the future.
+        """
+        by_no = {p.start_no: name for name, p in self.players.items() if p.start_no}
+        unoccupied: dict[str, set[int]] = {}
+        for entry in entries:
+            name = by_no.get(entry.start_no, entry.name)
+            if name in self.players:
+                unoccupied[name] = {r for r in entry.rounds(Absence.UNPLAYED) if r <= after}
+        return unoccupied
+
+    def likely_withdrawn(
+        self,
+        after: int | None = None,
+        consecutive: int = 1,
+        not_paired: Iterable[NotPairedEntry] | None = None,
+    ) -> set[str]:
         """Players who look to have left the event, for ``to_trf(withdrawn=...)``.
 
         Withdrawals are the entire error term in pairing prediction: given the
@@ -191,16 +223,42 @@ class Tournament:
         unpaired for a round and returns is a false positive. ``consecutive=1``
         measured best on rounds 7-9 of that event: 12 of 18 found, 1 false alarm.
         Raising it trades recall for precision.
+
+        ``not_paired`` supplies the "not paired" page (``art=40``) as a second
+        source of absences, for a history that has no crosstable behind it. It
+        is one request against one page where the crosstable is a whole table to
+        mine, and on round pages alone it is the difference between finding the
+        withdrawals and finding nobody. It buys nothing on a crosstable-reconciled
+        history, which already holds everything it says.
+
+        It carries one hazard, and it is exactly the distinction this method
+        cares about: ``art=40`` prints ``*`` for a requested half-point bye as
+        well as for a real absence. The marker is therefore consulted *only* for
+        a round the player has no play for at all -- wherever a round page or the
+        crosstable has said anything, that wins. So the hazard needs all three of
+        a half-point bye, a round page that has since dropped the row, and no
+        crosstable: Frome's twelve round 1 half-point byes produce no false alarm
+        at all, because their round page still lists them. Reconcile against the
+        crosstable for an event that awards half-point byes and the question does
+        not arise, since it keeps ``-½`` apart from ``-0``.
         """
         after = after if after is not None else self.last_round
         if after < 1:
             return set()
         window = range(max(1, after - consecutive + 1), after + 1)
+        unoccupied = self._unoccupied_rounds(not_paired, after) if not_paired is not None else {}
         withdrawn = set()
         for name, player in self.players.items():
-            plays = [player.play(rnd) for rnd in window]
+            missed = unoccupied.get(name, set())
+
+            def absent(rnd: int, play: Play | None, missed: set[int] = missed) -> bool:
+                # A round with no play at all is only evidence when art=40 says so;
+                # on round pages alone it usually means the row has been deleted.
+                return play.kind is PlayKind.UNPAIRED if play is not None else rnd in missed
+
+            plays = [(rnd, player.play(rnd)) for rnd in window]
             # The two signals the docstring describes, named so they stay distinguishable.
-            trailing_unpaired = all(p is not None and p.kind is PlayKind.UNPAIRED for p in plays)
+            trailing_unpaired = all(absent(rnd, p) for rnd, p in plays)
             never_played = not any(p.kind is not PlayKind.UNPAIRED for p in player.plays)
             if trailing_unpaired or never_played:
                 withdrawn.add(name)

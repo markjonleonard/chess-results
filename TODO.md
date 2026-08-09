@@ -165,9 +165,33 @@ Open work on chess-results, roughly in the order it is worth doing.
 
       So the division is: this page is the authority on *which* rounds were missed and is
       one request rather than a whole crosstable to mine; the crosstable stays the authority
-      on *what* a missed round was worth. Deliberately **not** wired into
-      `add_crosstable` or `likely_withdrawn` — changing the withdrawal inference needs its
-      own validation run against rounds 7–9, which is the next thing to do here.
+      on *what* a missed round was worth.
+- [x] **Feed `art=40` to the withdrawal inference.** Done 2026-08-09.
+      `likely_withdrawn(not_paired=...)` takes the parsed page as a second source of
+      absences. Measured offline against the 2026 British fixtures, players flagged per
+      round:
+
+      | after round | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+      | --- | --- | --- | --- | --- | --- | --- | --- |
+      | round pages alone | 0 | 0 | 0 | 0 | 0 | 3 | 5 |
+      | round pages + `art=40` | **2** | **2** | **2** | **2** | **3** | 3 | 5 |
+      | crosstable-reconciled | 2 | 2 | 2 | 2 | 3 | 3 | 5 |
+
+      Round pages alone find *nobody* for a superseded round; add one request for `art=40`
+      and they find exactly what the crosstable finds, at every round. On a
+      crosstable-reconciled history it is identical to passing nothing, as it must be — the
+      crosstable already holds everything the page says.
+
+      No engine run was needed to settle it: a prediction is a pure function of the
+      withdrawn set, and the sets are equal, so the pairings are equal too. For the same
+      reason `predict_next_round.py` is left alone — it reconciles against the crosstable,
+      where this provably changes nothing.
+
+      The half-point-bye hazard turns out to be narrower than feared. The marker is
+      consulted **only** for a round the player has no play for at all, so anything a round
+      page or the crosstable has said wins. Frome's twelve round 1 half-point byes therefore
+      produce no false alarm: their round page still lists them. The hazard needs all three
+      of a half-point bye, a round page that has dropped the row, and no crosstable.
 - [ ] **More views.** Parsed today: round pairings (`art=2`), starting rank (`art=0`),
       starting-rank crosstable (`art=5`), not paired (`art=40`). Not parsed: alphabetical
       (`art=3`), ranking crosstable (`art=4`, same data as 5 but keyed by current rank).

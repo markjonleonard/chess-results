@@ -93,8 +93,10 @@ does not replace the crosstable, for two reasons:
   (full-point) bye prints `bye`; a requested half-point bye prints `*`, exactly as a
   withdrawal does. Verified both ways against the crosstables — every one of Frome's round 1
   half-point byes appears as `*`, and every British `bye` marker is a full point. Since
-  `likely_withdrawn` deliberately does not treat a requested bye as a signal, feeding this
-  page to it naively would invent a withdrawal for every half-point bye in the event.
+  `likely_withdrawn` deliberately does not treat a requested bye as a signal, the marker is
+  consulted only for a round with no play at all — a round page or the crosstable always
+  wins where it has spoken, which is why Frome's twelve half-point byes raise no false
+  alarm.
 - **A forfeit lists only the player who defaulted.** The opponent takes the point without
   appearing at all.
 
@@ -202,7 +204,9 @@ shells out to bbpPairings. Two things that have already caused wrong conclusions
   `Tournament.likely_withdrawn` guesses the field from trailing `UNPAIRED` rounds and takes
   those three to 39/51, 49/51 and 44/50. It only works on crosstable-reconciled histories:
   run it against round pages alone and it finds *nobody* for any superseded round, because
-  those are exactly the rows chess-results has deleted.
+  those are exactly the rows chess-results has deleted — **or** pass it `not_paired=`, the
+  parsed `art=40` page, which restores exactly the crosstable's answer at every round of the
+  2026 British for one request. It buys nothing on top of a crosstable, by construction.
 
 Predictions made mid-round need a result for every unfinished game, and those assumptions
 dominate the outcome below the top boards. On 2026-08-08, round 9 predicted from a live

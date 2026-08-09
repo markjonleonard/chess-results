@@ -133,3 +133,88 @@ class TestPagesWithNothingToParse:
     def test_a_crosstable_is_not_mistaken_for_one(self):
         """It has round columns too, but numbers its players "No." not "SNo"."""
         assert parse_not_paired(fixture("british2026_champ_crosstable.html")) == []
+
+
+class TestFeedingItToWithdrawalInference:
+    """What the page is actually worth, measured against the crosstable.
+
+    `likely_withdrawn` reads trailing UNPAIRED rounds. Run against round pages
+    alone it finds nobody for a superseded round, those being exactly the rows
+    chess-results deletes. art=40 is the one-page source of the same facts.
+    """
+
+    @pytest.fixture(scope="class")
+    def not_paired(self):
+        return parse_not_paired(fixture("british2026_champ_notpaired_final.html"))
+
+    def test_round_pages_alone_find_nobody_for_a_superseded_round(self, british_rounds_only):
+        """Round 5 has been superseded, so its "not paired" rows are gone."""
+        assert british_rounds_only.likely_withdrawn(after=5) == set()
+
+    def test_the_page_recovers_exactly_what_the_crosstable_would_have(
+        self, british_rounds_only, british, not_paired
+    ):
+        recovered = british_rounds_only.likely_withdrawn(after=5, not_paired=not_paired)
+        assert recovered == british.likely_withdrawn(after=5)
+        assert len(recovered) == 3
+
+    def test_it_adds_nothing_to_a_reconciled_history(self, british, not_paired):
+        """The crosstable already holds everything the page says."""
+        for after in (5, 6):
+            assert british.likely_withdrawn(after=after, not_paired=not_paired) == (
+                british.likely_withdrawn(after=after)
+            )
+
+    @pytest.mark.parametrize("after", range(1, 8))
+    def test_round_pages_plus_the_page_equal_the_crosstable_at_every_round(
+        self, british_rounds_only, british, not_paired, after
+    ):
+        """The whole claim, in one assertion: one page buys what the crosstable does.
+
+        Round pages alone find 0, 0, 0, 0, 0, 3, 5 across rounds 1-7; with the
+        page they find 2, 2, 2, 2, 3, 3, 5, which is the crosstable's answer
+        exactly.
+        """
+        assert british_rounds_only.likely_withdrawn(after=after, not_paired=not_paired) == (
+            british.likely_withdrawn(after=after)
+        )
+
+    def test_the_future_is_not_read_back_into_an_earlier_round(self, british_rounds_only, not_paired):
+        """The capture is post-event, so a marker for round 8 must not count at round 5.
+
+        The page is always current and ignores &rd=, so a live prediction after
+        round 5 could only ever have seen rounds 1-5 of it.
+        """
+        after_five = british_rounds_only.likely_withdrawn(after=5, not_paired=not_paired)
+        # Badacsonyi stopped after round 4 and is findable; Golding's first missed
+        # round is 7, so nothing at round 5 may know about him.
+        assert "Badacsonyi, Frankie" in after_five
+        assert "Golding, Alex" not in after_five
+
+    def test_a_full_point_bye_is_not_mistaken_for_an_absence(self, british_rounds_only, not_paired):
+        """Chapman took a round 6 bye; the page marks it "bye", not "*"."""
+        assert "Chapman, Luke" not in british_rounds_only.likely_withdrawn(after=6, not_paired=not_paired)
+
+
+class TestTheHalfPointByeHazard:
+    """art=40 cannot tell a requested bye from an absence, so the marker is only
+    consulted for a round nothing else has spoken about."""
+
+    @pytest.fixture(scope="class")
+    def frome(self):
+        from chess_results.parse import parse_pairings
+        from chess_results.tournament import Tournament
+
+        event = Tournament(id="1393521")
+        event.add_round(parse_pairings(fixture("frome2026_open_r1.html"), 1))
+        event.add_crosstable(parse_crosstable(fixture("frome2026_open_crosstable.html")))
+        return event
+
+    def test_twelve_half_point_byes_produce_no_false_alarm(self, frome, frome_not_paired):
+        """Their round page still lists them, and a round page beats the marker."""
+        assert frome.likely_withdrawn(after=1, not_paired=frome_not_paired) == set()
+
+    def test_the_marker_only_fills_a_round_with_no_play_at_all(self, frome, frome_not_paired):
+        bye_takers = [e for e in frome_not_paired if e.markers.get(1) is Absence.UNPLAYED]
+        assert len(bye_takers) >= 10  # all of them marked exactly as a withdrawal would be
+        assert all(frome.players[e.name].play(1) is not None for e in bye_takers)
