@@ -200,15 +200,36 @@ Open work on chess-results, roughly in the order it is worth doing.
       did when handed the old output with a `BBU 0.5` line: *"The score for player 104 does
       not match the game results."* The crosstable's convention is deliberately exempt from
       the disagreement check; it is a difference of convention, not a contradiction.
-- [ ] **bbpPairings' checker disagrees with the published round 2 on six boards.** Found
-      2026-08-09 while running the check above. Rounds 1 and 3-8 reproduce exactly; round 2
-      differs on boards involving players 79-108, the tail of the field. Player 108 (Brown)
-      is in the differing set and did not play round 1, so the likely explanation is how a
-      late entrant's missing round 1 is represented — we write `0000 - Z`, a zero-point bye,
-      and the arbiter's software may treat a late entry differently. Worth settling, since
-      it is the one place the engine and the published pairings diverge on a field we
-      believe to be correct. Do not confuse it with the withdrawal error term, which is a
-      different thing entirely.
+- [x] **bbpPairings' checker disagrees with the published round 2 on six boards.**
+      Investigated 2026-08-09. **Nothing to fix on our side**, and the hypothesis recorded
+      here was wrong. Four candidate explanations, all tested and all dead:
+
+      - **Not the field.** Two players missed round 2 (Mannion 59, Kothari 69). Supplying
+        exactly those gives the *best* result, 47 of 53; supplying neither gives 37, either
+        one alone 33. So the correct field is already in use and the six boards remain.
+      - **Not how a late entrant's missing round is encoded.** Brown (108) did not play
+        round 1 and is in the differing set, which is what made this look like a
+        representation problem. Emitting her round 1 as `0000 - Z`, as a blank, or as
+        `0000 - -` produces *identical* pairings — 47 of 53 in all three cases.
+      - **Not colours.** Every board on which the two agree agrees on colour too: 47 pairs,
+        47 with colours.
+      - **Not same-federation avoidance.** The published round 2 has 24 of its 53 boards
+        between players of the same federation, so no such rule is operating.
+
+      What it is: a six-board cyclic shift confined to one scoregroup — the 42 players on
+      zero after round 1. bbpPairings pairs 32-81, 44-82, 54-84, 56-87, 57-89, 108-79; the
+      arbiter published 32-79, 44-81, 54-82, 56-84, 57-87, 108-89, each of the five S1
+      players taking an opponent one step earlier in the sequence. Structurally the
+      published pairing behaves as though 79 were the *top of S2* rather than the *bottom of
+      S1* — a one-place difference in where a 42-player group was split — but inserting
+      either absent player to force that split does not reproduce it either.
+
+      The checker lists the difference without flagging the published pairing as illegal,
+      and exits 0. So both are presumably admissible Dutch pairings on a group where a great
+      many are, and the two implementations resolve the choice differently. Rounds 1 and 3-8
+      reproduce exactly, as do 7, 8 and 9 given the right field, so this does not undermine
+      prediction — it caps it on rounds with one very large all-equal scoregroup, which in
+      practice means round 2.
 
 ## Scope
 

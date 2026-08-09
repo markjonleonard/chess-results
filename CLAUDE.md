@@ -212,9 +212,15 @@ Two more things that have already caused wrong conclusions:
   player to one board all event, usually on access grounds. Presentational only; it never
   changes who plays whom.
 
-- **Withdrawals are the whole error term.** Given the correct field, bbpPairings reproduces
-  the 2026 British Championship exactly: rounds 7 and 8 at 51 of 51, round 9 at 50 of 50,
-  colours and bye included. Blind — with no withdrawal information, which is what a live
+- **Withdrawals are the whole error term, from round 3 on.** Given the correct field,
+  bbpPairings reproduces the 2026 British Championship exactly: rounds 7 and 8 at 51 of 51,
+  round 9 at 50 of 50, colours and bye included, and the checker replays rounds 1 and 3-8
+  from the finished file without a single difference. **Round 2 is the one exception**, and
+  it is not our data: with the correct field it still differs on six boards, all inside the
+  42-player group on zero after round 1, and the encoding of a late entrant's missing round
+  makes no difference to it (`Z`, blank and `-` all give the same pairing). A group that
+  large and that flat admits many legal pairings, and Swiss-Manager and bbpPairings choose
+  differently. Expect it on any round 2; see TODO.md for the evidence. Blind — with no withdrawal information, which is what a live
   prediction actually has — the same rounds give 37/51, 44/51 and 42/50. Every single miss
   is a player who had stopped playing and whom the scraper could not see, because the round
   pages delete the evidence. Do not reach for a rules-version or engine-disagreement
