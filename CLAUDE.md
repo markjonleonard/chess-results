@@ -77,6 +77,13 @@ record, so `tournament()` fetches it and `add_crosstable` fills any round a play
 missing. This is not a display option — it happens with and without `turdet`. Verify score
 changes against the crosstable's published totals; all 108 must agree.
 
+Where both views *do* have a round, `add_crosstable` compares them and records any
+contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Nothing has
+ever tripped it — the two come from the same upload — so treat a hit as a parser bug, not as
+chess-results being inconsistent. Note that one view holding a value the other lacks is
+deliberately not a contradiction: the crosstable is often the fresher capture, and a round
+page carries no result until the game finishes.
+
 Searched for upstream attribution and found none: chess-results.com has no public issue
 tracker or changelog, and the Swiss-Manager manuals do not mention it. So this is observed,
 undocumented behaviour — do not go looking for a citation, there isn't one. It is not

@@ -7,7 +7,7 @@ crosstable keeps the whole record.
 """
 
 import pytest
-from tests.conftest import fixture
+from tests.conftest import _british, fixture
 
 from chess_results.models import Colour, PlayKind
 from chess_results.parse import parse_crosstable
@@ -99,3 +99,79 @@ class TestReconciliation:
         added = british.add_crosstable(parse_crosstable(fixture("british2026_champ_crosstable.html")))
         assert added == []
         assert {n: len(p.plays) for n, p in british.players.items()} == before
+
+
+class TestCrossCheckingTheTwoViews:
+    """The round pages and the crosstable come from the same upload, so they
+    ought to agree. Where both have a round, `add_crosstable` compares them."""
+
+    def test_the_real_fixtures_never_disagree(self, british, british_played_out):
+        """Both directions of the British, mid-event and played out."""
+        assert british.disagreements == []
+        assert british_played_out.disagreements == []
+
+    def test_frome_agrees_too(self, frome_round_one):
+        assert frome_round_one.disagreements == []
+
+    def test_a_capture_taken_later_is_not_a_disagreement(self, british):
+        """The mid-event crosstable holds 114 results the round pages had not caught.
+
+        A round page carries no result until the game finishes, and the crosstable
+        fixture was saved later than the round 6 and 7 pages. One view having a
+        value the other lacks is a difference in freshness, not a contradiction.
+        """
+        assert not [d for d in british.disagreements if d.field == "score"]
+
+    def _corrupt(self, crosstable, start_no, rnd, **changes):
+        import dataclasses
+
+        return {
+            no: [
+                dataclasses.replace(e, **changes) if no == start_no and e.round == rnd else e for e in entries
+            ]
+            for no, entries in crosstable.items()
+        }
+
+    def test_a_flipped_colour_is_caught(self):
+        event = _british_rounds_only()
+        crosstable = self._corrupt(
+            parse_crosstable(fixture("british2026_champ_crosstable.html")),
+            start_no=1,
+            rnd=1,
+            colour=Colour.WHITE,  # McShane had black on board 1
+        )
+        event.add_crosstable(crosstable)
+        assert [(d.field, d.round) for d in event.disagreements] == [("colour", 1)]
+
+    def test_a_changed_score_is_caught_and_reads_clearly(self):
+        event = _british_rounds_only()
+        crosstable = self._corrupt(
+            parse_crosstable(fixture("british2026_champ_crosstable.html")),
+            start_no=1,
+            rnd=1,
+            score=0.0,
+        )
+        event.add_crosstable(crosstable)
+        assert len(event.disagreements) == 1
+        assert "round 1" in str(event.disagreements[0])
+        assert "score is 1.0 on the round page but 0.0 in the crosstable" in str(event.disagreements[0])
+
+    def test_the_pairing_page_still_wins(self):
+        """A disagreement is reported, never silently resolved."""
+        event = _british_rounds_only()
+        name = next(p.name for p in event.players.values() if p.start_no == 1)
+        before = event.players[name].play(1).score
+        event.add_crosstable(
+            self._corrupt(
+                parse_crosstable(fixture("british2026_champ_crosstable.html")),
+                start_no=1,
+                rnd=1,
+                score=0.0,
+            )
+        )
+        assert event.players[name].play(1).score == before
+
+
+def _british_rounds_only():
+    """A fresh, unreconciled event -- the session fixtures must not be mutated."""
+    return _british(crosstable=False)

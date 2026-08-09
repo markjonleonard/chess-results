@@ -89,9 +89,23 @@ Open work on chess-results, roughly in the order it is worth doing.
       `session` keeps its own transport policy, which would otherwise be silently
       overwritten — the adapter is exported so such a caller can mount it themselves.
       `retries=0` opts out. Covered by `tests/test_client.py` without touching the network.
-- [ ] **Cross-check the crosstable instead of only filling gaps.** `add_crosstable`
-      currently trusts the pairing pages wherever they have data. It could compare and warn
-      on disagreement, which would catch a parse bug in either view.
+- [x] **Cross-check the crosstable instead of only filling gaps.** Done 2026-08-09. Where
+      both views have a round, `add_crosstable` now compares `kind`, `colour`, `opponent`,
+      `score` and `forfeit`, recording any contradiction in `Tournament.disagreements` as a
+      `Disagreement`. The pairing page still wins — a disagreement is reported, never
+      silently resolved — and the CLI prints them to stderr, so piped output stays clean.
+
+      **It finds nothing.** Zero disagreements across every fixture (British mid-event,
+      British played out through round 9 including both forfeits, Frome) and zero against the
+      live event. That is the expected result — the two views come from the same upload — so
+      this is a tripwire, not a fix. The tests corrupt a parsed crosstable deliberately to
+      prove it can still fire.
+
+      The one design point worth keeping: **a value one view holds and the other lacks is
+      not a contradiction.** The mid-event crosstable fixture has 114 results the round 6
+      and 7 pages had not caught, purely because it was saved later, and a round page carries
+      no result at all until the game finishes. Comparing those would have produced 114 false
+      alarms on a healthy tournament.
 - [ ] **Recovered rounds have no float direction beyond byes.** A `Play` restored from the
       crosstable has no `points_before`, so `_floats` cannot run on it. Only the
       bye-is-a-downfloat rule applies. The pre-round score could be reconstructed by summing

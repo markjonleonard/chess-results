@@ -18,6 +18,9 @@ from .tournament import Tournament
 
 T = TypeVar("T")
 
+#: How many disagreements to spell out before summarising the rest.
+MAX_WARNINGS = 10
+
 DESCRIPTION = """\
 Scrape a tournament from chess-results.com and report on it.
 
@@ -49,12 +52,34 @@ def _fetch(args: argparse.Namespace) -> Tournament:
         cache_dir=args.cache_dir,
         live_ttl=args.cache_ttl,
     )
-    return client.tournament(
+    event = client.tournament(
         args.tournament_id,
         rounds=args.rounds,
         bye_value=args.bye_value,
         crosstable=not args.no_crosstable,
     )
+    _warn_disagreements(event)
+    return event
+
+
+def _warn_disagreements(event: Tournament) -> None:
+    """Say so when the round pages and the crosstable contradict each other.
+
+    They never have on any page we have kept, so this means a parser has misread
+    something and the numbers below it are suspect. On stderr, so it cannot
+    corrupt piped output.
+    """
+    if not event.disagreements:
+        return
+    print(
+        f"warning: {len(event.disagreements)} disagreement(s) between the round "
+        "pages and the crosstable; the figures below may be wrong",
+        file=sys.stderr,
+    )
+    for item in event.disagreements[:MAX_WARNINGS]:
+        print(f"  {item}", file=sys.stderr)
+    if len(event.disagreements) > MAX_WARNINGS:
+        print(f"  … and {len(event.disagreements) - MAX_WARNINGS} more", file=sys.stderr)
 
 
 def _round(requested: int | None, event: Tournament) -> int:

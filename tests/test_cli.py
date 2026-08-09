@@ -1,14 +1,17 @@
 import argparse
+import copy
 import json
 import re
 
 import pytest
 
 from chess_results.cli import (
+    MAX_WARNINGS,
     _how_far,
     _limited,
     _round,
     _state,
+    _warn_disagreements,
     build_parser,
     cmd_colours,
     cmd_dump,
@@ -17,7 +20,7 @@ from chess_results.cli import (
     cmd_unfinished,
     main,
 )
-from chess_results.models import Play, PlayKind
+from chess_results.models import Disagreement, Play, PlayKind
 
 
 def test_shared_options_parse_before_the_subcommand():
@@ -274,3 +277,43 @@ class TestUnfinished:
         lines = self._run(british, monkeypatch, capsys, limit=3)
         assert len(lines) == 5
         assert lines[-1] == "… and 48 more"
+
+
+class TestDisagreementsAreReported:
+    """A contradiction between the two views means a parser has misread
+    something, so it must not pass silently under a table of numbers."""
+
+    def _event(self, british, count):
+        event = copy.copy(british)
+        event.disagreements = [
+            Disagreement(
+                player=f"Player {i}",
+                round=1,
+                field="score",
+                from_round_page=1.0,
+                from_crosstable=0.0,
+            )
+            for i in range(count)
+        ]
+        return event
+
+    def test_nothing_is_said_when_the_views_agree(self, british, capsys):
+        _warn_disagreements(british)
+        assert capsys.readouterr().err == ""
+
+    def test_each_one_is_spelled_out_on_stderr(self, british, capsys):
+        _warn_disagreements(self._event(british, 2))
+        err = capsys.readouterr().err.splitlines()
+        assert err[0].startswith("warning: 2 disagreement(s)")
+        assert err[1] == ("  round 1: Player 0: score is 1.0 on the round page but 0.0 in the crosstable")
+        assert len(err) == 3
+
+    def test_a_long_list_is_truncated_but_counted(self, british, capsys):
+        _warn_disagreements(self._event(british, 25))
+        err = capsys.readouterr().err.splitlines()
+        assert len(err) == 1 + MAX_WARNINGS + 1
+        assert err[-1] == f"  … and {25 - MAX_WARNINGS} more"
+
+    def test_it_goes_to_stderr_so_piped_output_stays_clean(self, british, capsys):
+        _warn_disagreements(self._event(british, 1))
+        assert capsys.readouterr().out == ""

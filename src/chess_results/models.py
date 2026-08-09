@@ -110,6 +110,33 @@ class CrosstableEntry:
     forfeit: bool = False
 
 
+@dataclass(frozen=True)
+class Disagreement:
+    """One field where a round's pairing page and the crosstable differ.
+
+    The two views come from the same upload and have always agreed on every
+    fixture in the suite, so this is a tripwire rather than a routine event: a
+    disagreement means one of the two parsers has misread something.
+    """
+
+    player: str
+    round: int
+    #: The attribute that differs: "kind", "colour", "opponent", "score" or "forfeit".
+    field: str
+    from_round_page: object = None
+    from_crosstable: object = None
+
+    def __str__(self) -> str:
+        def show(value: object) -> str:
+            return value.value if isinstance(value, Enum) else repr(value)
+
+        return (
+            f"round {self.round}: {self.player}: {self.field} is "
+            f"{show(self.from_round_page)} on the round page "
+            f"but {show(self.from_crosstable)} in the crosstable"
+        )
+
+
 class Absence(str, Enum):
     """A marker printed in a round column of the "not paired" page (``art=40``).
 

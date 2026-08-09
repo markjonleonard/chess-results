@@ -9,6 +9,7 @@ from .models import (
     Absence,
     Colour,
     CrosstableEntry,
+    Disagreement,
     NotPairedEntry,
     Pairing,
     Play,
@@ -31,6 +32,9 @@ class Tournament:
     name: str | None = None
     players: dict[str, Player] = field(default_factory=dict)
     rounds: dict[int, list[Pairing]] = field(default_factory=dict)
+    #: Where a round page and the crosstable contradicted each other. Filled by
+    #: :meth:`add_crosstable`; empty on every fixture in the suite.
+    disagreements: list[Disagreement] = field(default_factory=list)
 
     @property
     def last_round(self) -> int:
@@ -125,6 +129,11 @@ class Tournament:
         Only rounds already fetched are filled, and only where the player has
         nothing for that round; results read from the pairing pages are left
         alone, since those carry board numbers and pre-round scores too.
+
+        Where both views do have the round, they are compared and any
+        contradiction is recorded in :attr:`disagreements`. The two come from the
+        same upload and agree on every fixture in the suite, so a disagreement
+        means one of the two parsers has misread something.
         """
         by_number = {p.start_no: p for p in self.players.values() if p.start_no is not None}
         names = {no: player.name for no, player in by_number.items()}
@@ -135,7 +144,11 @@ class Tournament:
             if player is None:
                 continue
             for entry in entries:
-                if entry.round not in self.rounds or player.play(entry.round) is not None:
+                if entry.round not in self.rounds:
+                    continue
+                existing = player.play(entry.round)
+                if existing is not None:
+                    self.disagreements.extend(_compare(player.name, existing, entry, names))
                     continue
                 play = Play(
                     round=entry.round,
@@ -263,6 +276,34 @@ class Tournament:
             if trailing_unpaired or never_played:
                 withdrawn.add(name)
         return withdrawn
+
+
+def _compare(
+    name: str,
+    play: Play,
+    entry: CrosstableEntry,
+    names: dict[int, str],
+) -> list[Disagreement]:
+    """Fields on which a round page and the crosstable contradict each other.
+
+    Only where *both* have something to say. One view holding a value the other
+    lacks is not a contradiction: the crosstable is often the fresher capture,
+    and a round page carries no result at all until the game finishes.
+    """
+    opponent = names.get(entry.opponent_no) if entry.opponent_no else None
+    pairs: list[tuple[str, object, object]] = [
+        ("kind", play.kind, entry.kind),
+        ("colour", play.colour, entry.colour),
+        ("opponent", play.opponent, opponent),
+        ("score", play.score, entry.score),
+        # Booleans are never absent, so these always compare.
+        ("forfeit", play.forfeit, entry.forfeit),
+    ]
+    return [
+        Disagreement(player=name, round=play.round, field=field_name, from_round_page=a, from_crosstable=b)
+        for field_name, a, b in pairs
+        if a is not None and b is not None and a != b
+    ]
 
 
 def _floats(white_before: float | None, black_before: float | None) -> tuple[str | None, str | None]:
