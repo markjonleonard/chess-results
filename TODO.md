@@ -23,11 +23,14 @@ Open work on chess-results, roughly in the order it is worth doing.
       reduce the server load...". The name is the first `h2`, with the page title (minus the
       site's prefix) as a fallback. The existing Frome fixtures already reproduced it.
 
-- [ ] **Forfeits are untested against real pages.** No fixture in the repo contains one.
-      `parse_result` has unit tests for `"+ -"` / `"- +"`, but the crosstable's forfeit
-      branch in `_crosstable_cell` (`54b+`, `54b-`) has *no* coverage at all — it was
-      written from the format's shape, not from an observed page. Find a tournament with a
-      default and add it as a fixture before trusting it.
+- [x] **Forfeits are untested against real pages.** Fixed 2026-08-09. Stubbs (starting
+      number 62) defaulted twice in the 2026 British — round 8 board 45 against Gunatilake
+      (`- -`) and round 9 board 48 against Cooke (`+ -`) — which gives both directions on
+      both views. Added `british2026_champ_r8.html`, `_r9.html` and
+      `_crosstable_final.html`, and `tests/test_forfeit.py` covering the pairing pages, the
+      previously-uncovered `_crosstable_cell` branch (`100w-` and its matching win on the
+      opponent's row), and the `+`/`-` TRF encoding read back out of a real file. The
+      parsers were correct as written; nothing needed changing.
 - [ ] **`mypy --strict` fails with 22 errors.** The tools are now in the dev extra
       (`mypy`, `types-requests`, `types-beautifulsoup4`), but the errors are unfixed. Most
       will clear with the stubs installed. Two are real: `cache.py` types `**kwargs: object`,

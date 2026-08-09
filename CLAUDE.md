@@ -136,13 +136,28 @@ Fixtures are real saved pages, mostly from the 2026 British Championship caught 
 plus a congress section with a different column layout (it publishes starting-rank
 numbers and has half-point byes). Nothing in the suite touches the network.
 
-Two round-6 fixtures exist on purpose: `british2026_champ_r6.html` was captured with six
-games still in progress and its bye rows intact, and `british2026_champ_r6_finished.html` is
-the completed round with those rows already deleted. The pair is what demonstrates the bye
-problem. `british2026_champ_r8_unpaired_only.html` is the "round not yet paired" page.
+Several rounds have two fixtures on purpose, because the same round looks different
+depending on when it was caught. `_r6.html` and `_r7.html` are mid-round captures — six
+games still in progress in one, a paired-but-unplayed round in the other — and their
+`_r6_finished.html` / `_r7_finished.html` counterparts are the same rounds played out.
+The r6 pair is what demonstrates the bye problem: the mid-round page still has its bye
+rows, the finished one has had them deleted. `_r8_unpaired_only.html` is the "round not yet
+paired" page, and `_r8.html` is round 8 played.
 
-`conftest.py` offers `british` (full pipeline, crosstable reconciled) and
-`british_rounds_only` (round pages alone), so a test can show what reconciliation adds.
+`_r9.html` and `_crosstable_final.html` were captured on 2026-08-09 for the two defaulted
+games (see `test_forfeit.py`); round 9 was still being played, so **there is no
+complete-tournament fixture** — rounds 1-8 are as far as a fully-decided event goes.
+Round 9's page keeps its "not paired" rows, being the current round at capture and the last
+round of the event, which makes it the only round page in the set that still lists the
+absent players.
+
+`conftest.py` offers `british` (full pipeline, crosstable reconciled, mid-event — what most
+tests want), `british_rounds_only` (round pages alone, so a test can show what
+reconciliation adds), `british_played_out` (rounds 1-8 with every game decided, needed by
+anything asserting on real `to_trf` output, which refuses unfinished games) and
+`frome_round_one` (a congress section with a different column layout and twelve half-point
+byes; built from its round page alone — feeding the Frome crosstable to `parse_starting_rank`
+yields comma-less names that will not join).
 
 To add a fixture, save the page with `curl -sL` (the `-L` matters) and `lan=1`.
 
