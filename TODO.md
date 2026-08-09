@@ -4,13 +4,37 @@ Open work on chess-results, roughly in the order it is worth doing.
 
 ## Before this goes anywhere
 
-- [x] **CI.** Done 2026-08-09 as `.github/workflows/ci.yml`. Two jobs on push to `main`,
-      every pull request and `workflow_dispatch`: `lint` runs `ruff check` and
-      `ruff format --check` on 3.13 only, `test` runs `pytest` across 3.10–3.13 with
-      `fail-fast: false`. Both were already clean locally, so the format gate is safe to
-      enforce. No secrets and no network allowance — the suite is fixtures only. `mypy` is
-      deliberately *not* wired in yet; it still fails (see below) and would red the badge
-      from the first run.
+- [x] **CI.** Done 2026-08-09 as `.github/workflows/ci.yml`, green as of `593c298`. Two jobs
+      on push to `main`, every pull request and `workflow_dispatch`: `lint` runs
+      `ruff check`, `ruff format --check` and `mypy --strict` on 3.13 only; `test` runs
+      `pytest` across 3.10–3.13 with `fail-fast: false`. No secrets and no network
+      allowance — the suite is fixtures only.
+
+      `mypy` was left out of the first cut because it still failed; it was added in the same
+      sitting once the item below was fixed.
+
+      **The first run failed, and the cause is worth keeping.** All four test legs passed,
+      3.10 included. `lint` fell over on `ruff format --check` — which also meant `mypy`
+      never ran, being the step after it. Local ruff was 0.15.12, where formatting Python
+      blocks inside Markdown is experimental and gated behind preview mode; CI resolved
+      `ruff>=0.5` to 0.16.2, where it happens by default, and it wanted to reflow the
+      aligned trailing comments in the README and DESIGN examples. Fixed by excluding
+      `*.md` in `[tool.ruff.format]`, so the result no longer depends on which ruff a
+      developer happens to have.
+
+      **The dev extra is unpinned on purpose, so expect this again.** `ruff>=0.5` and
+      `mypy>=1.8` mean CI always resolves to the newest release and a new rule or a changed
+      default can red the badge without a line of our code changing. That is the trade for
+      not having to chase pins; when it happens, check the version CI installed against the
+      local one before suspecting the commit. Reproduce it by downloading the exact version
+      CI used and running it against the tree — guessing costs a push per attempt.
+
+      Also worth knowing: **3.10 is in the matrix because `requires-python = ">=3.10"` and
+      the classifiers advertise it**, not because anything needs it. Every module carries
+      `from __future__ import annotations` and there is no 3.11+ stdlib use, so raising the
+      floor would drop a support claim without simplifying any code. 3.10 has upstream
+      security support until October 2026. If the claim is ever dropped, change
+      `requires-python`, the classifiers and the matrix together.
 - [ ] **Publish to PyPI as `chess-results`.** Free as at 2026-08-07; re-check at publish
       time.
 - [x] **Compare the round 8 prediction against the published pairings.** Done 2026-08-07 with
