@@ -156,7 +156,14 @@ def parse_pairings(html: str, rnd: int, *, bye_value: float = 1.0) -> list[Pairi
     legend = parse_legend(html)
     fixed_board_markers = {marker for marker, text in legend.items() if _FIXED_BOARD in text.lower()}
 
-    def player_ref(cells: list[str], cols: _Columns, i_name, i_rtg, i_title, i_no) -> PlayerRef:
+    def player_ref(
+        cells: list[str],
+        cols: _Columns,
+        i_name: int | None,
+        i_rtg: int | None,
+        i_title: int | None,
+        i_no: int | None,
+    ) -> PlayerRef:
         name, marker = split_name_marker(cols.value(cells, i_name))
         return PlayerRef(
             name=name,

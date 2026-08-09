@@ -26,6 +26,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check --output-format=github .
       - run: ruff format --check .
+      - run: mypy --strict src/chess_results
 
   test:
     runs-on: ubuntu-latest

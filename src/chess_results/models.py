@@ -174,7 +174,13 @@ class Player:
 
     def colours(self, after: int | None = None) -> list[Colour]:
         """Colour history, oldest first, skipping byes and unplayed rounds."""
-        return [p.colour for p in self.plays if p.counts_for_colour and (after is None or p.round <= after)]
+        # The `is not None` is what `counts_for_colour` already guarantees, spelled
+        # out again so the element type is Colour rather than Colour | None.
+        return [
+            p.colour
+            for p in self.plays
+            if p.colour is not None and p.counts_for_colour and (after is None or p.round <= after)
+        ]
 
     def colour_difference(self, after: int | None = None) -> int:
         """Whites minus blacks."""

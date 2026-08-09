@@ -36,13 +36,28 @@ Open work on chess-results, roughly in the order it is worth doing.
       previously-uncovered `_crosstable_cell` branch (`100w-` and its matching win on the
       opponent's row), and the `+`/`-` TRF encoding read back out of a real file. The
       parsers were correct as written; nothing needed changing.
-- [ ] **`mypy --strict` fails with 22 errors.** The tools are now in the dev extra
-      (`mypy`, `types-requests`, `types-beautifulsoup4`), but the errors are unfixed. Most
-      will clear with the stubs installed. Two are real: `cache.py` types `**kwargs: object`,
-      too loose to forward to `CachedSession`, and `client.py` builds `params` as
-      `dict[str, object]` where `requests` wants stricter values. The package advertises
-      `Typing :: Typed` and ships `py.typed`, so this ought to be clean. Add it to the CI
-      `lint` job once it passes.
+- [x] **`mypy --strict` fails.** Fixed 2026-08-09; it now passes clean on all 8 source
+      files and runs in the CI `lint` job. With the stubs installed the count was 28, not
+      the 22 recorded here, and they came down to six causes:
+
+      - `cache.cached_session` had no return type and typed `**kwargs: object`. Now returns
+        `CachedSession` (imported under `TYPE_CHECKING`, since requests-cache is optional at
+        runtime) and forwards `**kwargs: Any` — a pass-through to a constructor with a couple
+        of dozen unrelated setting types cannot be more precise than that.
+      - `client.fetch` typed `**params: object`; they are query values, so `str | int`.
+      - `client.fetch`'s `options` dict carries `expire_after`, which is requests-cache's
+        extension and absent from `requests.Session.get`. Typed `Any` with a comment; the
+        alternative is to type the session as `CachedSession`, which it often is not.
+      - `client._is_cached` took a bare `dict` and read `self.session.cache`, which
+        `requests.Session` does not have. Now `dict[str, str | int]`, and the store is
+        reached with `getattr(self.session, "cache", None)`. Behaviour is unchanged — the
+        old `self.caching` guard was the same `hasattr` test.
+      - `Player.colours` returned `list[Colour | None]`: `counts_for_colour` guarantees the
+        colour is set but mypy will not narrow through a property, so the check is spelled
+        out in the comprehension.
+      - `cli.main` returned `Any` from `args.func(args)`, argparse being untyped.
+
+      No behaviour changed and no test needed amending; 165 still pass.
 - [ ] **Widen the ruff ruleset.** Currently `E, F, I, UP, B`. Adding `SIM, RET, C4, PTH,
       RUF` is real value at low noise. Leave `ANN`, `D` and `S` off for `tests/` — a test
       suite is meant to be full of bare asserts. `--select ALL` reports 549, of which only

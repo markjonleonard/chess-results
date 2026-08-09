@@ -446,7 +446,8 @@ def main(argv: list[str] | None = None) -> int:
     if not hasattr(args, "output"):
         args.output = None
     try:
-        return args.func(args)
+        code: int = args.func(args)
+        return code
     except BrokenPipeError:
         _silence_stdout()
         return 141  # what a shell reports for a process killed by SIGPIPE

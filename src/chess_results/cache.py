@@ -15,6 +15,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from requests_cache import CachedSession
 
 #: A round still in play, or the most recent one: expect it to change.
 LIVE_TTL = 300
@@ -26,10 +30,14 @@ STARTING_RANK_TTL = 60 * 60 * 24
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "chess-results"
 
 
-def cached_session(directory: str | Path | None = None, **kwargs: object):
+def cached_session(directory: str | Path | None = None, **kwargs: Any) -> CachedSession:
     """A ``requests_cache.CachedSession`` writing to ``directory``.
 
     Raises ImportError with a usable message if requests-cache is missing.
+
+    ``kwargs`` are forwarded verbatim to ``CachedSession``, whose settings are a
+    couple of dozen unrelated types, so ``Any`` is as precise as a pass-through
+    can be. The import is deferred because requests-cache is optional at runtime.
     """
     try:
         from requests_cache import CachedSession

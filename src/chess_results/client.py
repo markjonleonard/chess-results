@@ -9,6 +9,7 @@ English column labels.
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import requests
 
@@ -94,14 +95,16 @@ class ChessResults:
         art: int,
         *,
         expire_after: int | None = None,
-        **params: object,
+        **params: str | int,
     ) -> str:
         """Fetch one view of a tournament and return its HTML.
 
         ``expire_after`` is how long the response may be reused, in seconds.
         It is ignored by sessions that do not cache.
         """
-        options: dict[str, object] = {}
+        # expire_after is requests-cache's extension, absent from requests.Session.get,
+        # so this cannot be typed more tightly than Any without lying about the session.
+        options: dict[str, Any] = {}
         if self.caching and expire_after is not None:
             options["expire_after"] = expire_after
 
@@ -126,8 +129,10 @@ class ChessResults:
         response.raise_for_status()
         return response.text
 
-    def _is_cached(self, tournament_id: str | int, art: int, params: dict) -> bool:
-        if not self.caching:
+    def _is_cached(self, tournament_id: str | int, art: int, params: dict[str, str | int]) -> bool:
+        # The backing store lives on CachedSession, not on requests.Session.
+        cache = getattr(self.session, "cache", None)
+        if cache is None:
             return False
         try:
             request = requests.Request(
@@ -135,7 +140,7 @@ class ChessResults:
                 f"{self.base_url}/tnr{tournament_id}.aspx",
                 params={"lan": 1, "art": art, **params},
             ).prepare()
-            return self.session.cache.contains(request=request)
+            return bool(cache.contains(request=request))
         except Exception:  # cache introspection is a nicety, never a blocker
             return False
 

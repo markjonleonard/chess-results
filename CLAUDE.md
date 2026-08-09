@@ -14,7 +14,7 @@ pytest tests/test_tournament.py::TestStandings::test_scoregroups_are_ordered_hig
 
 ruff check .                                # lint (config in pyproject.toml)
 ruff format .                               # formatter is adopted; keep it clean
-mypy --strict src/chess_results             # not yet clean; see TODO.md
+mypy --strict src/chess_results             # clean, and CI enforces it — keep it that way
 ```
 
 Repository, distribution and import name all agree: `chess-results` / `chess-results` /
