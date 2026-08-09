@@ -161,10 +161,14 @@ class Tournament:
             groups.setdefault(p.score(after), []).append(p)
         return dict(sorted(groups.items(), key=lambda kv: -kv[0]))
 
+    def games(self, rnd: int | None = None) -> list[Pairing]:
+        """The actual games of a round: byes and "not paired" rows are not games."""
+        rnd = rnd or self.last_round
+        return [p for p in self.rounds.get(rnd, []) if p.kind is PlayKind.GAME]
+
     def unfinished(self, rnd: int | None = None) -> list[Pairing]:
         """Games with no result yet, for the given round or the latest one."""
-        rnd = rnd or self.last_round
-        return [p for p in self.rounds.get(rnd, []) if p.kind is PlayKind.GAME and p.white_score is None]
+        return [p for p in self.games(rnd) if p.white_score is None]
 
     def likely_withdrawn(self, after: int | None = None, consecutive: int = 1) -> set[str]:
         """Players who look to have left the event, for ``to_trf(withdrawn=...)``.

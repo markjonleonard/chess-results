@@ -70,6 +70,23 @@ $ chess-results standings 1452107 --after 6
    6   4½    9  IM  Czopor, Maciej
 ```
 
+Mid-round the scores are not comparable — a player whose game has finished counts
+this round, one still at the board does not — so the heading says how far the
+round has got and each line says what that player is doing. The extra column
+appears only while a round is live.
+
+```
+$ chess-results standings 1452107
+2026 British Chess Championships: Championship — during round 9: 4 of 50 results in
+   1   6½    3  GM  Royal, Shreyas                   playing
+   2   6½    4  IM  Grieve, Harry                    playing
+   …
+  98    2   62  CM  Stubbs, Oliver                   0F
+ 101    2   95      Jermy, Jaden                     not paired
+```
+
+A round paired but not yet started says so instead: `round 9 paired, no results yet`.
+
 ### colours
 
 What the next round's pairing turns on: the colours each player has had, whether
