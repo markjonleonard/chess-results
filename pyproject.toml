@@ -58,6 +58,13 @@ pythonpath = ["src", "."]
 line-length = 110
 src = ["src", "tests"]
 
+[tool.ruff.format]
+# ruff 0.16 began formatting Python blocks inside Markdown, which reflows the
+# aligned trailing comments the README and DESIGN examples rely on. Prose is not
+# the formatter's business, and pinning the behaviour here keeps CI from
+# disagreeing with a developer on an older ruff.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 # ANN, D and S are deliberately absent: a test suite is meant to be full of bare
 # asserts, and `--select ALL` reports 549 findings of which only a handful were
