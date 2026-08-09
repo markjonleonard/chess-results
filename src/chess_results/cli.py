@@ -5,13 +5,17 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
+from typing import TypeVar
 
 from . import __version__
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
 from .client import ChessResults
-from .models import Play, PlayKind
+from .models import Pairing, Play, PlayerRef, PlayKind
 from .tournament import Tournament
+
+T = TypeVar("T")
 
 DESCRIPTION = """\
 Scrape a tournament from chess-results.com and report on it.
@@ -26,9 +30,12 @@ EPILOG = """\
 examples:
   chess-results standings 1452107             the standings after the latest round
   chess-results standings 1452107 --after 6   the standings as they were after round 6
+  chess-results pairings 1452107              the latest round's boards and results
+  chess-results pairings 1452107 6            round 6's boards and results
   chess-results colours 1452107               colour and float history, and who is due what
   chess-results unfinished 1452107            games in the latest round with no result yet
   chess-results dump 1452107 -o event.json    the whole tournament as JSON
+  chess-results standings 1452107 --limit 10  just the top ten, heading kept
 
 Run "chess-results <command> --help" for a command's own options.
 """
@@ -49,15 +56,15 @@ def _fetch(args: argparse.Namespace) -> Tournament:
     )
 
 
-def _round(args: argparse.Namespace, event: Tournament) -> int:
+def _round(requested: int | None, event: Tournament) -> int:
     """The round to report on, clamped to the rounds the tournament actually has.
 
     ``--after 123`` on a seven-round event means "as it stands now", not a round
     that does not exist, so it must not reach the heading or the scoring.
     """
-    if args.after is None:
+    if requested is None:
         return event.last_round
-    return max(1, min(args.after, event.last_round))
+    return max(1, min(requested, event.last_round))
 
 
 def _points(value: float | None) -> str:
@@ -67,19 +74,43 @@ def _points(value: float | None) -> str:
     return f"{int(whole) if whole or not half else ''}{'½' if half else ''}" or "0"
 
 
-def _how_far(event: Tournament, after: int) -> str:
-    """How far the tournament has got, for the heading.
+def _progress(event: Tournament, rnd: int) -> tuple[int, int]:
+    """Games decided and games in the round; equal once the round has settled.
 
     A round is not simply over or not: it is paired before anyone sits down, then
-    live while results come in, and only then settled. "After round 9" is a lie
-    for the first two, and it is the state a live tournament is usually in.
+    live while results come in, and only then settled. A live tournament spends
+    most of its time in the middle state, so no heading may assume the last.
     """
-    games, unfinished = event.games(after), event.unfinished(after)
-    if not games or not unfinished:
+    games = event.games(rnd)
+    return len(games) - len(event.unfinished(rnd)), len(games)
+
+
+def _how_far(event: Tournament, after: int) -> str:
+    """How far the tournament has got, for the standings heading."""
+    done, total = _progress(event, after)
+    if done == total:
         return f"after round {after}"
-    if len(unfinished) == len(games):
+    if not done:
         return f"round {after} paired, no results yet"
-    return f"during round {after}: {len(games) - len(unfinished)} of {len(games)} results in"
+    return f"during round {after}: {done} of {total} results in"
+
+
+def _limited(rows: list[T], limit: int | None) -> tuple[list[T], int]:
+    """The rows to print, and how many were left out.
+
+    Counted in rows of data, not lines of output: ``--limit 10`` is ten players,
+    where ``| head -10`` is nine players and a heading.
+    """
+    if limit is None or limit >= len(rows):
+        return rows, 0
+    kept = max(0, limit)
+    return rows[:kept], len(rows) - kept
+
+
+def _and_the_rest(dropped: int) -> None:
+    """Never truncate silently: a cut-off table looks like a short tournament."""
+    if dropped:
+        print(f"… and {dropped} more")
 
 
 def _state(play: Play | None) -> str:
@@ -116,28 +147,86 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
 def cmd_standings(args: argparse.Namespace) -> int:
     event = _fetch(args)
-    after = _round(args, event)
+    after = _round(args.after, event)
     print(f"{event.name or event.id} — {_how_far(event, after)}")
     # Mid-round the scores are not comparable -- some include this round, some do
     # not -- so say outright what each player is doing. A settled round needs no
     # such column, every score being complete.
     live = bool(event.unfinished(after))
-    for rank, player in enumerate(event.ranking_order(after), start=1):
+    players, dropped = _limited(event.ranking_order(after), args.limit)
+    for rank, player in enumerate(players, start=1):
         line = (
             f"{rank:>4} {_points(player.score(after)):>4} "
             f"{player.start_no or '':>4}  {player.title or '':<3} {player.name}"
         )
         print(f"{line:<52} {_state(player.play(after))}" if live else line)
+    _and_the_rest(dropped)
     return 0
+
+
+def _result(pairing: Pairing) -> str:
+    """The score line of one game, as ``1-0``, ``½-½``, ``0-1``, ``1-0F`` or ``-``."""
+    if pairing.white_score is None:
+        return "-"
+    return f"{_points(pairing.white_score)}-{_points(pairing.black_score)}{'F' if pairing.forfeit else ''}"
+
+
+def _side(event: Tournament, player: PlayerRef, points: float | None) -> str:
+    """One player's half of a pairing row: pre-round score, starting number, name.
+
+    Most events leave the ``No.`` columns off their pairing pages, so the number
+    comes from the assembled player, who has it from the starting-rank list.
+    """
+    known = event.players.get(player.name)
+    start_no = player.start_no or (known.start_no if known else None)
+    title = player.title or (known.title if known else None)
+    return f"{_points(points):>4} {start_no or '':>4}  {title or '':<3} {player.name}"
+
+
+def _side_heading(label: str) -> str:
+    """The same shape as ``_side``, so the two line up. The title column has no name."""
+    return f"{'Pts':>4} {'No':>4}  {'':<3} {label}"
+
+
+def cmd_pairings(args: argparse.Namespace) -> int:
+    """Print one round's pairing table: who is on which board, against whom."""
+    event = _fetch(args)
+    rnd = _round(args.round if args.round is not None else args.after, event)
+    done, total = _progress(event, rnd)
+    state = "" if done == total else (f", {done} of {total} results in" if done else ", no results yet")
+    print(f"{event.name or event.id} — round {rnd} pairings{state}")
+    print(f"{'Bd':>4} {_side_heading('White'):<40} {'Res':<5} {_side_heading('Black')}")
+    boards, dropped = _limited(event.rounds.get(rnd, []), args.limit)
+    for pairing in boards:
+        white = _side(event, pairing.white, pairing.white_points_before)
+        if pairing.black is not None:
+            result, black = _result(pairing), _side(event, pairing.black, pairing.black_points_before)
+        else:
+            # A bye or a withdrawal: no opponent, so the result column carries
+            # whatever the player was awarded for the round, if anything.
+            result = "" if pairing.kind is PlayKind.UNPAIRED else _points(pairing.white_score)
+            black = f"{'':>4} {'':>4}  {'':<3} {_STANDING_IN[pairing.kind]}"
+        print(f"{pairing.board:>4} {white:<40} {result:<5} {black}")
+    _and_the_rest(dropped)
+    return 0
+
+
+#: What fills the opponent's side of a row that has no opponent.
+_STANDING_IN = {
+    PlayKind.PAIRING_BYE: "bye",
+    PlayKind.REQUESTED_BYE: "requested bye",
+    PlayKind.UNPAIRED: "not paired",
+}
 
 
 def cmd_colours(args: argparse.Namespace) -> int:
     """Print the colour and float history that drives the next round's pairings."""
     event = _fetch(args)
-    after = _round(args, event)
+    after = _round(args.after, event)
     print(f"{event.name or event.id} — colour and float history after round {after}")
     print(f"{'Pts':>4} {'No':>4}  {'Name':<32} {'Colours':<10} {'Floats':<10} Due")
-    for player in event.ranking_order(after):
+    players, dropped = _limited(event.ranking_order(after), args.limit)
+    for player in players:
         colours = "".join(c.value.upper() for c in player.colours(after))
         floats = "".join((p.float_direction or "-") for p in player.plays if p.round <= after)
         due, strength = player.colour_preference(after)
@@ -146,6 +235,7 @@ def cmd_colours(args: argparse.Namespace) -> int:
             f"{_points(player.score(after)):>4} {player.start_no or '':>4}  "
             f"{player.name:<32} {colours:<10} {floats:<10} {due_text}"
         )
+    _and_the_rest(dropped)
     return 0
 
 
@@ -156,11 +246,13 @@ def cmd_unfinished(args: argparse.Namespace) -> int:
         print(f"round {event.last_round}: all results in")
         return 0
     print(f"round {event.last_round}: {len(games)} game(s) still unfinished")
-    for game in games:
+    shown, dropped = _limited(games, args.limit)
+    for game in shown:
         print(
             f"  bd{game.board:<4} {game.white.name} ({_points(game.white_points_before)}) "
             f"vs {game.black.name if game.black else '?'} ({_points(game.black_points_before)})"
         )
+    _and_the_rest(dropped)
     return 0
 
 
@@ -199,8 +291,8 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
         type=int,
         default=default(None),
         metavar="ROUND",
-        help="report the position after this round rather than the latest; "
-        "clamped to the rounds played (standings and colours only)",
+        help="report on this round rather than the latest; clamped to the "
+        "rounds played (standings, colours and pairings)",
     )
     group.add_argument(
         "--no-crosstable",
@@ -246,6 +338,17 @@ COMMANDS = (
         "crosstable so that byes dropped from the round pages still count.",
     ),
     (
+        "pairings",
+        (),
+        cmd_pairings,
+        "print a round's board-by-board pairings",
+        "One round's pairing table: board, both players with the score each "
+        "carried into the round, and the result. The latest round unless a round "
+        "number is given (--after names one too, for consistency with the other "
+        "commands). Byes and withdrawals keep their row, as chess-results shows "
+        "them — though only while the round is the current one.",
+    ),
+    (
         "colours",
         ("colors",),
         cmd_colours,
@@ -261,6 +364,13 @@ COMMANDS = (
         "The games in the latest round still being played. Nothing to report once every result is in.",
     ),
 )
+
+
+#: Commands whose arguments are not simply a tournament id, for the usage line.
+USAGE_ARGS = {
+    "dump": "[-o FILE] <tournament-id>",
+    "pairings": "<tournament-id> [<round>]",
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -280,12 +390,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     for name, aliases, handler, help_text, description in COMMANDS:
-        extra = " [-o FILE]" if name == "dump" else ""
         child = sub.add_parser(
             name,
             aliases=list(aliases),
             help=help_text,
-            usage=f"chess-results [options] {name}{extra} <tournament-id>",
+            usage=f"chess-results [options] {name} {USAGE_ARGS.get(name, '<tournament-id>')}",
             description=description,
             parents=[_shared(defaults=False)],
         )
@@ -294,8 +403,37 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "dump":
             child.add_argument("-o", "--output", metavar="FILE", help="write JSON here instead of stdout")
+        else:
+            # Not on dump: truncated JSON is not JSON. Left off the top-level
+            # parser for the same reason, so `dump --limit` is an error rather
+            # than a flag that quietly does nothing.
+            child.add_argument(
+                "--limit",
+                type=int,
+                metavar="ROWS",
+                help="print at most this many rows, then say how many were left out",
+            )
+        if name == "pairings":
+            child.add_argument(
+                "round",
+                nargs="?",
+                type=int,
+                metavar="<round>",
+                help="which round to show (default the latest)",
+            )
         child.set_defaults(func=handler)
     return parser
+
+
+def _silence_stdout() -> None:
+    """Point what is left of stdout at /dev/null, after the reader has gone away.
+
+    ``dump ... | head`` closes the pipe long before we stop writing. Python's
+    parting flush of a dead stdout prints "Exception ignored ... BrokenPipeError"
+    over the user's prompt, which reads as a crash; this gives the flush somewhere
+    harmless to go.
+    """
+    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -307,7 +445,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not hasattr(args, "output"):
         args.output = None
-    return args.func(args)
+    try:
+        return args.func(args)
+    except BrokenPipeError:
+        _silence_stdout()
+        return 141  # what a shell reports for a process killed by SIGPIPE
 
 
 if __name__ == "__main__":

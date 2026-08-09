@@ -3,7 +3,17 @@ import re
 
 import pytest
 
-from chess_results.cli import _how_far, _round, _state, build_parser, cmd_colours, cmd_standings, main
+from chess_results.cli import (
+    _how_far,
+    _limited,
+    _round,
+    _state,
+    build_parser,
+    cmd_colours,
+    cmd_pairings,
+    cmd_standings,
+    main,
+)
 from chess_results.models import Play, PlayKind
 
 
@@ -77,7 +87,7 @@ class TestStandingsDistinguishALiveRoundFromASettledOne:
 
     def test_a_live_round_says_who_is_still_playing(self, british, capsys, monkeypatch):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_standings(argparse.Namespace(after=6))
+        cmd_standings(argparse.Namespace(after=6, limit=None))
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("during round 6: 46 of 52 results in")
         states = {re.split(r"\s{2,}", line)[-1] for line in lines[1:]}
@@ -86,10 +96,107 @@ class TestStandingsDistinguishALiveRoundFromASettledOne:
 
     def test_a_settled_round_needs_no_such_column(self, british, capsys, monkeypatch):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_standings(argparse.Namespace(after=5))
+        cmd_standings(argparse.Namespace(after=5, limit=None))
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("after round 5")
         assert not any(line.endswith("playing") for line in lines[1:])
+
+
+class TestPairings:
+    """One round's board-by-board table."""
+
+    @staticmethod
+    def _run(event, monkeypatch, capsys, **kwargs):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
+        cmd_pairings(argparse.Namespace(**{"round": None, "after": None, "limit": None, **kwargs}))
+        return capsys.readouterr().out.splitlines()
+
+    def test_a_settled_round_shows_boards_players_and_results(self, british, monkeypatch, capsys):
+        lines = self._run(british, monkeypatch, capsys, round=5)
+        assert lines[0].endswith("round 5 pairings")
+        assert lines[1].split() == ["Bd", "Pts", "No", "White", "Res", "Pts", "No", "Black"]
+        assert lines[2] == (
+            "   1   3½    3  GM  Royal, Shreyas            ½-½      4    6  IM  Bazakutsa, Svyatoslav"
+        )
+
+    def test_starting_numbers_are_joined_in_from_the_starting_rank(self, british, monkeypatch, capsys):
+        """This event's pairing pages carry no No. columns, so the rows have none."""
+        assert british.rounds[5][0].white.start_no is None
+        assert "  3  GM  Royal, Shreyas" in self._run(british, monkeypatch, capsys, round=5)[2]
+
+    def test_the_heading_counts_the_results_of_a_live_round(self, british, monkeypatch, capsys):
+        assert self._run(british, monkeypatch, capsys, round=6)[0].endswith(
+            "round 6 pairings, 46 of 52 results in"
+        )
+
+    def test_a_paired_but_unplayed_round_says_so_and_shows_no_results(self, british, monkeypatch, capsys):
+        lines = self._run(british, monkeypatch, capsys, round=7)
+        assert lines[0].endswith("round 7 pairings, no results yet")
+        assert "-" in lines[2].split()
+        assert not any(re.search(r"[\d½]-[\d½]", line) for line in lines[2:])
+
+    def test_rows_with_no_opponent_keep_their_board_and_say_what_happened(self, british, monkeypatch, capsys):
+        """Byes and withdrawals are rows on the page too, and round 6 still has them."""
+        tails = {re.split(r"\s{2,}", line)[-1] for line in self._run(british, monkeypatch, capsys, round=6)}
+        assert {"bye", "not paired"} <= tails
+
+    def test_the_round_defaults_to_the_latest(self, british, monkeypatch, capsys):
+        assert self._run(british, monkeypatch, capsys)[0].endswith("round 7 pairings, no results yet")
+
+    def test_after_names_a_round_too_and_the_positional_wins(self, british, monkeypatch, capsys):
+        assert self._run(british, monkeypatch, capsys, after=5)[0].endswith("round 5 pairings")
+        assert self._run(british, monkeypatch, capsys, round=4, after=5)[0].endswith("round 4 pairings")
+
+    def test_a_round_the_event_has_not_reached_is_clamped(self, british, monkeypatch, capsys):
+        assert self._run(british, monkeypatch, capsys, round=99)[0].endswith(
+            "round 7 pairings, no results yet"
+        )
+
+
+class TestLimit:
+    """``--limit`` counts rows of data, which ``| head`` cannot do."""
+
+    @pytest.mark.parametrize(
+        ("limit", "kept", "dropped"),
+        [(None, 4, 0), (10, 4, 0), (4, 4, 0), (3, 3, 1), (1, 1, 3), (0, 0, 4), (-2, 0, 4)],
+    )
+    def test_rows_are_taken_from_the_front(self, limit, kept, dropped):
+        rows, left_out = _limited(["a", "b", "c", "d"], limit)
+        assert (len(rows), left_out) == (kept, dropped)
+
+    def test_the_heading_is_not_one_of_the_rows(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_standings(argparse.Namespace(after=5, limit=3))
+        lines = capsys.readouterr().out.splitlines()
+        assert lines[0].endswith("after round 5")
+        assert len(lines) == 5  # heading, three players, and the tally
+        assert lines[-1] == "… and 105 more"
+
+    def test_nothing_is_said_when_nothing_is_left_out(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_standings(argparse.Namespace(after=5, limit=500))
+        assert "more" not in capsys.readouterr().out.splitlines()[-1]
+
+    def test_dump_refuses_it_rather_than_ignoring_it(self):
+        """Truncated JSON is not JSON, so the flag is not on dump at all."""
+        with pytest.raises(SystemExit) as exit_info:
+            build_parser().parse_args(["dump", "1452107", "--limit", "3"])
+        assert exit_info.value.code == 2
+
+
+class TestBrokenPipe:
+    """`chess-results dump ... | head` must not look like a crash."""
+
+    def test_a_closed_pipe_is_not_an_error_report(self, monkeypatch):
+        silenced = []
+        monkeypatch.setattr("chess_results.cli._silence_stdout", lambda: silenced.append(True))
+        monkeypatch.setattr("chess_results.cli._fetch", _raise_broken_pipe)
+        assert main(["standings", "1452107"]) == 141
+        assert silenced == [True]
+
+
+def _raise_broken_pipe(args):
+    raise BrokenPipeError
 
 
 class TestRoundIsClamped:
@@ -100,9 +207,9 @@ class TestRoundIsClamped:
         [(None, 7), (6, 6), (7, 7), (8, 7), (123, 7), (0, 1), (-4, 1)],
     )
     def test_clamped_to_the_rounds_played(self, british, given, expected):
-        assert _round(argparse.Namespace(after=given), british) == expected
+        assert _round(given, british) == expected
 
     def test_heading_reports_the_last_round_not_the_request(self, british, capsys, monkeypatch):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_colours(argparse.Namespace(after=123))
+        cmd_colours(argparse.Namespace(after=123, limit=None))
         assert "after round 7" in capsys.readouterr().out.splitlines()[0]

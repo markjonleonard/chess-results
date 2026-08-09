@@ -40,10 +40,11 @@ That number is what you pass to every command below. The examples all use
 
 ## Command line
 
-Four commands. Each takes a tournament number.
+Five commands. Each takes a tournament number.
 
 ```bash
 chess-results standings 1452107              # who is winning
+chess-results pairings 1452107               # this round's boards
 chess-results colours 1452107                # colour and float history
 chess-results unfinished 1452107             # games still being played
 chess-results dump 1452107 -o event.json     # everything, as a data file
@@ -54,6 +55,11 @@ particular round, rather than as it stands now. Ask for a round the tournament
 has not reached and you get the latest one.
 
 `colors` is accepted as a synonym for `colours`.
+
+`--limit N` prints the first N rows and then says how many it left out. It counts
+rows rather than lines, so `--limit 10` is ten players where `| head -10` is nine
+players and a heading. It saves no time — the fetching is done before anything is
+printed — and it is not offered on `dump`, truncated JSON being no use to anyone.
 
 ### standings
 
@@ -86,6 +92,29 @@ $ chess-results standings 1452107
 ```
 
 A round paired but not yet started says so instead: `round 9 paired, no results yet`.
+
+### pairings
+
+One round's table: board, both players with the score each carried into the
+round, and the result. The latest round unless you name one — `pairings 1452107 6`,
+or `--after 6` if you prefer the flag the other commands take.
+
+```
+$ chess-results pairings 1452107 6
+2026 British Chess Championships: Championship — round 6 pairings
+  Bd  Pts   No      White                     Res    Pts   No      Black
+   1   4½    6  IM  Bazakutsa, Svyatoslav     ½-½     4½    4  IM  Grieve, Harry
+   2    4    1  GM  Mcshane, Luke J           1-0      4   10  IM  Waldhausen Gordon, Frederick
+   …
+  52    ½  105  WCM Nevska, Gerda             1                    bye
+  53    3   21  IM  Golding, Alex                                  not paired
+```
+
+The starting numbers are joined in from the starting-rank list, because most
+events leave the `No.` columns off their pairing pages. Byes and "not paired"
+rows are shown as chess-results publishes them — which is to say only while the
+round is the current one, since they are deleted once the next round is paired.
+See [A note on byes](#a-note-on-byes).
 
 ### colours
 
