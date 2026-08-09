@@ -21,7 +21,13 @@ from .models import (
     Preference,
     StartingRankEntry,
 )
-from .parse import parse_crosstable, parse_not_paired, parse_pairings, parse_starting_rank
+from .parse import (
+    parse_crosstable,
+    parse_not_paired,
+    parse_pairings,
+    parse_published_totals,
+    parse_starting_rank,
+)
 from .tournament import Tournament
 
 __all__ = [
@@ -42,6 +48,7 @@ __all__ = [
     "parse_crosstable",
     "parse_not_paired",
     "parse_pairings",
+    "parse_published_totals",
     "parse_starting_rank",
 ]
 

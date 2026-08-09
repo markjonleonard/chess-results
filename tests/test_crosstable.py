@@ -10,7 +10,7 @@ import pytest
 from tests.conftest import _british, fixture
 
 from chess_results.models import Colour, PlayKind
-from chess_results.parse import parse_crosstable
+from chess_results.parse import parse_crosstable, parse_published_totals
 
 
 @pytest.fixture(scope="module")
@@ -175,3 +175,68 @@ class TestCrossCheckingTheTwoViews:
 def _british_rounds_only():
     """A fresh, unreconciled event -- the session fixtures must not be mutated."""
     return _british(crosstable=False)
+
+
+class TestPublishedTotals:
+    """The TB1 column is the arbiter's own arithmetic, so the round-by-round
+    cells we read out of the same row must sum to it."""
+
+    @pytest.mark.parametrize(
+        ("name", "players"),
+        [
+            ("british2026_champ_crosstable", 108),
+            ("british2026_champ_crosstable_final", 108),
+            ("frome2026_open_crosstable", 38),
+        ],
+    )
+    def test_every_published_total_is_read(self, name, players):
+        totals = parse_published_totals(fixture(f"{name}.html"))
+        assert len(totals) == players
+
+    def test_a_half_point_total_survives_the_decimal_comma(self):
+        """5,5 in the source; the whole point of reading this column."""
+        totals = parse_published_totals(fixture("british2026_champ_crosstable_final.html"))
+        assert 5.5 in totals.values()
+        assert all(t % 0.5 == 0 for t in totals.values())
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "british2026_champ_crosstable",
+            "british2026_champ_crosstable_final",
+            "frome2026_open_crosstable",
+        ],
+    )
+    def test_our_cells_sum_to_the_published_total_for_every_player(self, name):
+        """254 player-rows across three captures, and all of them agree."""
+        event = _british(crosstable=False)
+        html = fixture(f"{name}.html")
+        assert event.check_published_totals(parse_crosstable(html), parse_published_totals(html)) == []
+
+    def test_a_page_without_the_column_yields_nothing(self):
+        assert parse_published_totals(fixture("british2026_champ_r5.html")) == {}
+
+    def test_a_wrong_total_is_caught_and_named(self):
+        event = _british(crosstable=False)
+        html = fixture("british2026_champ_crosstable.html")
+        totals = parse_published_totals(html)
+        totals[1] = totals[1] + 1
+        found = event.check_published_totals(parse_crosstable(html), totals)
+        assert len(found) == 1
+        assert found[0].field == "total"
+        assert found[0].player == "Mcshane, Luke J"
+        assert "sum to 5.0 but it publishes 6.0" in str(found[0])
+
+    def test_it_is_not_compared_against_the_assembled_history(self):
+        """A published total and an assembled score cover the same rounds only by luck.
+
+        The mid-event crosstable is a later capture than the round pages, so
+        comparing the two produces 75 mismatches on a healthy tournament.
+        """
+        html = fixture("british2026_champ_crosstable.html")
+        totals = parse_published_totals(html)
+        event = _british(crosstable=True)
+        by_no = {p.start_no: p for p in event.players.values() if p.start_no}
+        differing = [no for no, total in totals.items() if by_no[no].score(7) != total]
+        assert len(differing) == 75
+        assert [d for d in event.disagreements if d.field == "total"] == []

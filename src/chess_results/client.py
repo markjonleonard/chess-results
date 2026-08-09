@@ -22,6 +22,7 @@ from .parse import (
     parse_crosstable,
     parse_not_paired,
     parse_pairings,
+    parse_published_totals,
     parse_starting_rank,
     parse_tournament_name,
 )
@@ -271,7 +272,12 @@ class ChessResults:
             event.add_round(pairings)
 
         if crosstable and event.rounds:
-            event.add_crosstable(self.crosstable(tournament_id))
+            # Fetched once and parsed twice: the round-by-round cells, and the
+            # totals the page publishes, which are the check on our reading of them.
+            html = self.fetch(tournament_id, ART_CROSSTABLE, expire_after=self.live_ttl)
+            parsed = parse_crosstable(html)
+            event.add_crosstable(parsed)
+            event.check_published_totals(parsed, parse_published_totals(html))
 
         self.settled.record(tournament_id, settled_rounds(event))
         return event

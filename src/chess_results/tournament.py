@@ -172,6 +172,49 @@ class Tournament:
             player.plays.sort(key=lambda p: p.round)
         return added
 
+    def check_published_totals(
+        self,
+        crosstable: dict[int, list[CrosstableEntry]],
+        totals: dict[int, float],
+    ) -> list[Disagreement]:
+        """Check our reading of the crosstable against the total it publishes.
+
+        The ``TB1`` column is the arbiter's own arithmetic, so the round-by-round
+        cells we parsed out of the same row must sum to it. That makes this the
+        strongest check available on the scoring: every other one compares two of
+        our own parsers against each other.
+
+        It deliberately compares the crosstable against *itself* rather than
+        against the assembled history. A player's assembled score is only
+        comparable to a published total when both cover exactly the same rounds,
+        and they routinely do not -- the crosstable is often the fresher capture,
+        and it may run to rounds we have not fetched. Comparing those produced 75
+        false alarms on the mid-event fixture alone.
+
+        Published scores are used as printed: a pairing-allocated bye counts 1
+        here whatever :attr:`bye_value` says, that being the crosstable's own
+        convention.
+        """
+        names = {p.start_no: name for name, p in self.players.items() if p.start_no is not None}
+        found: list[Disagreement] = []
+        for start_no, published in totals.items():
+            entries = crosstable.get(start_no)
+            if entries is None:
+                continue
+            ours = sum(e.score for e in entries if e.score is not None)
+            if abs(ours - published) > 1e-9:
+                found.append(
+                    Disagreement(
+                        player=names.get(start_no, f"#{start_no}"),
+                        round=0,  # a total belongs to no single round
+                        field="total",
+                        from_round_page=ours,
+                        from_crosstable=published,
+                    )
+                )
+        self.disagreements.extend(found)
+        return found
+
     def ranking_order(self, after: int | None = None) -> list[Player]:
         """Players in FIDE ranking order: score descending, then starting number."""
         return sorted(

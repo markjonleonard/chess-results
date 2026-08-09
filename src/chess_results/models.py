@@ -121,7 +121,8 @@ class Disagreement:
 
     player: str
     round: int
-    #: The attribute that differs: "kind", "colour", "opponent", "score" or "forfeit".
+    #: The attribute that differs: "kind", "colour", "opponent", "score",
+    #: "forfeit", or "total" for a published total that our cells do not sum to.
     field: str
     from_round_page: object = None
     from_crosstable: object = None
@@ -130,6 +131,13 @@ class Disagreement:
         def show(value: object) -> str:
             return value.value if isinstance(value, Enum) else repr(value)
 
+        if self.field == "total":
+            # Both sides come from the crosstable here: our sum of its cells
+            # against the total it prints, so the usual wording would mislead.
+            return (
+                f"{self.player}: the crosstable's rounds sum to "
+                f"{show(self.from_round_page)} but it publishes {show(self.from_crosstable)}"
+            )
         return (
             f"round {self.round}: {self.player}: {self.field} is "
             f"{show(self.from_round_page)} on the round page "

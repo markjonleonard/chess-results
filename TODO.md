@@ -293,13 +293,25 @@ Open work on chess-results, roughly in the order it is worth doing.
       Still latent in the pipeline: nothing we parse today emits commas, the round pages
       using `½` throughout. The tests therefore sweep every `n,n` string in the British
       crosstable (the `TB1` column) to prove the fix works on real data.
-- [ ] **Read the crosstable's published totals and check them.** `TB1` is the tournament's
-      own total for each player, printed with the decimal comma the item above now handles,
-      and nothing reads it. CLAUDE.md says to "verify score changes against the crosstable's
-      published totals; all 108 must agree" — which is a manual instruction that
-      `Tournament.disagreements` could now carry automatically. It is the strongest check
-      available on the scoring, since it compares against what the arbiter published rather
-      than against another of our own parsers.
+- [x] **Read the crosstable's published totals and check them.** Done 2026-08-09.
+      `parse_published_totals` reads the `TB1` column, and `check_published_totals` requires
+      the round-by-round cells we parsed from the same row to sum to it, recording a
+      `Disagreement` with `field="total"` when they do not. The client runs it as part of
+      `tournament()`, fetching the page once and parsing it twice. CLAUDE.md's manual "all
+      108 must agree" is now automatic.
+
+      **It passes everywhere**: 254 player-rows across the three crosstable fixtures, and
+      all 108 against the finished live event.
+
+      The design point that took measuring: it compares the crosstable **against itself**,
+      not against the assembled history. A published total and an assembled score are
+      comparable only when both cover exactly the same rounds, and they routinely do not —
+      the crosstable is often a fresher capture and may run to rounds we never fetched.
+      Comparing them gives **75** mismatches on the mid-event fixture and 5 on the played-out
+      one, none of them faults. A test pins that 75 so nobody "fixes" the check into
+      uselessness. Published scores are also used exactly as printed, so a pairing-allocated
+      bye counts 1 here whatever `bye_value` says — that is the crosstable's own convention,
+      and the rescaling belongs downstream.
 - [ ] **Team tournaments are untested.** Unknown whether `parse_pairings` copes with a team
       pairing table; do not claim support until there is a fixture.
 

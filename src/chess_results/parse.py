@@ -414,6 +414,41 @@ def has_pairings(html: str) -> bool:
     return any(_header_row(t, "Bo.") for t in _data_tables(html))
 
 
+def parse_published_totals(html: str) -> dict[int, float]:
+    """The tournament's own total for each player, from the crosstable's ``TB1``.
+
+    Keyed by starting number, as the crosstable is. This is the arbiter's
+    arithmetic rather than ours, which makes it the one figure on the page that
+    can check our reading of the round-by-round cells: they must sum to it.
+
+    Printed in the server's locale, so ``4½`` arrives as ``4,5`` -- see
+    :func:`parse_points`. Players whose total will not parse are left out.
+    """
+    for table in _data_tables(html):
+        found = _header_row(table, "No.")
+        if found and "TB1" in found[0]:
+            break
+    else:
+        return {}
+
+    header, header_idx = found
+    cols = _Columns(header)
+    i_no, i_total = cols.index("No."), cols.index("TB1")
+    if i_no is None or i_total is None:
+        return {}
+
+    totals: dict[int, float] = {}
+    for row in table.select("tr")[header_idx + 1 :]:
+        cells = [_text(c) for c in _cells(row)]
+        if len(cells) != len(header):
+            continue
+        start_no = _int(cols.value(cells, i_no))
+        total = parse_points(cols.value(cells, i_total))
+        if start_no is not None and total is not None:
+            totals[start_no] = total
+    return totals
+
+
 def parse_not_paired(html: str) -> list[NotPairedEntry]:
     """Parse the "not paired" page (``art=40``).
 

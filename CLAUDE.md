@@ -74,8 +74,10 @@ rows only while that round is the current one; once a later round is paired thos
 *deleted*. A player who took a full-point bye in round 6 then has no round 6 anywhere on the
 round pages and scores a point light. The starting-rank crosstable (`art=5`) keeps the whole
 record, so `tournament()` fetches it and `add_crosstable` fills any round a player is
-missing. This is not a display option — it happens with and without `turdet`. Verify score
-changes against the crosstable's published totals; all 108 must agree.
+missing. This is not a display option — it happens with and without `turdet`. Verifying score
+changes against the crosstable's published totals is no longer a manual step:
+`check_published_totals` requires the cells we read from a row to sum to the `TB1` total that
+row publishes, and `tournament()` runs it. All 108 agree, and always have.
 
 Where both views *do* have a round, `add_crosstable` compares them and records any
 contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Nothing has
