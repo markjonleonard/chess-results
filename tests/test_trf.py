@@ -127,13 +127,14 @@ class TestNonStandardByeValues:
     whose totals disagree, so what a bye is worth has to be stated."""
 
     def _event(self, bye_value):
+        from tests.conftest import _round_fixture
+
         from chess_results.parse import parse_crosstable
 
-        finished = {6: "british2026_champ_r6_finished", 7: "british2026_champ_r7_finished"}
         event = Tournament(id="1452107", name="British", bye_value=bye_value)
         event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
         for rnd in range(1, 9):
-            name = finished.get(rnd, f"british2026_champ_r{rnd}")
+            name = _round_fixture(rnd, played_out=True)
             event.add_round(parse_pairings(fixture(f"{name}.html"), rnd, bye_value=bye_value))
         event.add_crosstable(parse_crosstable(fixture("british2026_champ_crosstable_final.html")))
         return event

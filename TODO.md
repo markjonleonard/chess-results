@@ -342,7 +342,12 @@ Open work on chess-results, roughly in the order it is worth doing.
       expiry at write time, so a round that settles between runs is fetched once more before
       it takes the 30-day lifetime. Fixable by rewriting the cache entry at the moment a
       round is recorded as settled. Documented in DESIGN.md as a known caveat; low value.
-- [ ] **Two round-6 fixtures now exist.** `british2026_champ_r6.html` (mid-round, bye rows
-      intact) and `british2026_champ_r6_finished.html` (complete, bye rows deleted). Keep
-      both — the pair is what demonstrates the vanishing-bye problem — but the naming does
-      not make the distinction obvious from a directory listing.
+- [x] **Two round-6 fixtures now exist.** Renamed 2026-08-09. The mid-round captures are
+      `british2026_champ_r6_midround.html` and `_r7_midround.html`, sitting beside their
+      `_finished` counterparts, so a directory listing states which is which and neither
+      holds the plain `_r6.html` name. Tests ask `conftest._round_fixture(rnd, played_out=…)`
+      for the name.
+
+      The rename immediately earned itself: three places in `test_cache.py` were building
+      `f"british2026_champ_r{rnd}.html"` and silently getting the mid-round capture, which
+      is what they wanted but had never said. They now say so.

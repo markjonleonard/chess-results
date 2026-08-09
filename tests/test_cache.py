@@ -6,7 +6,7 @@ assert on the lifetimes it asks for.
 """
 
 import pytest
-from tests.conftest import fixture
+from tests.conftest import _round_fixture, fixture
 
 from chess_results.cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, SettledRounds
 from chess_results.client import ChessResults, settled_rounds
@@ -52,7 +52,8 @@ def pages(art, rnd):
     if art == 5:
         return fixture("british2026_champ_crosstable.html")
     if rnd and rnd <= 7:
-        return fixture(f"british2026_champ_r{rnd}.html")
+        # The mid-round captures for 6 and 7: this fake serves a live tournament.
+        return fixture(f"{_round_fixture(rnd, played_out=False)}.html")
     return fixture("british2026_champ_r8_unpaired_only.html")
 
 
@@ -120,7 +121,7 @@ class TestSettledRounds:
     def test_a_round_with_games_in_progress_has_not_settled(self):
         event = Tournament(id="x")
         for rnd in (6, 7):
-            event.add_round(parse_pairings(fixture(f"british2026_champ_r{rnd}.html"), rnd))
+            event.add_round(parse_pairings(fixture(f"{_round_fixture(rnd, played_out=False)}.html"), rnd))
         assert 6 not in settled_rounds(event), "round 6 had six games unfinished"
 
     def test_records_survive_between_instances(self, tmp_path):

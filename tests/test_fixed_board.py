@@ -26,7 +26,7 @@ def test_split_name_marker(text, expected):
 
 
 def test_legend_is_read_from_the_page():
-    legend = parse_legend(fixture("british2026_champ_r6.html"))
+    legend = parse_legend(fixture("british2026_champ_r6_midround.html"))
     assert legend == {"*)": "This player is assigned to a fixed board."}
 
 
@@ -37,7 +37,7 @@ def test_no_legend_when_nobody_is_annotated():
 class TestPairingRows:
     @pytest.fixture(scope="class")
     def round6(self):
-        return parse_pairings(fixture("british2026_champ_r6.html"), 6)
+        return parse_pairings(fixture("british2026_champ_r6_midround.html"), 6)
 
     def test_marked_player_is_flagged(self, round6):
         hebden = next(p for p in round6 if p.white.name == "Hebden, Mark L").white

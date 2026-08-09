@@ -160,12 +160,17 @@ plus a congress section with a different column layout (it publishes starting-ra
 numbers and has half-point byes). Nothing in the suite touches the network.
 
 Several rounds have two fixtures on purpose, because the same round looks different
-depending on when it was caught. `_r6.html` and `_r7.html` are mid-round captures — six
-games still in progress in one, a paired-but-unplayed round in the other — and their
-`_r6_finished.html` / `_r7_finished.html` counterparts are the same rounds played out.
-The r6 pair is what demonstrates the bye problem: the mid-round page still has its bye
-rows, the finished one has had them deleted. `_r8_unpaired_only.html` is the "round not yet
-paired" page, and `_r8.html` is round 8 played.
+depending on when it was caught. `_r6_midround.html` and `_r7_midround.html` are the earlier
+captures — six games still in progress in one, a paired-but-unplayed round in the other —
+and their `_r6_finished.html` / `_r7_finished.html` counterparts are the same rounds played
+out. The r6 pair is what demonstrates the bye problem: the mid-round page still has its bye
+rows, the finished one has had them deleted.
+
+**Neither capture holds the plain `_r6.html` name, deliberately.** Which one a test wants is
+the whole point of the pair, so there is no default to fall into: ask `conftest._round_fixture(rnd,
+played_out=...)` for the name rather than building `f"..._r{rnd}.html"`, which is what the
+old naming quietly encouraged. `_r8_unpaired_only.html` is the "round not yet paired" page,
+and `_r8.html` is round 8 played.
 
 `_r9.html` and `_crosstable_final.html` were captured on 2026-08-09 for the two defaulted
 games (see `test_forfeit.py`); round 9 was still being played, so **there is no

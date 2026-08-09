@@ -88,7 +88,7 @@ class TestBritishPairings:
 
     @pytest.fixture(scope="class")
     def round7(self):
-        return parse_pairings(fixture("british2026_champ_r7.html"), 7)
+        return parse_pairings(fixture("british2026_champ_r7_midround.html"), 7)
 
     def test_board_one(self, round7):
         board = round7[0]
@@ -110,7 +110,7 @@ class TestBritishPairings:
         assert byes[0].white_score == 1.0, "defaults to a full point"
 
     def test_bye_value_is_configurable(self):
-        half = parse_pairings(fixture("british2026_champ_r7.html"), 7, bye_value=0.5)
+        half = parse_pairings(fixture("british2026_champ_r7_midround.html"), 7, bye_value=0.5)
         assert [p.white_score for p in half if p.kind is PlayKind.PAIRING_BYE] == [0.5]
 
     def test_unpaired_players_score_nothing(self, round7):
@@ -119,7 +119,7 @@ class TestBritishPairings:
         assert all(p.white_score == 0.0 and p.black is None for p in unpaired)
 
     def test_round_six_results(self):
-        round6 = parse_pairings(fixture("british2026_champ_r6.html"), 6)
+        round6 = parse_pairings(fixture("british2026_champ_r6_midround.html"), 6)
         played = [p for p in round6 if p.played]
         assert len(played) == 46
         adams = next(p for p in round6 if p.black and p.black.name == "Adams, Michael")

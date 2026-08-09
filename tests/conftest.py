@@ -19,18 +19,27 @@ def fixture(name: str) -> str:
 
 #: Rounds 1-8, every game of which has a result. Round 9 was still being played
 #: when the fixtures were captured, so there is no complete-tournament fixture.
-#: Rounds 6 and 7 have to come from their `_finished` captures: the plain ones
-#: are mid-round snapshots kept deliberately, for the byes they still show.
 BRITISH_PLAYED_ROUNDS = 8
-_FINISHED = {6: "british2026_champ_r6_finished", 7: "british2026_champ_r7_finished"}
+
+#: Rounds 6 and 7 were each saved twice, and which capture you want is the whole
+#: point of the pair: `_midround` still shows its bye and "not paired" rows,
+#: `_finished` is the same round after a later one was paired and those rows were
+#: deleted. Neither is "the" round 6 fixture, so neither carries the plain name.
+_CAPTURE = {6: "midround", 7: "midround"}
+_PLAYED_CAPTURE = {6: "finished", 7: "finished"}
+
+
+def _round_fixture(rnd: int, played_out: bool) -> str:
+    captures = _PLAYED_CAPTURE if played_out else _CAPTURE
+    suffix = captures.get(rnd)
+    return f"british2026_champ_r{rnd}" + (f"_{suffix}" if suffix else "")
 
 
 def _british(crosstable: bool, rounds: int = BRITISH_ROUNDS, played_out: bool = False) -> Tournament:
     event = Tournament(id="1452107", name="2026 British Chess Championships: Championship")
     event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
     for rnd in range(1, rounds + 1):
-        name = _FINISHED.get(rnd, f"british2026_champ_r{rnd}") if played_out else f"british2026_champ_r{rnd}"
-        event.add_round(parse_pairings(fixture(f"{name}.html"), rnd))
+        event.add_round(parse_pairings(fixture(f"{_round_fixture(rnd, played_out)}.html"), rnd))
     if crosstable:
         name = "british2026_champ_crosstable_final" if played_out else "british2026_champ_crosstable"
         event.add_crosstable(parse_crosstable(fixture(f"{name}.html")))
