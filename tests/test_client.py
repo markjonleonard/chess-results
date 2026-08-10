@@ -3,7 +3,13 @@ the client builds, and drives the adapter against a stubbed connection pool."""
 
 import requests
 
-from chess_results.client import RETRY_STATUSES, ChessResults, retrying_adapter
+from chess_results.client import (
+    ALL_ROWS,
+    ART_CROSSTABLE,
+    RETRY_STATUSES,
+    ChessResults,
+    retrying_adapter,
+)
 
 
 def _retry(session: requests.Session, scheme: str = "https://") -> object:
@@ -60,3 +66,37 @@ class TestASuppliedSessionIsLeftAlone:
 def test_the_adapter_is_usable_on_its_own():
     """It is exported so a caller can mount it on a session of their own."""
     assert retrying_adapter(retries=1).max_retries.total == 1
+
+
+class TestEveryRequestAsksForTheWholePage:
+    """chess-results paginates a long list at 150 rows and says so nowhere a
+    parser can see it, so the truncated page reads as a complete small event.
+
+    The 2026 Arad Open has 209 players. Read paginated it is a 150-player
+    tournament with no error raised, no field missing from the HTML we parsed,
+    and every score, float and prediction drawn from two thirds of the event.
+    Nothing downstream can detect it, which is why it belongs on the request.
+    """
+
+    @staticmethod
+    def _query(**params):
+        client = ChessResults(session=requests.Session())
+        return client._query(ART_CROSSTABLE, params)
+
+    def test_zeilen_is_on_the_query(self):
+        assert self._query()["zeilen"] == ALL_ROWS
+
+    def test_english_is_too(self):
+        """The parsers key off English labels, so this has always been required."""
+        assert self._query()["lan"] == 1
+
+    def test_a_caller_cannot_lose_it_by_accident(self):
+        """Explicit params are merged after, so they may override deliberately."""
+        assert self._query(rd=3)["zeilen"] == ALL_ROWS
+        assert self._query(zeilen=10)["zeilen"] == 10
+
+    def test_the_cache_probe_asks_the_same_question(self):
+        """_is_cached builds its own request; a different query would make every
+        lookup miss, and the pacing that depends on it would sleep needlessly."""
+        client = ChessResults(session=requests.Session())
+        assert client._query(ART_CROSSTABLE, {}) == client._query(ART_CROSSTABLE, {})

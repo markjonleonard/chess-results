@@ -240,3 +240,61 @@ class TestPublishedTotals:
         differing = [no for no, total in totals.items() if by_no[no].score(7) != total]
         assert len(differing) == 75
         assert [d for d in event.disagreements if d.field == "total"] == []
+
+
+class TestTheScoreColumnIsNotAlwaysTB1:
+    """TB1 holds the score on some events and a tiebreak on others.
+
+    The 2026 British and Frome both print TB1 and no Pts. column, and their TB1
+    *is* the score -- which is what made it look like a rule. Arad 2026 prints
+    both: Pts. is the score and TB1 is a rating tiebreak, so reading TB1 gave
+    the top seed a total of 2369 and reported 208 of 209 players as disagreeing
+    with themselves. A wrong column is worse than no column, because it buries
+    a real disagreement in a page of false ones.
+    """
+
+    @staticmethod
+    def _header(name):
+        from chess_results.parse import _data_tables, _header_row
+
+        for table in _data_tables(fixture(name)):
+            found = _header_row(table, "No.")
+            if found:
+                return found[0]
+        raise AssertionError("no crosstable header")
+
+    def test_arad_publishes_both_columns(self):
+        """Guarding the premise: if this event stopped printing Pts. the test
+        below would pass for the wrong reason."""
+        header = self._header("arad2026_a_crosstable.html")
+        assert "Pts." in header
+        assert "TB1" in header
+
+    def test_the_score_is_read_from_points_not_the_tiebreak(self):
+        totals = parse_published_totals(fixture("arad2026_a_crosstable.html"))
+        # Kovalenko is seed 1 and scored 6 of 9. TB1 on his row is 2369.
+        assert totals[1] == 6.0
+        assert max(totals.values()) <= 9
+
+    def test_the_whole_event_then_agrees_with_itself(self):
+        from chess_results.tournament import Tournament
+
+        html = fixture("arad2026_a_crosstable.html")
+        event = Tournament(id="1342553")
+        cross = parse_crosstable(html)
+        event.add_crosstable(cross)
+        assert len(cross) == 209
+        assert event.check_published_totals(cross, parse_published_totals(html)) == []
+
+    def test_tb1_is_still_used_where_it_is_the_only_candidate(self):
+        """The British prints no Pts. column, and its TB1 is the score."""
+        assert "Pts." not in self._header("british2026_champ_crosstable_final.html")
+        totals = parse_published_totals(fixture("british2026_champ_crosstable_final.html"))
+        assert totals and max(totals.values()) <= 9
+
+    def test_an_implausible_column_is_refused_rather_than_believed(self):
+        """No score can exceed the rounds played, so a rating in that column is
+        rejected outright. Returning nothing reads as "no totals to check
+        against"; returning ratings would fail every player in the event."""
+        html = fixture("arad2026_a_crosstable.html").replace(">Pts.<", ">Xx.<")
+        assert parse_published_totals(html) == {}

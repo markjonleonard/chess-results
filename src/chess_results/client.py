@@ -3,7 +3,8 @@
 chess-results serves tournaments from numbered mirrors and redirects the bare
 domain to whichever one holds the tournament, so redirects must be followed.
 Pages are always requested in English (``lan=1``) because the parsers key off
-English column labels.
+English column labels, and always with every row (``zeilen``) because the
+default is a truncated page that says nothing about being truncated.
 """
 
 from __future__ import annotations
@@ -40,6 +41,11 @@ ART_CROSSTABLE = 5
 #: "not paired": one row per player who has missed a round. Linked in the nav
 #: bar, undocumented, and it ignores ``rd`` -- there is only ever the current one.
 ART_NOT_PAIRED = 40
+
+#: Rows to ask a list view for. chess-results paginates at 150 and offers
+#: ``zeilen=99999`` as its own "show all" link, so this is the site's number
+#: rather than one we chose; no chess tournament comes near it.
+ALL_ROWS = 99999
 
 #: Safety net for round auto-detection.
 MAX_ROUNDS = 30
@@ -134,6 +140,17 @@ class ChessResults:
         """True when the session stores responses."""
         return hasattr(self.session, "cache")
 
+    def _query(self, art: int, params: dict[str, str | int]) -> dict[str, str | int]:
+        """The query string for one view, English and unpaginated.
+
+        Both must be on every request, and ``zeilen`` is the one that bites:
+        chess-results shows a long list 150 rows at a time and the truncated
+        page announces itself nowhere a parser can see. A 209-player open read
+        as 150 players produces no error at all — just an event missing a
+        third of its field, and every score and prediction drawn from it.
+        """
+        return {"lan": 1, "art": art, "zeilen": ALL_ROWS, **params}
+
     def fetch(
         self,
         tournament_id: str | int,
@@ -160,10 +177,9 @@ class ChessResults:
             if wait > 0 and not self._is_cached(tournament_id, art, params):
                 time.sleep(wait)
 
-        query = {"lan": 1, "art": art, **params}
         response = self.session.get(
             f"{self.base_url}/tnr{tournament_id}.aspx",
-            params=query,
+            params=self._query(art, params),
             timeout=self.timeout,
             allow_redirects=True,
             **options,
@@ -183,7 +199,7 @@ class ChessResults:
             request = requests.Request(
                 "GET",
                 f"{self.base_url}/tnr{tournament_id}.aspx",
-                params={"lan": 1, "art": art, **params},
+                params=self._query(art, params),
             ).prepare()
             return bool(cache.contains(request=request))
         except Exception:  # cache introspection is a nicety, never a blocker

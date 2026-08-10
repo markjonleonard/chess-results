@@ -397,6 +397,16 @@ Open work on chess-results, roughly in the order it is worth doing.
       uselessness. Published scores are also used exactly as printed, so a pairing-allocated
       bye counts 1 here whatever `bye_value` says — that is the crosstable's own convention,
       and the rescaling belongs downstream.
+- [x] **chess-results paginates, and we were reading truncated pages.** Found 2026-08-10
+      against the 19th Arad Open (1342553, 209 players): a long list is served 150 rows at
+      a time and the truncated page says so nowhere a parser can see. We read a complete,
+      well-formed 150-player tournament and raised nothing. `client._query` now sends
+      `zeilen=99999` -- chess-results' own "show all" value -- on every request. Two more
+      column assumptions fell out of the same event: `Pts.` versus `TB1` for the published
+      total (its TB1 is a rating, giving the top seed 2369 and 208 of 209 rows a false
+      disagreement), and `RtgI`/`RtgN` where there is no plain `Rtg`. All three are in
+      CLAUDE.md; the fixtures are `arad2026_a_*`.
+
 - [ ] **Team tournaments are untested.** Unknown whether `parse_pairings` copes with a team
       pairing table; do not claim support until there is a fixture.
 

@@ -47,6 +47,12 @@ _FIXED_BOARD = "fixed board"
 #: The site's own name, which every page title is prefixed with.
 _TITLE_PREFIX = re.compile(r"^Chess-Results Server\s+Chess-results\.com\s*-\s*", re.IGNORECASE)
 
+#: Where a rating may be found, best first. An event rated on one list prints a
+#: plain ``Rtg``; one rated nationally and internationally at once prints
+#: ``RtgI`` and ``RtgN`` and no ``Rtg`` at all, which used to leave every rating
+#: None. International first, that being what a FIDE pairing engine wants.
+_RATING_LABELS = ("Rtg", "RtgI", "RtgN")
+
 
 def clean_name(text: str) -> str:
     """Strip footnote markers and collapse whitespace in a player name."""
@@ -155,6 +161,16 @@ class _Columns:
             return i
         return None
 
+    def index_any(
+        self, labels: tuple[str, ...], after: int | None = None, before: int | None = None
+    ) -> int | None:
+        """The first of ``labels`` this header carries, in the order given."""
+        for label in labels:
+            found = self.index(label, after=after, before=before)
+            if found is not None:
+                return found
+        return None
+
     def value(self, cells: list[str], idx: int | None) -> str:
         return cells[idx] if idx is not None and idx < len(cells) else ""
 
@@ -212,10 +228,10 @@ def parse_pairings(html: str, rnd: int, *, bye_value: float = 1.0) -> list[Pairi
         if None in (i_board, i_result, i_white, i_black):
             continue
 
-        i_w_rtg = cols.index("Rtg", before=i_result)
+        i_w_rtg = cols.index_any(_RATING_LABELS, before=i_result)
         i_w_pts = cols.index("Pts.", before=i_result)
         i_w_no = cols.index("No.", before=i_result)
-        i_b_rtg = cols.index("Rtg", after=i_result)
+        i_b_rtg = cols.index_any(_RATING_LABELS, after=i_result)
         i_b_pts = cols.index("Pts.", after=i_result)
         i_b_no = cols.index("No.", after=i_result)
         # The unlabelled column immediately before a name column holds the title.
@@ -294,7 +310,7 @@ def parse_starting_rank(html: str) -> list[StartingRankEntry]:
                 StartingRankEntry(
                     start_no=start_no,
                     name=clean_name(cols.value(cells, i_name)),
-                    rating=_int(cols.value(cells, cols.index("Rtg"))),
+                    rating=_int(cols.value(cells, cols.index_any(_RATING_LABELS))),
                     title=cols.value(cells, i_title) or None,
                     fide_id=cols.value(cells, cols.index("FideID")) or None,
                     federation=cols.value(cells, cols.index("FED")) or None,
@@ -414,39 +430,66 @@ def has_pairings(html: str) -> bool:
     return any(_header_row(t, "Bo.") for t in _data_tables(html))
 
 
+#: Where a crosstable's score column may be found, best first. ``Pts.`` says
+#: what it is; ``TB1`` merely often happens to hold the score, on events whose
+#: first tiebreak is the score itself and which print no ``Pts.`` column at all
+#: (the 2026 British and Frome are both like this). Where a tournament
+#: publishes both, ``TB1`` is a genuine tiebreak and nothing to do with points
+#: -- Arad 2026's is a rating, so reading it gave Kovalenko a total of 2369.
+_TOTAL_LABELS = ("Pts.", "TB1")
+
+
 def parse_published_totals(html: str) -> dict[int, float]:
-    """The tournament's own total for each player, from the crosstable's ``TB1``.
+    """The tournament's own total for each player, from the crosstable.
 
     Keyed by starting number, as the crosstable is. This is the arbiter's
     arithmetic rather than ours, which makes it the one figure on the page that
     can check our reading of the round-by-round cells: they must sum to it.
+
+    Read from ``Pts.`` where the event publishes one and ``TB1`` otherwise, and
+    **the result is checked before being believed**: no player can score more
+    than there are rounds, so a column that breaks that is not the score
+    however it is labelled. A wrong column here is worse than none, since it
+    would report every player in the event as a disagreement and bury a real
+    one. Returns ``{}`` when no column survives, which reads downstream as
+    "this crosstable publishes no totals to check against".
 
     Printed in the server's locale, so ``4½`` arrives as ``4,5`` -- see
     :func:`parse_points`. Players whose total will not parse are left out.
     """
     for table in _data_tables(html):
         found = _header_row(table, "No.")
-        if found and "TB1" in found[0]:
+        if found and any(label in found[0] for label in _TOTAL_LABELS):
             break
     else:
         return {}
 
     header, header_idx = found
     cols = _Columns(header)
-    i_no, i_total = cols.index("No."), cols.index("TB1")
-    if i_no is None or i_total is None:
+    i_no = cols.index("No.")
+    if i_no is None:
         return {}
+    # Counting the round columns bounds what a total can legitimately be.
+    rounds = sum(1 for cell in header if _ROUND_COLUMN.fullmatch(cell.strip()))
 
-    totals: dict[int, float] = {}
-    for row in table.select("tr")[header_idx + 1 :]:
-        cells = [_text(c) for c in _cells(row)]
-        if len(cells) != len(header):
+    for label in _TOTAL_LABELS:
+        i_total = cols.index(label)
+        if i_total is None:
             continue
-        start_no = _int(cols.value(cells, i_no))
-        total = parse_points(cols.value(cells, i_total))
-        if start_no is not None and total is not None:
-            totals[start_no] = total
-    return totals
+        totals: dict[int, float] = {}
+        for row in table.select("tr")[header_idx + 1 :]:
+            cells = [_text(c) for c in _cells(row)]
+            if len(cells) != len(header):
+                continue
+            start_no = _int(cols.value(cells, i_no))
+            total = parse_points(cols.value(cells, i_total))
+            if start_no is not None and total is not None:
+                totals[start_no] = total
+        # A score cannot exceed the rounds played. Anything that does is a
+        # tiebreak wearing the wrong name, so try the next candidate.
+        if totals and (not rounds or max(totals.values()) <= rounds):
+            return totals
+    return {}
 
 
 def parse_not_paired(html: str) -> list[NotPairedEntry]:
@@ -509,7 +552,7 @@ def parse_not_paired(html: str) -> list[NotPairedEntry]:
             NotPairedEntry(
                 start_no=start_no,
                 name=clean_name(cols.value(cells, i_name)),
-                rating=_int(cols.value(cells, cols.index("Rtg"))),
+                rating=_int(cols.value(cells, cols.index_any(_RATING_LABELS))),
                 title=cols.value(cells, i_title) or None,
                 federation=cols.value(cells, cols.index("FED")) or None,
                 markers=markers,

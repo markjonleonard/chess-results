@@ -226,3 +226,50 @@ class TestRoundNotYetPaired:
     def test_every_row_is_an_unpaired_player(self, rows):
         assert {p.kind for p in rows} == {PlayKind.UNPAIRED}
         assert "Mannion, Steve R" in [p.white.name for p in rows]
+
+
+class TestRatingColumnsVaryByEvent:
+    """An event rated on one list prints ``Rtg``. One rated nationally and
+    internationally at once prints ``RtgI`` and ``RtgN`` and no ``Rtg`` at all,
+    which used to leave every rating None -- silently, since an unrated player
+    is a legitimate thing for the field to hold.
+    """
+
+    def test_the_arad_starting_rank_has_no_plain_rtg_column(self):
+        """Guarding the premise, so this cannot pass for the wrong reason."""
+        from chess_results.parse import _data_tables, _header_row
+
+        header = next(
+            found[0]
+            for table in _data_tables(fixture("arad2026_a_startingrank.html"))
+            if (found := _header_row(table, "No."))
+        )
+        assert "Rtg" not in header
+        assert "RtgI" in header and "RtgN" in header
+
+    def test_the_international_rating_is_read(self):
+        rank = parse_starting_rank(fixture("arad2026_a_startingrank.html"))
+        assert (rank[0].name, rank[0].title, rank[0].rating) == ("Kovalenko, Igor", "GM", 2669)
+        assert all(entry.rating for entry in rank)
+
+    def test_a_plain_rtg_column_still_wins(self):
+        """The British publishes Rtg and nothing else; nothing changes for it."""
+        rank = parse_starting_rank(fixture("british2026_champ_startingrank.html"))
+        assert all(entry.rating for entry in rank)
+
+
+def test_the_paginated_page_looks_complete_and_is_not():
+    """Why zeilen belongs on the request rather than in a parser check.
+
+    Both captures are the same event's starting rank. The truncated one parses
+    cleanly into a perfectly well-formed 150-player field: no marker, no count,
+    nothing malformed for a parser to notice. The only way to tell them apart
+    is to have asked for the whole page in the first place.
+    """
+    truncated = parse_starting_rank(fixture("arad2026_a_startingrank_paginated.html"))
+    whole = parse_starting_rank(fixture("arad2026_a_startingrank.html"))
+    assert len(truncated) == 150
+    assert len(whole) == 209
+    # The truncated field is a clean prefix, which is what makes it undetectable.
+    assert [e.name for e in truncated] == [e.name for e in whole[:150]]
+    assert all(e.rating and e.name for e in truncated)

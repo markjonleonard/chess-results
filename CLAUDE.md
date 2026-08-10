@@ -76,8 +76,18 @@ round pages and scores a point light. The starting-rank crosstable (`art=5`) kee
 record, so `tournament()` fetches it and `add_crosstable` fills any round a player is
 missing. This is not a display option — it happens with and without `turdet`. Verifying score
 changes against the crosstable's published totals is no longer a manual step:
-`check_published_totals` requires the cells we read from a row to sum to the `TB1` total that
-row publishes, and `tournament()` runs it. All 108 agree, and always have.
+`check_published_totals` requires the cells we read from a row to sum to the total that row
+publishes, and `tournament()` runs it. All 108 agree, and always have.
+
+**Which column holds that total is not fixed, and `TB1` is not a safe answer.** Where an
+event prints a `Pts.` column, that is the score and `TB1` is a real tiebreak — Arad 2026's
+is a rating, so reading it gave the top seed a total of 2369 and reported 208 of its 209
+players as disagreeing with themselves. The British and Frome print no `Pts.` at all and
+their `TB1` *is* the score, which is what made the rule look general. `parse_published_totals`
+therefore prefers `Pts.`, falls back to `TB1`, and then **checks what it got**: no score can
+exceed the rounds played, so a column that breaks that is refused and the function returns
+`{}`. Reading no totals is a safe "nothing to check against"; reading the wrong ones fails
+every player in the event and buries a genuine disagreement.
 
 Where both views *do* have a round, `add_crosstable` compares them and records any
 contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Nothing has
@@ -146,6 +156,20 @@ not published. A pairing-allocated bye counts as a downfloat.
 **`lan=1` is mandatory on every request.** The parsers key off English column labels and the
 literal words "bye" and "not paired".
 
+**So is `zeilen`, and this one fails silently.** chess-results paginates a long list at 150
+rows, and the truncated page announces itself nowhere a parser can reach — no marker in the
+table, no count, nothing. Arad 2026 has 209 players and read as a complete 150-player
+tournament: every score, float and prediction drawn from two thirds of the field, and not
+one error raised. `client._query` puts `zeilen=99999` on every
+request, which is chess-results' own "show all" value. Nothing downstream can detect the
+truncation, so it has to be prevented at the request. The British has 108 players, which is
+why this survived so long.
+
+**Rating columns vary too.** An event rated on one list prints `Rtg`; one rated nationally
+and internationally at once prints `RtgI` and `RtgN` and no `Rtg`, which left every rating
+`None` — silently, an unrated player being a legitimate thing for a field to contain.
+`_RATING_LABELS` tries `Rtg`, then `RtgI`, then `RtgN`.
+
 **Redirects must be followed.** chess-results 302s the bare domain to a numbered mirror
 (S1/S2/S3), so every logical fetch is two HTTP requests. Relevant when counting cache hits.
 
@@ -210,7 +234,16 @@ the only state in which the "does it warn in advance?" question can be asked, an
 cannot be recreated — treat these six files as irreplaceable. It is also a smaller field
 than the other two (32 players, 7 rounds) with forfeits in round 1.
 
-To add a fixture, save the page with `curl -sL` (the `-L` matters) and `lan=1`.
+The `arad2026_a_*` set is a third organiser again (19th Arad Open, Romania, 209 players,
+9 rounds, completed) and exists for the column variations it exposed: `RtgI`/`RtgN` instead
+of `Rtg`, and a `Pts.` column alongside genuine `TB1`-`TB5` tiebreaks.
+`arad2026_a_startingrank_paginated.html` is deliberately the *truncated* 150-row capture,
+kept so a test can show what the default page looks like; every other Arad fixture is the
+full `zeilen=99999` page.
+
+To add a fixture, save the page with `curl -sL` (the `-L` matters), `lan=1` and
+`zeilen=99999`. Leave any of the three off and you get a redirect page, a German one, or a
+silently truncated one.
 
 ## Pairing prediction
 
