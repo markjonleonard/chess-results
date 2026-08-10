@@ -9,23 +9,25 @@ For each player it collects who they played, which colour they had, whether they
 floated up or down, and whether they took a bye — the things you need to follow a
 Swiss tournament, or to work out what the next round's pairings should be.
 
-> **Early days.** This works and is tested against real tournaments, but it has
-> not been released and has only been used against
-> a handful of events. Expect rough edges, and expect commands and options to
-> change. If you are relying on it for something that matters, check its answers
+> **Early days.** Version 0.1.0 is a first release. It works and is tested
+> against real tournaments, but it has only been used against a handful of
+> events. Expect rough edges, and expect commands and options to change before
+> 1.0. If you are relying on it for something that matters, check its answers
 > against the tournament's own pages.
 
 ## Install
 
-Not on PyPI yet — install from a clone:
+```bash
+pip install chess-results
+```
+
+Requires Python 3.10 or newer. To work on it instead:
 
 ```bash
 git clone https://github.com/markjonleonard/chess-results
 cd chess-results
-pip install -e .
+pip install -e ".[dev]"
 ```
-
-Requires Python 3.10 or newer.
 
 ## Finding your tournament
 
@@ -288,11 +290,6 @@ reproduce it. Tournaments vary more than you would expect in which columns they
 publish, so the most likely cause is a column layout this tool has not seen before.
 
 Bug reports and pull requests are both welcome.
-
-## What is planned
-
-[TODO.md](TODO.md) is the working list, roughly in the order things are worth
-doing.
 
 ## Licence
 
