@@ -1,0 +1,77 @@
+name: Publish (TestPyPI)
+
+# TestPyPI only, on purpose. This is the rehearsal: there is deliberately no
+# path from here to the real index until an upload has been watched working.
+#
+# Authentication is Trusted Publishing — GitHub mints a short-lived OIDC token
+# that TestPyPI exchanges for upload rights, so there is no API token in the
+# repository secrets and nothing on anyone's laptop. That also means the upload
+# acts as the repository rather than as a user, so it does not care which
+# GitHub account is active locally.
+#
+# TestPyPI must be told to trust this workflow before the first run. The
+# project does not exist there yet, so it takes a *pending* publisher
+# (test.pypi.org -> Your projects -> Publishing), which the first successful
+# upload converts into an ordinary one:
+#
+#   Project name  chess-results
+#   Owner         markjonleonard
+#   Repository    chess-results
+#   Workflow      publish.yml
+#   Environment   testpypi
+#
+# All five must match or the token exchange is refused.
+
+on:
+  workflow_dispatch:
+
+# Manual only. A publish is not something to trigger by pushing, and TestPyPI
+# is as unforgiving as PyPI about it: a version can be uploaded exactly once,
+# and deleting it does not free the filename. Rehearse on a throwaway
+# `0.1.0.devN` in src/chess_results/__init__.py and keep 0.1.0 for the release.
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install build twine
+      - run: python -m build
+      # The same metadata validation the index applies on upload. Running it
+      # here fails the build in a second rather than burning a version number.
+      - run: python -m twine check --strict dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # The environment is the second lock. Trusted Publishing checks it as part
+    # of the claim, and repository settings can require a review before a job
+    # in it will run, so a fork or a stray branch cannot publish.
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/chess-results
+    permissions:
+      # The whole point: this is what lets the job request an OIDC token.
+      # Nothing else in the repository needs or gets it.
+      id-token: write
+    steps:
+      # Note the majors differ: download-artifact is a release ahead of upload.
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/

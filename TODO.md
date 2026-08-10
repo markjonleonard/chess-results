@@ -35,8 +35,37 @@ Open work on chess-results, roughly in the order it is worth doing.
       floor would drop a support claim without simplifying any code. 3.10 has upstream
       security support until October 2026. If the claim is ever dropped, change
       `requires-python`, the classifiers and the matrix together.
-- [ ] **Publish to PyPI as `chess-results`.** Free as at 2026-08-07; re-check at publish
-      time.
+- [ ] **Publish to PyPI as `chess-results`.** Still free as at 2026-08-10, on both
+      normalisations. Rehearsing on TestPyPI first, via
+      `.github/workflows/publish.yml` — TestPyPI only by design, so there is no path to
+      the real index until an upload has been watched working.
+
+      **Trusted Publishing, not an API token.** GitHub mints a short-lived OIDC token
+      the index exchanges for upload rights: nothing in repository secrets, nothing on
+      a laptop, and the upload acts as the repository rather than as a user — which
+      also sidesteps this machine defaulting to the wrong GitHub account.
+
+      Blocked on one thing only, which needs a login: registering a **pending**
+      publisher on TestPyPI (the project does not exist there, so there is nothing to
+      attach an ordinary publisher to; the first upload converts it). Project
+      `chess-results`, owner `markjonleonard`, repo `chess-results`, workflow
+      `publish.yml`, environment `testpypi`. All five must match or the exchange is
+      refused.
+
+      Two facts that shape the rehearsal:
+
+      - **TestPyPI is as immutable as PyPI.** A version uploads exactly once and
+        deleting it does not free the filename, so rehearse on a throwaway
+        `0.1.0.devN` in `__init__.py` and keep `0.1.0` for the release.
+      - **Verifying the install needs a fallback index**, requests, beautifulsoup4 and
+        requests-cache not being mirrored there:
+        `pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ chess-results`.
+
+      The metadata itself is already clean: `twine check --strict` passes on both
+      artifacts, `py.typed` ships in the wheel, and the licence is the SPDX
+      `License-Expression: MIT` of PEP 639 rather than the deprecated classifiers. The
+      workflow runs that same `--strict` check before publishing, so a metadata fault
+      fails the build instead of burning a version number.
 - [x] **Compare the round 8 prediction against the published pairings.** Done 2026-08-07 with
       `examples/validate_prediction.py`. Rounds 7 and 8 both reproduce **51 of 51 exactly,
       colours and bye included**, once withdrawals are supplied; 37/51 and 44/51 respectively
