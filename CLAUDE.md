@@ -92,7 +92,7 @@ every player in the event and buries a genuine disagreement.
 Where both views *do* have a round, `add_crosstable` compares them and records any
 contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Nothing has
 ever tripped it — the two come from the same upload — so treat a hit as a parser bug, not as
-chess-results being inconsistent. Note that one view holding a value the other lacks is
+chess-results.com being inconsistent. Note that one view holding a value the other lacks is
 deliberately not a contradiction: the crosstable is often the fresher capture, and a round
 page carries no result until the game finishes.
 

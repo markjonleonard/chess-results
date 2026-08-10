@@ -1,66 +1,160 @@
 # Design notes
 
-How chess-results is built and why. These notes describe internals, and they
-carry measurements taken against particular tournaments — expect both to move as
-the code changes. The [README](README.md) is the stable, user-facing description.
+How [`chess-results`](https://pypi.org/project/chess-results/) is built and why.
+The [README](README.md) is the user-facing description; this is for anyone
+changing the code. Throughout, `chess-results` is this library and
+[chess-results.com](https://chess-results.com) is the site it reads. Measurements
+here were taken against particular tournaments and will move as the code does.
 
-## Prior art
+## What it is for
 
-There is an R package, [chessResults](https://cran.r-project.org/package=chessResults),
-that scrapes chess-results, but no maintained Python equivalent. This library keeps
-the things a Swiss pairing depends on: who played whom, with which colour, who
-floated up or down, and who took a bye.
+A Swiss tournament is a sequence of pairings, and every pairing depends on what
+came before it: each player's score, the colours they have had, whether they were
+floated up or down, and whether they have taken a bye. chess-results.com
+publishes all of that, but scattered across several views and only in the present
+tense — the round pages describe the round in front of you, not the tournament so
+far.
 
-## Byes disappear, so the crosstable is scraped too
+This library assembles those views into one per-player history, keyed by player,
+covering every round. From that history it can report standings, colour and float
+records and colour preferences, and write the tournament out in the format FIDE
+pairing engines read, so the next round can be computed.
+
+Nothing persists between runs except cached pages. Each invocation fetches what
+it needs, builds the history in memory, and reports from it; there is no store to
+migrate and no state to keep in step.
+
+## Shape
+
+Three layers, kept apart so the parsers can be exercised offline against saved
+pages. Nothing below the fetch layer knows HTTP exists.
+
+| Layer | Module | Responsibility |
+| --- | --- | --- |
+| Parse | `parse.py` | HTML → dataclasses. Stateless, no network. |
+| Assemble | `tournament.py` | Per-round tables → per-player histories. |
+| Fetch | `client.py` | HTTP, round discovery, cache policy, orchestration. |
+
+`models.py` holds the dataclasses. `trf.py` and `cli.py` consume an assembled
+`Tournament`; `cache.py` is policy only.
+
+Two shapes are easy to confuse. A **`Pairing`** is one row of a round's table and
+holds two players. A **`Play`** is what *one* player did in one round. `add_round`
+turns each `Pairing` into one or two `Play` objects, and a `Player` is a name plus
+an ordered list of them.
+
+## Where the data comes from
+
+| View | URL | Parsed by |
+| --- | --- | --- |
+| Round pairings | `art=2&rd=N` | `parse_pairings` |
+| Starting rank | `art=0` | `parse_starting_rank` |
+| Starting-rank crosstable | `art=5` | `parse_crosstable`, `parse_published_totals` |
+| Not paired | `art=40` | `parse_not_paired` |
+
+A scrape walks the rounds from 1 upward until a page has no games, then fetches
+the crosstable. The starting rank supplies numbers, titles, ratings and
+federations, which pairing pages often omit.
+
+`art=40` lists only the players who have missed a round, as a grid of one column
+per round marked `*` not paired, `bye` a bye, `0F` a forfeit. It is the most
+direct statement of who was absent when, and one small page rather than a whole
+crosstable to mine, so `ChessResults.not_paired()` exposes it and
+`likely_withdrawn` accepts it. It cannot replace the crosstable: a *requested*
+half-point bye prints `*` exactly as a withdrawal does, so it does not say what a
+missed round was worth, and a forfeit lists only the player who defaulted.
+
+Three views are deliberately unparsed. `art=1` (ranking list) carries no
+withdrawal marker. `art=9` (player info) does, but costs one request per player.
+`art=3` is an alphabetical list, and `art=4` is `art=5`'s data keyed by current
+rank, which a caller holding the crosstable can produce by sorting.
+
+## The central problem: byes vanish
 
 A round's pairing page lists byes and unpaired players only while that round is
-the current one. Once a later round is paired, those rows are **deleted**. Round
-7 of the 2026 British Championship shows its pairing-allocated bye; rounds 4, 5
-and 6 show nothing at all, though two of them had one.
+the current one. Once a later round is paired, those rows are **deleted**.
 
-Scrape after the fact and a full-point bye is simply gone — the player has no
-such round anywhere on the round pages, and their score comes out a point light.
-This is not a display option; it is the same with and without `turdet`.
+A player who took a full-point bye in round 6 therefore has no round 6 anywhere on
+the round pages once round 7 is out, and their score comes out a point light.
+Through round 8 of the 2026 British Championship this affects four players —
+Chapman, Cooke, Nevska and Ruddy, one bye each across rounds 5 to 8. It is not a
+display option; the same happens with and without `turdet`.
 
-This is observed behaviour, not documented behaviour. [chess-results.com](https://chess-results.com)
-publishes no changelog or issue tracker, and nothing in the
-[Swiss-Manager](https://swiss-manager.at) manuals describes
-it, so whether it is deliberate or a defect is not something you can find out from
-outside. Treat the description here as what the pages were seen to do in August
-2026, not as a guarantee.
-
-What can be said is that the data is not lost upstream: the same event's crosstable
-still carries every bye that the round pages have dropped. Both views are rendered
-from the same Swiss-Manager upload, so the record survives in the source and it is
-the `art=2` round view that stops showing it. Swiss-Manager is not the culprit.
-
-The starting-rank crosstable (`art=5`) keeps the whole record, one row per
-player, one column per round:
+The data is not lost upstream. The starting-rank crosstable keeps the whole
+record, one row per player, one column per round:
 
 ```
 106  Chapman Luke   52b0  77w0  84w0  104b½  96w0  -1  92b½    2
 ```
 
 `-1` is a pairing-allocated bye, `-½` a requested one, `-0` a round the player
-took no part in. So `tournament()` fetches the crosstable as well and fills in
-any round a player is missing. Results already read from a pairing page are left
-alone — those carry board numbers and pre-round scores, which the crosstable does
-not publish. Recovered rounds are marked:
+took no part in. Both views come from the same Swiss-Manager upload, so this is
+the round view choosing to stop showing something the source still holds.
+
+So `tournament()` fetches the crosstable too and fills in any round a player is
+missing. Rounds read from a pairing page win, since those carry board numbers and
+pre-round scores the crosstable does not publish. Recovered rounds are marked:
 
 ```python
-[p.round for p in event.players["Ruddy, Rachel"].plays if p.from_crosstable]   # [5]
+[p.round for p in event.players["Ruddy, Rachel"].plays if p.from_crosstable]  # [5]
 ```
 
-Across the full 108-player field this takes every computed score to agreement
-with the published totals; without it, two are wrong. Pass `crosstable=False`
-(`--no-crosstable`) to skip the extra request.
+Only rounds already fetched are filled, so the crosstable never introduces a round
+of its own, and since a *game* row is never deleted from a round page, a recovered
+play is always a bye or an absence. `crosstable=False` (`--no-crosstable`) skips
+the request and accepts the four wrong scores.
+
+This behaviour is observed, not documented. chess-results.com publishes no changelog
+or issue tracker and the [Swiss-Manager](https://swiss-manager.at)
+manuals do not mention it, so treat this as what the pages were seen to do in
+August 2026 rather than a guarantee.
+
+## Reading tables that keep changing shape
+
+Tournaments differ in which columns they publish, so nothing is read by position.
+Each table's header row drives the parse. chess-results.com emits one header mixing
+`<th>` with `<td>` — the two player-name columns are `td` — so both are read
+together to get a header that aligns with the data rows.
+
+Column *names* vary as well as their presence:
+
+- **Ratings** are `Rtg`, or `RtgI` and `RtgN` where an event is rated nationally
+  and internationally at once.
+- **A player's total** is `Pts.` where the event publishes one, `TB1` otherwise.
+  `TB1` is a tie-break, which on many events happens to be the score and on others
+  is a rating. `parse_published_totals` prefers `Pts.`, falls back to `TB1`, and
+  rejects whatever it picks if any value exceeds the number of rounds played.
+
+Every request carries `lan=1`, because the parsers key off English labels and the
+words "bye" and "not paired"; `zeilen=99999`, because a list is otherwise
+paginated at 150 rows with nothing in the page to say so; and follows redirects,
+because chess-results.com 302s the bare domain to a numbered mirror. Every
+logical fetch is therefore two HTTP requests, which is worth remembering against
+the counts below.
+
+## Checking the reading
+
+Two views of one upload give something to check against. Both checks are
+tripwires: they are clean on every fixture and against live events, so a hit means
+a parser has misread something rather than chess-results.com being inconsistent.
+
+- **`check_published_totals`** requires the round-by-round cells parsed from a
+  crosstable row to sum to the total that row publishes. It compares the
+  crosstable against *itself*, not against the assembled history — a published
+  total and an assembled score cover the same rounds only sometimes.
+- **`Tournament.disagreements`** records any field where a round page and the
+  crosstable contradict each other. A value one view holds and the other lacks is
+  not a contradiction: the crosstable is often the fresher capture, and a round
+  page carries no result until the game finishes.
+
+The CLI prints disagreements to stderr, so piped output stays clean.
 
 ## Caching
 
-A round that has finished, with a later round already paired, never changes again,
-so it is cached for far longer than one still in play. The client records which
-rounds have settled in a small JSON file beside the cache, so the knowledge
-survives between runs:
+Pages are given lifetimes by how volatile they are. A round that has finished,
+with a later round already paired, never changes again; the newest round always
+might, because a result can be corrected before the next pairing is published.
+Settled rounds are recorded in a JSON sidecar so the knowledge survives runs.
 
 | Page | Lifetime |
 | --- | --- |
@@ -69,62 +163,57 @@ survives between runs:
 | Finished round, superseded by a later one | 30 days |
 | Crosstable | 30 days, replaced when it falls behind |
 
-The newest round is never treated as settled even when every result is in, because
-a result can still be corrected before the next pairing is published.
+The crosstable takes the long lifetime despite looking live. It carries the
+current round's results, but those are never read from it — the round page is the
+authority there. What is read is the byes and absences round pages delete, which
+are settled the moment they are written. So instead of expiring on a timer it is
+*replaced* when a cached copy stops covering what is needed: when it holds fewer
+rounds than the scrape does, or while the newest round is still being played,
+where a stale copy would read as a contradiction rather than an old page.
 
-The crosstable is the interesting one. It looks live — it carries the current
-round's results — but we never read results from it; the round page is the
-authority there. What we read is the byes and absences that round pages delete
-once a later round is paired, and those are settled the moment they are written.
-So it is cached for 30 days and *replaced* when a cached copy stops being good
-enough, which happens when it covers fewer rounds than we hold (it could not
-supply the newest round's bye) or when the newest round is still being played
-(the two views are also compared, and a stale copy would look like a
-contradiction rather than an old page). A finished tournament therefore fetches
-it once and never again.
+[requests-cache](https://requests-cache.readthedocs.io) fixes a response's expiry
+when it stores it, so a lifetime cannot be lengthened after the fact. The two
+ways around that suit different cases. **Rewriting** the stored entry
+in place costs nothing and suits a settled round, whose content is final and only
+whose expiry is wrong. **Refreshing** refetches, and suits the crosstable, whose
+content really has gone out of date.
 
-The CLI caches by default, in `~/.cache/chess-results`; `--no-cache` bypasses
-it and `--cache-dir` moves it. The library does not, so a caller keeps control:
+In practice a cold run on a finished 9-round event is about twelve logical
+fetches: the starting rank, nine rounds, an empty probe past the last, and the
+crosstable. A repeat run costs two — the newest round and the probe — or none
+within the five-minute window.
+
+The CLI caches by default in `~/.cache/chess-results`; `--no-cache` bypasses it,
+`--cache-dir` moves it. The library does not, so a caller keeps control:
 
 ```python
-ChessResults(cache=True)                      # or pass your own CachedSession
+ChessResults(cache=True)  # or pass your own CachedSession
 ```
-
-Against a 7-round event this took repeat runs from 18 network requests to zero.
-[requests-cache](https://requests-cache.readthedocs.io) fixes a response's expiry
-when it stores it, so a round cached
-while it was live keeps the five-minute lifetime even after it settles and the
-client starts asking for thirty days. That used to cost one extra fetch per
-round — the page was refetched on the old schedule purely to be written back
-with a longer life. The client now rewrites the stored entry in place instead,
-when a round is first recorded as settled, so the request never happens.
-Forcing a refresh would have corrected the expiry too, and would have spent the
-very request being avoided.
 
 ## Retries
 
-A scrape is one request per round plus the crosstable and the starting rank, so a
-single transient failure part-way through loses the whole run. Sessions the client
-builds carry a urllib3 `Retry` on 429 and the 5xx family — three attempts, backing
-off about 0.5s, 1s, 2s, honouring `Retry-After`. GET and HEAD only, and 404 is
-excluded on purpose: that is chess-results answering that no such tournament
-exists, not failing.
+A scrape is a dozen requests, so one transient failure part-way through would lose
+the run. Sessions the client builds carry a urllib3 `Retry` on 429 and the 5xx
+family — three attempts, backing off about 0.5s, 1s, 2s, honouring `Retry-After`.
+GET and HEAD only. 404 is excluded deliberately: that is chess-results.com answering
+that no such tournament exists, not failing.
 
 ```python
-ChessResults(retries=0)                       # opt out
-ChessResults(session=mine)                    # your session, your transport policy
+ChessResults(retries=0)     # opt out
+ChessResults(session=mine)  # your session, your transport policy
 ```
 
 A session you pass in is never mounted over — `client.retrying_adapter()` is
-exported so you can mount it yourself if you want it.
+exported so you can mount it yourself.
 
 ## Predicting the next round
 
 `chess_results.trf` writes FIDE
 [TRF(x)](https://handbook.fide.com/files/handbook/C04Annex2_TRF16.pdf), which
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and
-[JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read. `examples/predict_next_round.py` scrapes a live tournament, resolves any
-unfinished games from assumptions you supply, and shells out to bbpPairings:
+[JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read.
+`examples/predict_next_round.py` scrapes a tournament, resolves any unfinished
+games from assumptions you supply, and shells out to bbpPairings:
 
 ```bash
 python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe \
@@ -139,117 +228,151 @@ python examples/validate_prediction.py 1452107 --round 8 \
     --engine ~/bbpPairings/bbpPairings.exe --total-rounds 9
 ```
 
-Rounds 7 and 8 of the 2026 British Championship, each reproduced from the rounds
+Three rounds of the 2026 British Championship, each reproduced from the rounds
 before it:
 
-| | Round 7 | Round 8 |
-| --- | --- | --- |
-| Boards published | 51 | 51 |
-| Exact, no withdrawal information | 37 | 44 |
-| Exact, withdrawals supplied | **51** | **51** |
-| Right pair, wrong colour | 0 | 0 |
-| Bye recipient | correct | correct |
+| | Round 7 | Round 8 | Round 9 |
+| --- | --- | --- | --- |
+| Boards published | 51 | 51 | 50 |
+| Exact, no withdrawal information | 37 | 44 | 42 |
+| Exact, withdrawals inferred | 39 | 49 | 44 |
+| Exact, withdrawals supplied | **51** | **51** | **50** |
+| Right pair, wrong colour | 0 | 0 | 0 |
+| Bye recipient | correct | correct | correct |
 
-Given an accurate field, bbpPairings reproduces both rounds exactly: every board,
-every colour, and the right player on the bye. **Withdrawals account for every
-difference.** Nothing here suggests the engines disagree with Swiss-Manager, or
-that the rule version matters — the whole error term is not knowing who has left.
+Given an accurate field the engine reproduces all three exactly — every board,
+every colour, the right player on the bye. **The accuracy of the field is the
+whole error term.** Nothing here suggests the engines disagree with
+Swiss-Manager, or that the rule version matters.
 
-The two figures are not comparable. The blind one is what a genuine live
-prediction achieves; the second supplies the absent players from the published
-round and so uses hindsight. Read the gap between them as the cost of the missing
-information:
+The columns are not comparable with each other: "no withdrawal information" is
+what a live prediction has, while "supplied" takes the absent players from the
+published round and so uses hindsight. The gap between them is the cost of not
+knowing who has left, and it is the dominant term because a single departure
+changes floats and the bye for everyone below.
 
-- **Withdrawals are invisible until the round is published.** chess-results does
-  not say who has withdrawn, and a player leaving changes floats and the bye for
-  everyone below them. `Tournament.likely_withdrawn` infers what it can — a
-  player whose last rounds are all unpaired, or who never occupied a round —
-  which recovers 12 of the 18 absences across those three rounds and takes the
-  blind figures to 39/51, 49/51 and 44/50. The rest have no signal to find:
-  three of round 9's eight absentees played round 8 in full and simply never
-  came back. `examples/predict_next_round.py` applies the inference by default
-  (`--no-infer-withdrawals` opts out) and takes `--withdrawn` if you know more
-  than it does.
-- **The field must come from the crosstable, not the round page.** Deriving it
-  from a superseded round page reclassifies that round's bye recipient as a
-  withdrawal, which produces plausible and entirely wrong match rates.
+`Tournament.likely_withdrawn` closes part of that gap by inference — a player
+whose last rounds are all unpaired, or who never occupied a round. A requested
+bye is deliberately not treated as a signal. It finds 12 of the 18 absences
+across those three rounds; the remaining six leave no trace, three of them having
+played the previous round in full and simply not come back.
+`predict_next_round.py` applies it by default (`--no-infer-withdrawals` opts out)
+and takes `--withdrawn` if you know more.
 
-Board *order* is not part of a pairing engine's output — engines emit a set of
-pairs, and the arbiter's software numbers the boards. Compare pairings as sets.
+Two limits on what prediction can be expected to do:
+
+- **Round 2 does not reproduce**, even with the correct field: six boards differ,
+  all inside the 42-player group on zero after round 1. Not the field, colours,
+  the encoding of a late entrant's missing round, or same-federation avoidance —
+  each was tested. A group that large and that flat admits many legal pairings,
+  and the checker exits 0 without calling the published one illegal. Expect this
+  on any round 2.
+- **A mid-round prediction is dominated by its assumptions.** Round 9 predicted
+  from a live round 8 with ten unfinished games filled in as draws got the top 12
+  boards exactly right in the arbiter's own order, and 29 of 50 overall — five
+  guesses were wrong, and each wrong score moves a player into a different
+  scoregroup. Trust the scoregroups whose games are settled; say so about the
+  rest.
+
+Board *order* is not part of an engine's output. Engines emit a set of pairs and
+the arbiter's software numbers the boards, so compare pairings as sets — by
+position gives a badly misleading match rate.
 
 ## Fixed boards
 
-Swiss-Manager lets an arbiter pin a player to one board number for the whole
-event, usually on access or health grounds. chess-results marks them with a
-footnote and explains it in a legend under the pairing table, which this library
-reads:
+Swiss-Manager lets an arbiter pin a player to one board for the whole event,
+usually on access or health grounds. chess-results.com marks them with a footnote and
+explains it in a legend under the pairing table, which this library reads:
 
 ```python
 hebden = event.players["Hebden, Mark L"]
-hebden.fixed_board          # True
-hebden.fixed_board_number   # 14
+hebden.fixed_board         # True
+hebden.fixed_board_number  # 14
 ```
 
-The flag says only *that* a player has a fixed board, never which one, so the
-number is read back from the boards they actually played on. In the 2026 British
-Championship, Hebden played boards 23, 18 and 1 in the first three rounds and
-then board 14 in every round after, while his score moved from 3 to 4.
+The footnote says only *that* a player is pinned, never to which board, so the
+number is inferred from the boards they played: the longest unbroken run, most
+recent winning a tie. A run rather than the most frequent board, because a pin
+need not start at round 1 — Hebden played 23, 18 and 1 before settling on 14 from
+round 4, and by then every board had been played exactly once.
 
-This constrains where a game is played, not who plays whom, so it never changes
-a pairing — but it is a second reason not to expect board numbers to follow from
-scores, alongside the fact that engines do not emit an ordering at all.
+It remains a heuristic: two rounds on one board by coincidence look like a pin,
+and a pin the arbiter could not honour one round looks like two shorter ones.
 
-## What gets parsed
+A fixed board constrains where a game is played, not who plays whom, so it never
+changes a pairing — but it is a second reason board numbers do not follow from
+scores.
 
-| View | chess-results URL | Function |
-| --- | --- | --- |
-| Round pairings | `art=2&rd=N` | `parse_pairings` |
-| Starting rank | `art=0` | `parse_starting_rank` |
-| Starting-rank crosstable | `art=5` | `parse_crosstable` |
+## What this does not read
 
-Parsing is driven by each table's header row rather than fixed column offsets.
-chess-results emits one header row that mixes `<th>` with `<td>` (the two player
-name columns are `td`), and tournaments switch columns on and off — the starting
-rank `No.` columns in particular are absent from some events. Reading `th` and
-`td` together gives a header that aligns with the data rows whichever columns a
-tournament publishes.
+- **Team tournaments.** chess-results.com reports them in a different format: the
+  round page pairs *teams*, carrying match points and naming no player, with the
+  individual boards on a second view as one sub-table per match. `parse_pairings`
+  reads nothing from either — safe, in that no team is mistaken for a player, but
+  indistinguishable from an event that has not started. So `is_team_pairings`
+  detects the shape and `tournament()` raises `TeamTournamentError` rather than
+  returning an empty event.
+- **Most tournament metadata.** The name, and nothing else — no organiser, time
+  control, dates, playing schedule, or the tie-break columns of the final
+  ranking. Everything here is built around who played whom.
 
-Pages are always requested with `lan=1`: the parsers key off English column
-labels and the words "bye" and "not paired".
+For the site's tables as published, including the metadata and tie-breaks,
+[chessResults](https://cran.r-project.org/package=chessResults) is an R package
+covering that ground.
 
 ## Things worth knowing
 
-- **Players are keyed by name.** chess-results pairing pages identify players by
-  name, and only some tournaments publish starting numbers there. Where the
-  starting rank list is available its numbers are attached to each player, and
-  that is what `ranking_order()` sorts on. Two players sharing a name in one
-  event will collide.
-- **Floats are inferred**, by comparing the two players' displayed pre-round
-  scores. That is what the published data supports; it is not read from the
-  arbiter's own float records.
+- **Players are keyed by name.** Pairing pages identify players by name, and only
+  some tournaments publish starting numbers there. Where the starting-rank list is
+  available its numbers are attached and are what `ranking_order()` sorts on. Two
+  players sharing a name in one event will collide, as will one player named
+  differently on two views — which shows up as a field one larger than it should
+  be.
+- **Floats are inferred** by comparing the two players' displayed pre-round
+  scores. They are not published. A pairing-allocated bye counts as a downfloat.
 - **Byes are ambiguous in the source.** An opponent shown as `bye` is a
   pairing-allocated bye, worth a full point in a FIDE Swiss but a half at some
   congresses — hence `bye_value`. `not paired` with a value shown is a requested
-  bye and keeps whatever the page displays. The crosstable is unambiguous about
-  *what happened*, and is the authority wherever a round page has dropped the
-  row, but it prints every pairing-allocated bye as a full point regardless of
-  what the event awards, so a bye recovered from it is rescored to
-  `Tournament.bye_value`. That is not cosmetic: `to_trf` declares a non-standard
-  value as bbpPairings' `BBU` line, and the engine recomputes every player's
-  score from their results and refuses the file if the totals disagree.
-- **Be polite.** The client sleeps between requests (`delay`, default 1s), only
-  pacing requests that actually reach the server, and identifies itself.
+  bye and keeps what the page displays. The crosstable is unambiguous about what
+  happened and is the authority wherever a round page has dropped the row, but it
+  prints every pairing-allocated bye as a full point regardless of what the event
+  awards, so a bye recovered from it is rescored to `Tournament.bye_value`. That
+  is a correctness matter, not a display one: `to_trf` declares a non-standard
+  value as bbpPairings' `BBU` line, and the engine recomputes every score from the
+  results and refuses the file if the totals disagree.
+- **Points are written two ways in one tournament.** Round-by-round cells use `½`;
+  a total is rendered in the server's locale and can arrive as `4,5`. A comma is
+  always a decimal separator here, no points value being large enough to need a
+  thousands separator.
+- **Be polite.** The client sleeps between requests (`delay`, default 1s), pacing
+  only those that actually reach the server, and identifies itself.
 
 ## Tests
-
-The test tools are in the `dev` extra, which the README's install line leaves out:
 
 ```bash
 pip install -e ".[dev]"
 pytest
 ```
 
-Fixtures are real pages from two tournaments with different column layouts: the
-2026 British Championship caught mid-event (rounds 1-6 played with six games
-unfinished, round 7 paired but unplayed, byes and withdrawals present, no
-starting-rank columns) and a congress section that does publish them.
+320 tests, none touching the network. Fixtures are real saved pages from five
+tournaments, chosen for the ways they differ:
+
+| Event | What it covers |
+| --- | --- |
+| 2026 British Championship | The main set: mid-event and played out, byes, withdrawals, forfeits both ways round, no starting-rank columns |
+| Frome congress section | A different column layout, starting-rank numbers, twelve requested half-point byes |
+| 19th Arad Open | 209 players, so pagination; `RtgI`/`RtgN`; a `Pts.` column beside real tie-breaks |
+| Jeddah qualifier | Caught live with a round unpaired — the only state in which `art=40`'s predictiveness can be tested |
+| Chinese National Youth Team | A team event |
+
+Rounds 6 and 7 have two fixtures each, because the same round looks different
+depending on when it was caught: the mid-round captures still have their bye rows,
+the played-out ones have had them deleted. Which one a test wants is the point of
+the pair, so neither holds the plain name — ask `conftest._round_fixture(rnd,
+played_out=...)`.
+
+The Jeddah set cannot be regenerated: `art=40` ignores `&rd=`, so that mid-event
+state existed only while the round was live.
+
+To add a fixture, save the page with `curl -sL` — the `-L` matters — plus `lan=1`
+and `zeilen=99999`.
