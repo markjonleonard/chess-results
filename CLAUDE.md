@@ -110,9 +110,19 @@ does not replace the crosstable, for two reasons:
   appearing at all.
 
 It also does not warn you in advance: a marker appears only for a round that has already
-been paired, so it cannot help predict the round you are about to pair. And it ignores
-`&rd=` — there is one page, always current, so no mid-event state can be recovered
-afterwards. See TODO.md for the full survey of `art=1`, `art=9` and `art=40`.
+been paired, so it cannot help predict the round you are about to pair. **This was
+checked against a live event on 2026-08-10** — tournament 1473782, caught with round 2
+half-played and round 3 unpaired — and the page carried a column for all seven rounds
+with a marker in round 1 only. It is observation, not inference; the `jeddah2026_*`
+fixtures are that capture and cannot be regenerated, because the page ignores `&rd=`
+and there is only ever the current one.
+
+The other two views were surveyed the same way, and neither helps: **`art=1`**, the
+ranking list, keeps a withdrawn player in place with their frozen score and carries no
+marker of any kind (note it prints scores with a decimal comma). **`art=9`**, player
+info, needs `&snr=<starting number>` and renders an empty shell without one; it does
+show a missed round explicitly, as a `not paired` row with opponent SNo `-2`, but that
+is one request per player — 108 for a field — to learn what one crosstable already says.
 
 **An unpaired round still renders a table.** It contains only the withdrawn players' "not
 paired" rows. Round auto-detection therefore requires at least one `PlayKind.GAME`; without
@@ -193,6 +203,13 @@ capture of it cannot be made after the fact — there is only ever the current o
 together are what prove the requested-bye limitation above: Frome has half-point byes and
 the British does not.
 
+The `jeddah2026_*` set is the exception to "taken after their events finished", and the
+reason it exists: tournament 1473782 caught mid-round on 2026-08-10, with round 1
+complete, round 2 paired and 9 of 16 games played, and round 3 not yet paired. That is
+the only state in which the "does it warn in advance?" question can be asked, and it
+cannot be recreated — treat these six files as irreplaceable. It is also a smaller field
+than the other two (32 players, 7 rounds) with forfeits in round 1.
+
 To add a fixture, save the page with `curl -sL` (the `-L` matters) and `lan=1`.
 
 ## Pairing prediction
@@ -227,7 +244,16 @@ Two more things that have already caused wrong conclusions:
   42-player group on zero after round 1, and the encoding of a late entrant's missing round
   makes no difference to it (`Z`, blank and `-` all give the same pairing). A group that
   large and that flat admits many legal pairings, and Swiss-Manager and bbpPairings choose
-  differently. Expect it on any round 2; see TODO.md for the evidence. Blind — with no withdrawal information, which is what a live
+  differently. Expect it on any round 2. Four explanations were tested and all are dead:
+  not the field (supplying exactly the two who missed round 2 gives the *best* result, 47
+  of 53, against 37 for neither and 33 for either alone); not the encoding of a late
+  entrant's missing round, as above; not colours (all 47 agreed boards agree on colour
+  too); and not same-federation avoidance (24 of the published 53 boards are between
+  players of one federation). What it is, is a six-board cyclic shift confined to that
+  scoregroup, the published pairing behaving as though the split fell one place earlier
+  than bbpPairings puts it. The checker lists the difference without calling the
+  published pairing illegal, and exits 0, so both are presumably legal.
+  Blind — with no withdrawal information, which is what a live
   prediction actually has — the same rounds give 37/51, 44/51 and 42/50. Every single miss
   is a player who had stopped playing and whom the scraper could not see, because the round
   pages delete the evidence. Do not reach for a rules-version or engine-disagreement

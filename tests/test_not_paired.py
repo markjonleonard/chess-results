@@ -1,8 +1,9 @@
 """The "not paired" page (art=40).
 
-Both fixtures are final captures: the British after all 9 rounds, Frome after
-all 5. The page ignores ``&rd=``, so a mid-event capture of it cannot be made
-after the fact -- there is only ever the current one.
+Two of the fixtures are final captures: the British after all 9 rounds, Frome
+after all 5. The page ignores ``&rd=``, so a mid-event capture of it cannot be
+made after the fact -- there is only ever the current one, which is why the
+Jeddah set below had to be caught live and cannot be regenerated.
 
 The interesting tests are the ones that check it against the crosstable, which
 is the view whose facts we already trust.
@@ -218,3 +219,52 @@ class TestTheHalfPointByeHazard:
         bye_takers = [e for e in frome_not_paired if e.markers.get(1) is Absence.UNPLAYED]
         assert len(bye_takers) >= 10  # all of them marked exactly as a withdrawal would be
         assert all(frome.players[e.name].play(1) is not None for e in bye_takers)
+
+
+class TestItDoesNotWarnInAdvance:
+    """Whether a marker can appear for a round that has not been paired yet.
+
+    This is the question the withdrawal ceiling turned on, and until 2026-08-10
+    it was answered by inference from the page's semantics rather than by
+    observation -- because ``art=40`` ignores ``&rd=``, so the state of a
+    half-finished event cannot be recovered afterwards.
+
+    The Jeddah fixtures are that observation, caught live: a 32-player, 7-round
+    Swiss with round 1 complete, round 2 paired and half played, and round 3 not
+    yet paired. The page carries a column for every one of the seven rounds and
+    a marker for round 1 only.
+    """
+
+    @pytest.fixture(scope="class")
+    def jeddah(self):
+        return parse_not_paired(fixture("jeddah2026_notpaired_midevent.html"))
+
+    def test_round_one_is_marked(self, jeddah):
+        """Absent, forfeited and bye all appear, so the page is working."""
+        assert {e.markers[1] for e in jeddah} == {Absence.UNPLAYED, Absence.FORFEIT, Absence.BYE}
+
+    def test_no_unpaired_round_carries_a_marker(self, jeddah):
+        """Rounds 3-7 are unpaired, and none of them says anything about anyone.
+
+        The finding: the page is contemporaneous, never predictive. It records
+        a round once that round has been paired, so it cannot tell you who is
+        about to be missing from the round you are trying to predict.
+        """
+        assert all(set(entry.markers) == {1} for entry in jeddah)
+
+    def test_a_live_round_is_silent_here_only_because_nobody_missed_it(self, jeddah):
+        """Guarding the reading: round 2 pairs the whole field, so its blankness
+        is explained without appealing to how the page treats a live round.
+        Rounds 3-7 carry the argument, being unpaired rather than unblemished."""
+        from chess_results.parse import parse_pairings, parse_starting_rank
+
+        field = {e.name for e in parse_starting_rank(fixture("jeddah2026_startingrank.html"))}
+        round_two = parse_pairings(fixture("jeddah2026_r2_live.html"), 2)
+        paired = {p.white.name for p in round_two} | {p.black.name for p in round_two if p.black}
+        assert paired == field
+
+    def test_an_unpaired_round_still_renders_an_empty_table(self):
+        """Round 3 is not paired, so its page has no rows -- not even withdrawals."""
+        from chess_results.parse import parse_pairings
+
+        assert parse_pairings(fixture("jeddah2026_r3_unpaired.html"), 3) == []

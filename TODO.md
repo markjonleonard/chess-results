@@ -220,22 +220,29 @@ Open work on chess-results, roughly in the order it is worth doing.
       unpaired in round 7 and back in round 8 — and it cost almost nothing: round 8 still
       scored 49/51). `consecutive=1` beat 2 and 3 on the same data.
 
-- [ ] **The residual withdrawal gap looks irreducible.** `likely_withdrawn` closes 9 of the
-      29 missed pairings above; the rest are players with *no signal to find*. Three of the
-      eight absent from round 9 — Dupuis, Jermy, Majeed — played round 8 in full and simply
-      never came back, so rounds 1–8 contain nothing to detect.
+- [x] **The residual withdrawal gap is irreducible.** Settled 2026-08-10 by the experiment
+      this item asked for, against a live event: tournament 1473782, the Jeddah Season
+      Chess Championship Qualifiers, a 32-player 7-round Swiss caught with round 1
+      complete, round 2 paired and 9 of its 16 games played, and round 3 not yet paired.
 
-      Checked on 2026-08-09: **no view marks a withdrawal in advance.** `art=1` ranks
-      withdrawn players in place with no marker at all. `art=9` shows a `not paired` row per
-      player, and `art=40` consolidates every absence onto one page — but both record a round
-      that has already been paired. All three name Dupuis, Jermy and Majeed only under round
-      9, which is the round we were trying to predict. So they are contemporaneous, not
-      predictive, and add nothing the crosstable does not already have.
+      **`art=40` carries a column for every one of the seven rounds and a marker in
+      round 1 only.** Rounds 3-7 are unpaired and say nothing about anybody, so the page
+      is contemporaneous rather than predictive, exactly as the semantics suggested. It
+      cannot tell you who will be missing from the round you are about to pair.
 
-      This is inference from the semantics, not observation: `art=40` ignores `&rd=`, so its
-      mid-event state cannot be recovered after the fact. Settle it by fetching `art=40`
-      during a live round and checking whether a `*` ever appears for a round that is not yet
-      paired. Until then, treat 132/152 as the ceiling.
+      Round 2 is blank too, but that argues nothing either way — it pairs the whole
+      field, so there is no absence for the page to record. The unpaired rounds carry
+      the finding; the guard is a test of its own so nobody later mistakes the one for
+      the other.
+
+      Captured as `jeddah2026_*` fixtures and pinned by
+      `test_not_paired.TestItDoesNotWarnInAdvance`. They cannot be regenerated: the page
+      ignores `&rd=`, so this state existed only while that round was live.
+
+      So **132/152 stands as the ceiling**, and the three players absent from round 9 of
+      the British with no prior signal — Dupuis, Jermy, Majeed — remain undetectable in
+      principle rather than merely in our implementation.
+
 - [x] **Check the TRF we emit against TRF-2026.** Done 2026-08-09, and it found a real bug.
       Checked empirically rather than by reading alone: bbpPairings has a check mode
       (`--dutch file -c`) that parses a whole tournament and lists discrepancies.
