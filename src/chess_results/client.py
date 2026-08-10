@@ -20,6 +20,7 @@ from .cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, SettledRounds, cach
 from .models import CrosstableEntry, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
 from .parse import (
     has_pairings,
+    is_team_pairings,
     parse_crosstable,
     parse_not_paired,
     parse_pairings,
@@ -49,6 +50,17 @@ ALL_ROWS = 99999
 
 #: Safety net for round auto-detection.
 MAX_ROUNDS = 30
+
+
+class TeamTournamentError(ValueError):
+    """The tournament pairs teams, which this library does not read.
+
+    Raised rather than returned empty. A team event's round page names no
+    players, so the scrape would otherwise succeed into a tournament with no
+    rounds and no field -- indistinguishable, to anyone reading the output,
+    from an event that has not started yet.
+    """
+
 
 #: Transient conditions worth retrying: rate limiting, and the 5xx family a busy
 #: chess-results returns under load. 404 and the rest of 4xx are answers, not faults.
@@ -272,6 +284,12 @@ class ChessResults:
                 rd=rnd,
                 expire_after=self.round_ttl(tournament_id, rnd),
             )
+            if is_team_pairings(page):
+                raise TeamTournamentError(
+                    f"tournament {tournament_id} pairs teams, not players; "
+                    "chess-results reports team events in a different format "
+                    "that this library does not read"
+                )
             if not has_pairings(page):
                 break
             pairings = parse_pairings(page, rnd, bye_value=bye_value)

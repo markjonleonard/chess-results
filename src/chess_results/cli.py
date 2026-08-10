@@ -13,7 +13,7 @@ from typing import TypeVar
 
 from . import __version__
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
-from .client import ChessResults
+from .client import ChessResults, TeamTournamentError
 from .models import Pairing, Play, PlayerRef, PlayKind
 from .tournament import Tournament
 
@@ -567,6 +567,11 @@ def main(argv: list[str] | None = None) -> int:
     except BrokenPipeError:
         _silence_stdout()
         return 141  # what a shell reports for a process killed by SIGPIPE
+    except TeamTournamentError as exc:
+        # An unsupported format, not a crash: say so in one line rather than
+        # showing a traceback for something the user can do nothing about.
+        print(f"chess-results: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

@@ -430,6 +430,32 @@ def has_pairings(html: str) -> bool:
     return any(_header_row(t, "Bo.") for t in _data_tables(html))
 
 
+#: What a team match table pairs on: a team against a team, carrying match
+#: points. No player is named anywhere on it.
+_TEAM_COLUMNS = ("Team", "MP")
+
+
+def is_team_pairings(html: str) -> bool:
+    """True if a round page pairs teams rather than players (``art=2``).
+
+    A team event's round page is a different table entirely -- ``No. | SNo |
+    Team | MP | Res. | : | Res. | MP | Team | SNo`` -- naming no players at
+    all, so :func:`parse_pairings` reads nothing from it. That is the safe
+    failure, but on its own it is indistinguishable from an event that has not
+    started, and the caller would report an empty tournament with every
+    appearance of confidence. Detecting it lets the caller say so instead.
+
+    The individual boards live on ``art=3``, laid out as one sub-table per
+    match with the two team names in its header, which this library also does
+    not read.
+    """
+    for table in _data_tables(html):
+        found = _header_row(table, "No.")
+        if found and all(label in found[0] for label in _TEAM_COLUMNS):
+            return True
+    return False
+
+
 #: Where a crosstable's score column may be found, best first. ``Pts.`` says
 #: what it is; ``TB1`` merely often happens to hold the score, on events whose
 #: first tiebreak is the score itself and which print no ``Pts.`` column at all

@@ -407,8 +407,30 @@ Open work on chess-results, roughly in the order it is worth doing.
       disagreement), and `RtgI`/`RtgN` where there is no plain `Rtg`. All three are in
       CLAUDE.md; the fixtures are `arad2026_a_*`.
 
-- [ ] **Team tournaments are untested.** Unknown whether `parse_pairings` copes with a team
-      pairing table; do not claim support until there is a fixture.
+- [x] **Team tournaments are untested.** Tested 2026-08-10 against the Chinese National
+      Youth Chess Team Championship 2026 G14 (1472122), and the answer is that we do not
+      support them and now say so out loud rather than quietly.
+
+      chess-results reports a team event in a different shape entirely. `art=2` pairs
+      *teams* — `No. | SNo | Team | MP | Res. | : | Res. | MP | Team | SNo` — and names no
+      player anywhere; the individual boards are on `art=3`, one sub-table per match with
+      the two team names in its header. `parse_pairings` reads nothing from either, which
+      is the *safe* failure: no team is ever mistaken for a player.
+
+      Reading nothing was not enough, though. It is indistinguishable from an event that
+      has not started, so the scrape succeeded into a tournament with no rounds and the CLI
+      printed "round 0 pairings" and "all results in" — confidently wrong-looking output
+      about a perfectly good tournament. `parse.is_team_pairings` now detects the team
+      table and `tournament()` raises `TeamTournamentError`; the CLI prints one line to
+      stderr and exits 2.
+
+      The trap if this is ever taken further: `art=3` opens with a `Bo.` column, so
+      `has_pairings` returns True for it. Only parsing finds out. A team event's ordinary
+      player list (`art=16`) does parse, so the players are reachable even though their
+      games are not.
+
+      Supporting team events properly would need a match/board model this library does not
+      have. Fixtures are `cnyt2026_g14_*`.
 
 ## Housekeeping
 

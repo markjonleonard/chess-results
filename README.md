@@ -220,6 +220,12 @@ taken in earlier rounds and score those players a point light. This library read
 the crosstable as well and puts the missing rounds back, so the scores it reports
 agree with the tournament's published totals.
 
+## What it does not do
+
+**Team tournaments.** chess-results reports a team competition in a different format —
+the round page pairs teams rather than players — and this library does not read it. Point
+it at one and it says so and stops, rather than reporting an empty tournament.
+
 ## Being a good guest
 
 chess-results is a free service run for the chess community. This library pauses

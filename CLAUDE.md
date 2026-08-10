@@ -241,6 +241,13 @@ of `Rtg`, and a `Pts.` column alongside genuine `TB1`-`TB5` tiebreaks.
 kept so a test can show what the default page looks like; every other Arad fixture is the
 full `zeilen=99999` page.
 
+`cnyt2026_g14_*` is a **team** event (Chinese National Youth Team Championship 2026 G14,
+1472122, round 1 paired and unplayed). Its round page pairs teams and names no players, so
+`parse_pairings` reads nothing — safe, but indistinguishable from an event that has not
+started, which is why `is_team_pairings` exists and `tournament()` raises
+`TeamTournamentError` rather than returning an empty event. Note `cnyt2026_g14_boards_r1.html`
+(`art=3`) opens with a `Bo.` column, so `has_pairings` says True and only parsing finds out.
+
 To add a fixture, save the page with `curl -sL` (the `-L` matters), `lan=1` and
 `zeilen=99999`. Leave any of the three off and you get a redirect page, a German one, or a
 silently truncated one.
