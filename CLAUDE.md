@@ -199,8 +199,29 @@ game has a result **and** a later round is paired — the newest round never set
 a result can be corrected before the next pairing goes out. Settled rounds are recorded in a
 JSON sidecar next to the cache so the knowledge survives between runs.
 
+**The crosstable is cached hard too, and replaced rather than expired.** It used to take
+the live 5-minute lifetime, flat, on the reasoning that it holds live results — but we never
+read results from it, the round page being the authority. What we read is the byes and
+absences that round pages delete once a later round is paired, and those never change again.
+So it is fetched with `SETTLED_TTL` and `refresh=True` is passed when
+`crosstable_is_stale()` says the cached copy will not do, which is the only way round
+requests-cache fixing expiry at write time. Two things make it stale:
+
+- **It covers fewer rounds than we hold.** A copy fetched before round 8 existed cannot
+  supply round 8's bye, and `add_crosstable` fills only rounds we already have. This is the
+  case that matters, and `CrosstableCoverage` (a second JSON sidecar) is what remembers it.
+- **The newest round is still being played.** Nothing we *need* changes while results
+  arrive, but `add_crosstable` also compares the two views, and against a stale copy that
+  comparison would report results the crosstable had not caught yet — turning the
+  disagreement tripwire into noise.
+
+Net effect: a finished tournament fetches the crosstable once and then never again; a live
+one behaves exactly as before. Do not "simplify" this back to a flat TTL.
+
 Known caveat, documented in the README: requests-cache fixes expiry at write time, so a
 round that settles between runs is fetched once more before it takes the long lifetime.
+The crosstable no longer suffers from this — forcing a refresh is what sidesteps it — and
+the same trick would fix the round pages if it ever seems worth doing.
 
 The library is uncached by default (`ChessResults(cache=True)` opts in); the CLI caches by
 default.

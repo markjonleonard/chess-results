@@ -16,7 +16,14 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from .cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, SettledRounds, cached_session
+from .cache import (
+    LIVE_TTL,
+    SETTLED_TTL,
+    STARTING_RANK_TTL,
+    CrosstableCoverage,
+    SettledRounds,
+    cached_session,
+)
 from .models import CrosstableEntry, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
 from .parse import (
     has_pairings,
@@ -145,6 +152,7 @@ class ChessResults:
         self.timeout = timeout
         self.live_ttl = live_ttl
         self.settled = SettledRounds(cache_dir)
+        self.coverage = CrosstableCoverage(cache_dir)
         self._last_request = 0.0
 
     @property
@@ -169,25 +177,31 @@ class ChessResults:
         art: int,
         *,
         expire_after: int | None = None,
+        refresh: bool = False,
         **params: str | int,
     ) -> str:
         """Fetch one view of a tournament and return its HTML.
 
         ``expire_after`` is how long the response may be reused, in seconds.
-        It is ignored by sessions that do not cache.
+        ``refresh`` replaces any cached copy rather than reusing it, which is
+        the only way to shorten a lifetime after the fact -- requests-cache
+        fixes expiry when the response is written. Both are ignored by sessions
+        that do not cache.
         """
         # expire_after is requests-cache's extension, absent from requests.Session.get,
         # so this cannot be typed more tightly than Any without lying about the session.
         options: dict[str, Any] = {}
         if self.caching and expire_after is not None:
             options["expire_after"] = expire_after
+        if self.caching and refresh:
+            options["force_refresh"] = True
 
-        # Pace only requests that actually reach the server.
+        # Pace only requests that actually reach the server. A forced refresh
+        # always reaches it, cached or not, so it must not take the shortcut.
         served_from_cache = False
-        if not (self.caching and options.get("expire_after") == 0):
-            wait = self.delay - (time.monotonic() - self._last_request)
-            if wait > 0 and not self._is_cached(tournament_id, art, params):
-                time.sleep(wait)
+        wait = self.delay - (time.monotonic() - self._last_request)
+        if wait > 0 and (refresh or not self._is_cached(tournament_id, art, params)):
+            time.sleep(wait)
 
         response = self.session.get(
             f"{self.base_url}/tnr{tournament_id}.aspx",
@@ -225,6 +239,28 @@ class ChessResults:
     def round_ttl(self, tournament_id: str | int, rnd: int) -> int:
         """How long this round's page may be reused."""
         return SETTLED_TTL if self.settled.is_settled(tournament_id, rnd) else self.live_ttl
+
+    def crosstable_is_stale(self, tournament_id: str | int, event: Tournament) -> bool:
+        """Whether a cached crosstable must be replaced rather than reused.
+
+        The crosstable is cached hard, because the only thing we take from it --
+        byes and absences deleted from superseded round pages -- never changes
+        once written. Two things make a cached copy insufficient:
+
+        - **It covers fewer rounds than we hold.** A crosstable fetched before
+          round 8 existed cannot supply round 8's bye, and `add_crosstable`
+          fills only rounds we already have. This is the case that matters.
+        - **The newest round is still being played.** Nothing we *need* changes
+          while results arrive, since the round page carries them, but
+          `add_crosstable` also compares the two views and reports any
+          contradiction. Against a stale copy that comparison would report
+          results the crosstable simply had not caught yet, turning a tripwire
+          into noise.
+
+        So a settled tournament is fetched once and then never again, and a live
+        one behaves as it always has.
+        """
+        return self.coverage.rounds(tournament_id) < event.last_round or bool(event.unfinished())
 
     def pairings(self, tournament_id: str | int, rnd: int, *, bye_value: float = 1.0) -> list[Pairing]:
         html = self.fetch(
@@ -308,10 +344,19 @@ class ChessResults:
         if crosstable and event.rounds:
             # Fetched once and parsed twice: the round-by-round cells, and the
             # totals the page publishes, which are the check on our reading of them.
-            html = self.fetch(tournament_id, ART_CROSSTABLE, expire_after=self.live_ttl)
+            html = self.fetch(
+                tournament_id,
+                ART_CROSSTABLE,
+                # Cached hard and replaced on demand rather than expired on a
+                # timer: what we take from this page is settled history, and a
+                # short lifetime meant refetching it forever.
+                expire_after=SETTLED_TTL,
+                refresh=self.crosstable_is_stale(tournament_id, event),
+            )
             parsed = parse_crosstable(html)
             event.add_crosstable(parsed)
             event.check_published_totals(parsed, parse_published_totals(html))
+            self.coverage.record(tournament_id, event.last_round)
 
         self.settled.record(tournament_id, settled_rounds(event))
         return event

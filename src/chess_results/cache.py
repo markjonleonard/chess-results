@@ -9,6 +9,16 @@ repeatedly against a live tournament.
 So this module tracks which rounds have settled, in a small JSON file beside the
 cache, and the client uses it to ask for a long lifetime on those pages and a
 short one on everything else.
+
+The crosstable needs the same treatment for a different reason. Most of it is
+settled history -- the byes and absences that round pages delete once a later
+round is paired, which is the only thing we take from it. Its volatile part is
+the current round's results, which we never read from it, the round page being
+the authority there. So caching it as though the whole page were live meant
+refetching a mostly-frozen page every five minutes forever. What actually
+matters is that the cached copy covers every round we have assembled, so
+:class:`CrosstableCoverage` records how many rounds it covered when it was
+fetched, and the client replaces it when that falls behind.
 """
 
 from __future__ import annotations
@@ -76,6 +86,39 @@ class SettledRounds:
         if merged == self._data.get(key):
             return
         self._data[key] = merged
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self._data, indent=0, sort_keys=True))
+        except OSError:  # a cache that cannot be written is not an error
+            pass
+
+
+class CrosstableCoverage:
+    """How many rounds the cached crosstable was known to cover, per tournament.
+
+    Kept beside the settled-round record and for the same reason: requests-cache
+    fixes a response's expiry when it is written, so a lifetime chosen once
+    cannot later be shortened. Knowing what the cached copy covers lets the
+    client decide to replace it instead.
+    """
+
+    def __init__(self, directory: str | Path | None = None) -> None:
+        self.path = Path(directory or DEFAULT_CACHE_DIR) / "crosstable.json"
+        try:
+            self._data: dict[str, int] = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            self._data = {}
+
+    def rounds(self, tournament_id: str | int) -> int:
+        """Rounds the cached crosstable covers; 0 when we have never fetched one."""
+        value = self._data.get(str(tournament_id), 0)
+        return value if isinstance(value, int) else 0
+
+    def record(self, tournament_id: str | int, rounds: int) -> None:
+        key = str(tournament_id)
+        if self._data.get(key) == rounds:
+            return
+        self._data[key] = rounds
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.path.write_text(json.dumps(self._data, indent=0, sort_keys=True))

@@ -66,9 +66,21 @@ survives between runs:
 | Starting rank | 1 day — fixed once the event begins |
 | Round still in play, or the newest round | 5 minutes (`--cache-ttl`) |
 | Finished round, superseded by a later one | 30 days |
+| Crosstable | 30 days, replaced when it falls behind |
 
 The newest round is never treated as settled even when every result is in, because
 a result can still be corrected before the next pairing is published.
+
+The crosstable is the interesting one. It looks live — it carries the current
+round's results — but we never read results from it; the round page is the
+authority there. What we read is the byes and absences that round pages delete
+once a later round is paired, and those are settled the moment they are written.
+So it is cached for 30 days and *replaced* when a cached copy stops being good
+enough, which happens when it covers fewer rounds than we hold (it could not
+supply the newest round's bye) or when the newest round is still being played
+(the two views are also compared, and a stale copy would look like a
+contradiction rather than an old page). A finished tournament therefore fetches
+it once and never again.
 
 The CLI caches by default, in `~/.cache/chess-results`; `--no-cache` bypasses
 it and `--cache-dir` moves it. The library does not, so a caller keeps control:
@@ -80,7 +92,9 @@ ChessResults(cache=True)                      # or pass your own CachedSession
 Against a 7-round event this took repeat runs from 18 network requests to zero.
 One caveat: requests-cache fixes a response's expiry when it stores it, so a
 round that settles between runs is fetched once more before it takes the long
-lifetime. It costs one extra fetch per round, once.
+lifetime. It costs one extra fetch per round, once. The crosstable sidesteps
+this by forcing a refresh rather than shortening a lifetime it can no longer
+change; the same trick would work for round pages if it ever seems worth it.
 
 ## Retries
 
