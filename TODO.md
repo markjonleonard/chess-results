@@ -51,13 +51,6 @@ Open work on chess-results, roughly in the order it is worth doing.
       deprecated classifiers. Both workflows run that same `--strict` check before
       uploading, so a fault fails the build instead of burning a version number.
 
-## Correctness and coverage
-
-- [ ] **Recovered rounds have no float direction beyond byes.** A `Play` restored from the
-      crosstable has no `points_before`, so `_floats` cannot run on it. Only the
-      bye-is-a-downfloat rule applies. The pre-round score could be reconstructed by summing
-      earlier rounds if float history for those players ever matters.
-
 ## Scope
 
 - [ ] **More views.** Parsed: round pairings (`art=2`), starting rank (`art=0`),

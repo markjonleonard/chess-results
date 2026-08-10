@@ -298,3 +298,46 @@ class TestTheScoreColumnIsNotAlwaysTB1:
         against"; returning ratings would fail every player in the event."""
         html = fixture("arad2026_a_crosstable.html").replace(">Pts.<", ">Xx.<")
         assert parse_published_totals(html) == {}
+
+
+class TestRecoveredPlaysAreNeverGames:
+    """Why a recovered play needing no float direction costs nothing.
+
+    A Play restored from the crosstable has no ``points_before`` -- the
+    crosstable prints no pre-round score -- so ``_floats`` cannot run on it and
+    only the bye-is-a-downfloat rule applies. That looks like a gap and is not
+    one: ``add_crosstable`` fills only rounds already fetched, and the only
+    rows chess-results deletes from a round page are byes and "not paired". A
+    game row is never removed, so a recovered game does not arise.
+
+    These pin that, because the reasoning above is what makes the missing
+    float safe to leave alone.
+    """
+
+    @pytest.mark.parametrize("played_out", [False, True])
+    def test_every_recovered_play_is_a_bye_or_an_absence(self, played_out, request):
+        event = request.getfixturevalue("british_played_out" if played_out else "british")
+        recovered = [p for pl in event.players.values() for p in pl.plays if p.from_crosstable]
+        assert recovered, "fixture no longer exercises recovery at all"
+        assert all(p.kind is not PlayKind.GAME for p in recovered)
+
+    def test_a_recovered_bye_still_counts_as_a_downfloat(self, british_played_out):
+        byes = [
+            p
+            for pl in british_played_out.players.values()
+            for p in pl.plays
+            if p.from_crosstable and p.kind is PlayKind.PAIRING_BYE
+        ]
+        assert byes
+        assert all(p.float_direction == "D" for p in byes)
+
+    def test_a_recovered_absence_floats_nowhere(self, british_played_out):
+        """Correct rather than missing: an unpaired player did not float."""
+        absences = [
+            p
+            for pl in british_played_out.players.values()
+            for p in pl.plays
+            if p.from_crosstable and p.kind is PlayKind.UNPAIRED
+        ]
+        assert absences
+        assert all(p.float_direction is None for p in absences)

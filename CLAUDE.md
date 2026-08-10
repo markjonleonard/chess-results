@@ -153,6 +153,24 @@ sharing a name in one event will collide.
 **Floats are inferred**, by comparing the two players' displayed pre-round scores. They are
 not published. A pairing-allocated bye counts as a downfloat.
 
+A `Play` recovered from the crosstable therefore has no float: the crosstable prints no
+pre-round score, so `points_before` is `None` and `_floats` cannot run. **This costs
+nothing, and the reason is worth keeping so nobody "fixes" it.** `add_crosstable` fills
+only rounds already fetched (`if entry.round not in self.rounds`), so it never introduces a
+whole round — it fills one player's gap inside a round we have. The only rows chess-results
+deletes from a round page are byes and "not paired"; a game row is never removed. So a
+recovered play is always one of those two, and both are already right: a pairing bye takes
+`"D"`, and an unpaired player takes nothing, having floated nowhere. Measured across every
+fixture, the number of recovered *games* is zero.
+
+The one way to reach a recovered game is a player whose name differs between the starting
+rank and the round pages — the join is by `start_no`, so the crosstable still matches them.
+That yields games with no float, but it also yields **two players for one person** and a
+field one larger than it should be, which is the name-keying hazard below wearing a
+different hat. Fix that, not the float. Note also that `float_direction` has a single
+consumer, the `Floats` column of `colours`; it never reaches the TRF, so it cannot affect a
+prediction — engines recompute floats themselves.
+
 **`lan=1` is mandatory on every request.** The parsers key off English column labels and the
 literal words "bye" and "not paired".
 
