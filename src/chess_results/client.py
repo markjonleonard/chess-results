@@ -27,6 +27,7 @@ from .cache import (
 from .models import CrosstableEntry, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
 from .parse import (
     has_pairings,
+    is_combined_pairings,
     is_team_pairings,
     parse_crosstable,
     parse_not_paired,
@@ -59,13 +60,45 @@ ALL_ROWS = 99999
 MAX_ROUNDS = 30
 
 
-class TeamTournamentError(ValueError):
-    """The tournament pairs teams, which this library does not read.
+class TournamentError(ValueError):
+    """This tournament cannot be assembled into a per-player history.
 
-    Raised rather than returned empty. A team event's round page names no
-    players, so the scrape would otherwise succeed into a tournament with no
-    rounds and no field -- indistinguishable, to anyone reading the output,
-    from an event that has not started yet.
+    Raised rather than returned empty, which is the whole point. Each case below
+    produces a page this library reads *nothing* from, and an empty tournament
+    is indistinguishable from a real one that has yet to be played: the caller
+    gets a confident report of zero rounds and no warning that anything is
+    wrong. Naming the reason is the difference between a tool that is honest
+    about its limits and one that quietly answers the wrong question.
+    """
+
+
+class TeamTournamentError(TournamentError):
+    """The tournament pairs teams rather than players.
+
+    A team event's round page carries teams and match points and names no player
+    at all; the individual boards live on a second view this library does not
+    read either.
+    """
+
+
+class RoundRobinError(TournamentError):
+    """The tournament is a round robin, published in a shape this cannot read.
+
+    Two views differ from the Swiss equivalents. The pairings page holds every
+    round at once under repeated headings and ignores ``rd``, so each round
+    would be read as whichever was asked for; and the crosstable is a grid of
+    opponents rather than of rounds, which `parse_crosstable` reads nothing
+    from while `parse_published_totals` still finds the totals beside it --
+    leaving the usual cross-check with nothing to compare and nothing to say.
+    """
+
+
+class TournamentNotStartedError(TournamentError):
+    """No round has been played, so there is no history to assemble.
+
+    Not a limitation but a state, and a common one: chess-results publishes an
+    entry list as soon as registration opens, often months ahead, and such a
+    page carries a field and no games.
     """
 
 
@@ -367,6 +400,12 @@ class ChessResults:
                     "chess-results reports team events in a different format "
                     "that this library does not read"
                 )
+            if is_combined_pairings(page):
+                raise RoundRobinError(
+                    f"tournament {tournament_id} publishes every round on one "
+                    "page, as chess-results does for a round robin; this "
+                    "library reads only the round-by-round format of a Swiss"
+                )
             if not has_pairings(page):
                 break
             pairings = parse_pairings(page, rnd, bye_value=bye_value)
@@ -403,6 +442,13 @@ class ChessResults:
         # lifetime, and requests-cache cannot be told otherwise after the fact.
         # Extend the stored entries in place rather than spending a request each
         # to fetch pages that have not changed and never will again.
+        if not event.rounds:
+            # Every reason for this is the same to a reader: a field, and no
+            # games. Saying so beats reporting a tournament of zero rounds.
+            raise TournamentNotStartedError(
+                f"tournament {tournament_id} has no played rounds; it has probably not started yet"
+            )
+
         now_settled = settled_rounds(event)
         for rnd in sorted(now_settled - self.settled.rounds(tournament_id)):
             self._extend_cached_lifetime(tournament_id, ART_ROUND_PAIRINGS, {"rd": rnd}, SETTLED_TTL)

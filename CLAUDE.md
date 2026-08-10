@@ -134,6 +134,21 @@ info, needs `&snr=<starting number>` and renders an empty shell without one; it 
 show a missed round explicitly, as a `not paired` row with opponent SNo `-2`, but that
 is one request per player — 108 for a field — to learn what one crosstable already says.
 
+**Three shapes are refused rather than read**, all subclasses of `TournamentError`, all
+for the same reason: each produces a page nothing parses from, and an empty tournament is
+indistinguishable from one that has not been played. `TeamTournamentError` (the round page
+pairs teams), `RoundRobinError` (`is_combined_pairings` — every round on one page under
+repeated "Round N on" headings, and an opponent-grid crosstable that `parse_crosstable`
+reads nothing from while `parse_published_totals` still finds its totals, leaving the
+cross-check with nothing to compare), and `TournamentNotStartedError` (no round assembled
+at all). Do not "helpfully" make any of them return an empty `Tournament`.
+
+**A round robin's pairing rows carry one trailing empty cell more than the header**, so the
+alignment guard in `parse_pairings` drops every row. Tempting to relax — do not, on its
+own: with the guard relaxed all nine rounds parse and every one is filed under whichever
+round was requested, turning a silent nothing into silent nonsense. Section-aware parsing
+would have to come first.
+
 **An unpaired round still renders a table.** It contains only the withdrawn players' "not
 paired" rows. Round auto-detection therefore requires at least one `PlayKind.GAME`; without
 that check the scraper invents rounds and makes the whole active field look withdrawn.

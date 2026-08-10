@@ -305,16 +305,45 @@ scores.
 
 ## What this does not read
 
-- **Team tournaments.** chess-results.com reports them in a different format: the
-  round page pairs *teams*, carrying match points and naming no player, with the
-  individual boards on a second view as one sub-table per match. `parse_pairings`
-  reads nothing from either — safe, in that no team is mistaken for a player, but
-  indistinguishable from an event that has not started. So `is_team_pairings`
-  detects the shape and `tournament()` raises `TeamTournamentError` rather than
-  returning an empty event.
-- **Most tournament metadata.** The name, and nothing else — no organiser, time
-  control, dates, playing schedule, or the tie-break columns of the final
-  ranking. Everything here is built around who played whom.
+Three shapes produce a page nothing can be read from, and all three used to
+assemble into an empty tournament — a field, no rounds, and a confident report of
+nothing at all. Each is now detected and refused with its reason, as a subclass
+of `TournamentError`, so a caller catches one thing and the CLI prints one line.
+
+- **Team tournaments** (`TeamTournamentError`). The round page pairs *teams*,
+  carrying match points and naming no player; the individual boards sit on a
+  second view as one sub-table per match. `parse_pairings` reads nothing from
+  either, which is safe — no team is mistaken for a player.
+- **Round robins** (`RoundRobinError`). Two views differ from their Swiss
+  equivalents. The pairings page holds **every round at once**, under repeated
+  "Round N on …" headings in a single table, and ignores `rd` — so a parser
+  reading it would file all nine rounds' games under whichever round it asked
+  for. And the crosstable is a grid of *opponents* rather than of rounds:
+
+  ```
+  Swiss:       No. | Name | Rtg | FED | 1.Rd | 2.Rd | … | Pts.
+  Round robin: No. | Name | Rtg |  1   |  2   | …    | 9 | Pts.
+  ```
+
+  `parse_crosstable` reads nothing from that, while `parse_published_totals`
+  still finds the `Pts.` column beside it — so the cross-check compares nine
+  totals against nothing and reports no disagreement. A check that goes quiet
+  because it has nothing to compare is worse than no check, which is why this is
+  refused outright rather than left to the tripwire.
+
+  `is_combined_pairings` detects it from the repeated headings rather than from
+  the tournament type, which the page does not state. One heading is what an
+  ordinary Swiss round page carries; more than one means the rounds have been
+  combined.
+- **Tournaments that have not started** (`TournamentNotStartedError`). Not a
+  limitation but a state, and the commonest of the three: chess-results publishes
+  an entry list as soon as registration opens, often months ahead. Six round-robin
+  tournament numbers were tried while hunting for a played one, and four had not
+  begun.
+
+Also unread, but no error, since these are simply outside what it collects:
+**most tournament metadata** — no organiser, time control, dates, playing
+schedule, or the tie-break columns of the final ranking.
 
 For the site's tables as published, including the metadata and tie-breaks,
 [chessResults](https://cran.r-project.org/package=chessResults) is an R package
@@ -364,6 +393,8 @@ tournaments, chosen for the ways they differ:
 | 19th Arad Open | 209 players, so pagination; `RtgI`/`RtgN`; a `Pts.` column beside real tie-breaks |
 | Jeddah qualifier | Caught live with a round unpaired — the only state in which `art=40` can be tested for advance warning |
 | Chinese National Youth Team | A team event |
+| USSA Closed 2026 Open | A round robin: every round on one page, an opponent-grid crosstable |
+| Warsaw IM norm event | A tournament that had not started — a field and no games |
 
 Rounds 6 and 7 have two fixtures each, because the same round looks different
 depending on when it was caught: the mid-round captures still have their bye rows,

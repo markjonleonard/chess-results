@@ -434,6 +434,35 @@ def has_pairings(html: str) -> bool:
 #: points. No player is named anywhere on it.
 _TEAM_COLUMNS = ("Team", "MP")
 
+#: The heading row chess-results puts above each round's boards, as
+#: "Round 3 on 2026/08/09 at 14.00".
+_ROUND_HEADING = re.compile(r"^Round\s+\d+\s+on\b")
+
+
+def is_combined_pairings(html: str) -> bool:
+    """True if one pairing table holds every round at once (``art=2``).
+
+    A Swiss publishes one page per round and ``&rd=`` selects it. A round robin
+    publishes all of its rounds together, under repeated "Round N on ..."
+    headings inside a single table, and ignores ``&rd=`` -- so every round of a
+    round robin would otherwise be read as the round that was asked for.
+
+    Detected by the headings rather than by the tournament type, which is not on
+    the page: one heading is what a Swiss round page has, more than one means
+    the rounds have been combined.
+    """
+    for table in _data_tables(html):
+        if not _header_row(table, "Bo."):
+            continue
+        headings = sum(
+            1
+            for row in table.select("tr")
+            if (cells := [_text(c) for c in _cells(row)]) and _ROUND_HEADING.match(cells[0])
+        )
+        if headings > 1:
+            return True
+    return False
+
 
 def is_team_pairings(html: str) -> bool:
     """True if a round page pairs teams rather than players (``art=2``).

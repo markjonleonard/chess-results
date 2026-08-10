@@ -245,9 +245,14 @@ agree with the tournament's published totals.
 
 ## What it does not do
 
-**Team tournaments.** chess-results reports a team competition in a different format —
-the round page pairs teams rather than players — and this library does not read it. Point
-it at one and it says so and stops, rather than reporting an empty tournament.
+**Team tournaments and round robins.** chess-results publishes both in formats this does
+not read — a team round pairs teams rather than players, and a round robin puts every
+round on one page with a crosstable of opponents rather than of rounds. Point it at either
+and it says so and stops, rather than reporting an empty tournament.
+
+**Tournaments that have not started** get the same treatment. An entry list often appears
+months ahead of the first game, and "this has not started yet" is more use than a table of
+zeroes.
 
 **Most of the tournament's own metadata.** It reads the name and nothing else: not the
 organiser, the time control, the dates, the playing schedule, or the tie-break columns of
