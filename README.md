@@ -63,6 +63,18 @@ rows rather than lines, so `--limit 10` is ten players where `| head -10` is nin
 players and a heading. It saves no time — the fetching is done before anything is
 printed — and it is not offered on `dump`, truncated JSON being no use to anyone.
 
+`--name-width N` sets how much room a player's name gets before it is clipped to
+an `…`. The default is 28, narrowed further if your terminal is too small to fit
+the table; anything under 8 is treated as 8. Widen it when an event has long
+names you want in full:
+
+```bash
+chess-results pairings 1452107 6 --name-width 40
+```
+
+Like `--limit`, it is not offered on `dump` — JSON has no columns to line up, and
+clipping a name there would corrupt data rather than tidy a table.
+
 ### standings
 
 Rank, score, starting number, title and name.
@@ -92,11 +104,11 @@ chess-results standings 1452107
 
 ```
 2026 British Chess Championships: Championship — during round 9: 4 of 50 results in
-   1   6½    3  GM  Royal, Shreyas                   playing
-   2   6½    4  IM  Grieve, Harry                    playing
+   1   6½    3  GM  Royal, Shreyas               playing
+   2   6½    4  IM  Grieve, Harry                playing
    …
-  98    2   62  CM  Stubbs, Oliver                   0F
- 101    2   95      Jermy, Jaden                     not paired
+  98    2   62  CM  Stubbs, Oliver               0F
+ 101    2   95      Jermy, Jaden                 not paired
 ```
 
 A round paired but not yet started says so instead: `round 9 paired, no results yet`.
@@ -113,12 +125,12 @@ chess-results pairings 1452107 6
 
 ```
 2026 British Chess Championships: Championship — round 6 pairings
-  Bd  Pts   No      White                     Res    Pts   No      Black
-   1   4½    6  IM  Bazakutsa, Svyatoslav     ½-½     4½    4  IM  Grieve, Harry
-   2    4    1  GM  Mcshane, Luke J           1-0      4   10  IM  Waldhausen Gordon, Frederick
+  Bd  Pts   No      White                        Res    Pts   No      Black
+   1   4½    6  IM  Bazakutsa, Svyatoslav        ½-½     4½    4  IM  Grieve, Harry
+   2    4    1  GM  Mcshane, Luke J              1-0      4   10  IM  Waldhausen Gordon, Frederick
    …
-  52    ½  105  WCM Nevska, Gerda             1                    bye
-  53    3   21  IM  Golding, Alex                                  not paired
+  52    ½  105  WCM Nevska, Gerda                1                    bye
+  53    3   21  IM  Golding, Alex                                     not paired
 ```
 
 The starting numbers are joined in from the starting-rank list, because most
@@ -139,14 +151,14 @@ chess-results colours 1452107 --after 6
 
 ```
 2026 British Chess Championships: Championship — colour and float history after round 6
- Pts   No  Name                             Colours    Floats     Due
-   5    2  Adams, Michael                   WBWBWB     ------     W (mild)
-   5    3  Royal, Shreyas                   BWBWWB     ----U-     W (mild)
-   5    4  Grieve, Harry                    WBWBWB     ------     W (mild)
-   5    6  Bazakutsa, Svyatoslav            WBWWBW     ----D-     B (absolute)
-  4½    7  Harvey, Marcus R                 BWBWBW     ------     B (mild)
+ Pts   No  Name                         Colours    Floats     Due
+   5    2  Adams, Michael               WBWBWB     ------     W (mild)
+   5    3  Royal, Shreyas               BWBWWB     ----U-     W (mild)
+   5    4  Grieve, Harry                WBWBWB     ------     W (mild)
+   5    6  Bazakutsa, Svyatoslav        WBWWBW     ----D-     B (absolute)
+  4½    7  Harvey, Marcus R             BWBWBW     ------     B (mild)
    …
-   4    1  Mcshane, Luke J                  BWBWBW     ------     B (mild)
+   4    1  Mcshane, Luke J              BWBWBW     ------     B (mild)
 ```
 
 A player due a colour "absolutely" must get it in the next round; "mild" means

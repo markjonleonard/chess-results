@@ -1,14 +1,22 @@
 import argparse
 import copy
 import json
+import os
 import re
 
 import pytest
 
 from chess_results.cli import (
+    _COLOURS_PREFIX,
+    _SIDE_PREFIX,
+    _STANDINGS_PREFIX,
+    DEFAULT_NAME_WIDTH,
     MAX_WARNINGS,
+    MIN_NAME_WIDTH,
+    _fit,
     _how_far,
     _limited,
+    _name_width,
     _round,
     _state,
     _warn_disagreements,
@@ -21,6 +29,16 @@ from chess_results.cli import (
     main,
 )
 from chess_results.models import Disagreement, Play, PlayKind
+
+
+def _args(**kwargs):
+    """The options a reporting command reads, defaulted as the parser defaults them.
+
+    Collected here rather than spelled out at each call so that adding an
+    option to the parser does not mean editing every construction in this file
+    — which is exactly what --name-width would otherwise have cost.
+    """
+    return argparse.Namespace(**{"after": None, "limit": None, "name_width": None, **kwargs})
 
 
 def test_shared_options_parse_before_the_subcommand():
@@ -93,7 +111,7 @@ class TestStandingsDistinguishALiveRoundFromASettledOne:
 
     def test_a_live_round_says_who_is_still_playing(self, british, capsys, monkeypatch):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_standings(argparse.Namespace(after=6, limit=None))
+        cmd_standings(_args(after=6))
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("during round 6: 46 of 52 results in")
         states = {re.split(r"\s{2,}", line)[-1] for line in lines[1:]}
@@ -102,7 +120,7 @@ class TestStandingsDistinguishALiveRoundFromASettledOne:
 
     def test_a_settled_round_needs_no_such_column(self, british, capsys, monkeypatch):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_standings(argparse.Namespace(after=5, limit=None))
+        cmd_standings(_args(after=5))
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("after round 5")
         assert not any(line.endswith("playing") for line in lines[1:])
@@ -114,7 +132,7 @@ class TestPairings:
     @staticmethod
     def _run(event, monkeypatch, capsys, **kwargs):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
-        cmd_pairings(argparse.Namespace(**{"round": None, "after": None, "limit": None, **kwargs}))
+        cmd_pairings(_args(**{"round": None, **kwargs}))
         return capsys.readouterr().out.splitlines()
 
     def test_a_settled_round_shows_boards_players_and_results(self, british, monkeypatch, capsys):
@@ -122,7 +140,7 @@ class TestPairings:
         assert lines[0].endswith("round 5 pairings")
         assert lines[1].split() == ["Bd", "Pts", "No", "White", "Res", "Pts", "No", "Black"]
         assert lines[2] == (
-            "   1   3½    3  GM  Royal, Shreyas            ½-½      4    6  IM  Bazakutsa, Svyatoslav"
+            "   1   3½    3  GM  Royal, Shreyas               ½-½      4    6  IM  Bazakutsa, Svyatoslav"
         )
 
     def test_starting_numbers_are_joined_in_from_the_starting_rank(self, british, monkeypatch, capsys):
@@ -159,6 +177,111 @@ class TestPairings:
         )
 
 
+class TestColumnsStayInLine:
+    """A name longer than its column used to shift every column after it.
+
+    ``f"{name:<25}"`` widens to the name rather than clipping it, so the four
+    2026 British names over 25 characters each knocked their own row out of
+    line while every other row stayed put. The fix clips instead, and these
+    pin both halves: that long names are cut, and that the cut keeps the row
+    the same shape as its neighbours.
+    """
+
+    @staticmethod
+    def _pairings(event, monkeypatch, capsys, **kwargs):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
+        cmd_pairings(_args(**{"round": 6, **kwargs}))
+        return capsys.readouterr().out.splitlines()
+
+    def test_the_result_column_starts_at_one_place_on_every_row(self, british, monkeypatch, capsys):
+        rows = self._pairings(british, monkeypatch, capsys)[2:]
+        # Every row's result sits at the same offset, whatever the name did.
+        assert len({len(row) - len(row[_SIDE_PREFIX + DEFAULT_NAME_WIDTH :]) for row in rows}) == 1
+
+    def test_a_name_that_does_not_fit_is_clipped_with_an_ellipsis(self, british, monkeypatch, capsys):
+        longest = max((p.name for p in british.players.values()), key=len)
+        assert len(longest) > DEFAULT_NAME_WIDTH, "fixture no longer exercises clipping"
+        rows = self._pairings(british, monkeypatch, capsys)
+        assert not any(longest in row for row in rows)
+        assert any("…" in row for row in rows)
+
+    def test_a_name_that_fits_is_left_alone(self, british, monkeypatch, capsys):
+        """The four that used to overrun are all inside the wider default now."""
+        rows = "\n".join(self._pairings(british, monkeypatch, capsys))
+        assert "Arakhamia-Grant, Ketevan E" in rows
+        assert "Raju, Sooraj Menothuparambil" in rows
+
+    def test_name_width_widens_the_column_to_show_a_clipped_name(self, british, monkeypatch, capsys):
+        rows = self._pairings(british, monkeypatch, capsys, name_width=40)
+        assert any("Lishoy Gengis Paratazham, Dildarav" in row for row in rows)
+
+    def test_name_width_narrows_it_too(self, british, monkeypatch, capsys):
+        rows = self._pairings(british, monkeypatch, capsys, name_width=10)[2:]
+        assert all(len(row) - len(row[_SIDE_PREFIX + 10 :]) == _SIDE_PREFIX + 10 for row in rows)
+
+    def test_no_row_is_left_with_trailing_whitespace(self, british, monkeypatch, capsys):
+        rows = self._pairings(british, monkeypatch, capsys)
+        assert not any(row != row.rstrip() for row in rows)
+
+    def test_colours_clips_its_name_column_too(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_colours(_args(after=6))
+        rows = capsys.readouterr().out.splitlines()[2:]
+        # Anchored on position rather than on finding a run of W/B: two players
+        # have played one game apiece, so a single letter is a whole history.
+        start = _COLOURS_PREFIX + DEFAULT_NAME_WIDTH + 1
+        assert all(re.fullmatch(r"[WB]*\s*", row[start : start + 10]) for row in rows)
+
+    def test_a_live_standings_state_column_lines_up(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_standings(_args(after=6))
+        rows = capsys.readouterr().out.splitlines()[1:]
+        assert len({len(row) - len(row[_STANDINGS_PREFIX + DEFAULT_NAME_WIDTH :]) for row in rows}) == 1
+
+
+class TestNameWidthIsChosen:
+    """How wide the column gets when nothing asks for a particular width."""
+
+    def test_an_explicit_width_wins(self):
+        assert _name_width(40, fixed=0) == 40
+
+    def test_piped_output_takes_the_default(self, monkeypatch):
+        """Not a terminal, so there is no width to fit — be reproducible instead."""
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False, raising=False)
+        assert _name_width(None, fixed=0) == DEFAULT_NAME_WIDTH
+
+    def test_a_narrow_terminal_narrows_the_column(self, monkeypatch):
+        monkeypatch.setattr("chess_results.cli.sys.stdout.isatty", lambda: True, raising=False)
+        monkeypatch.setattr("shutil.get_terminal_size", lambda *a: os.terminal_size((60, 24)))
+        assert _name_width(None, fixed=42, columns=2) == (60 - 42) // 2
+
+    def test_a_wide_terminal_does_not_widen_it_past_the_default(self, monkeypatch):
+        monkeypatch.setattr("chess_results.cli.sys.stdout.isatty", lambda: True, raising=False)
+        monkeypatch.setattr("shutil.get_terminal_size", lambda *a: os.terminal_size((400, 24)))
+        assert _name_width(None, fixed=42, columns=2) == DEFAULT_NAME_WIDTH
+
+    def test_a_column_is_never_narrowed_into_uselessness(self, monkeypatch):
+        monkeypatch.setattr("chess_results.cli.sys.stdout.isatty", lambda: True, raising=False)
+        monkeypatch.setattr("shutil.get_terminal_size", lambda *a: os.terminal_size((20, 24)))
+        assert _name_width(None, fixed=42, columns=2) == MIN_NAME_WIDTH
+        assert _name_width(1, fixed=0) == MIN_NAME_WIDTH
+
+    @pytest.mark.parametrize(
+        ("text", "width", "expected"),
+        [
+            ("abc", 5, "abc  "),
+            ("abcde", 5, "abcde"),
+            ("abcdef", 5, "abcd…"),
+            ("abc", 1, "…"),
+            ("abc", 0, ""),
+        ],
+    )
+    def test_fit_pads_or_clips(self, text, width, expected):
+        """Never wider than asked for — the point is to hold a column, not fill it."""
+        assert _fit(text, width) == expected
+        assert len(_fit(text, width)) == width
+
+
 class TestLimit:
     """``--limit`` counts rows of data, which ``| head`` cannot do."""
 
@@ -172,7 +295,7 @@ class TestLimit:
 
     def test_the_heading_is_not_one_of_the_rows(self, british, monkeypatch, capsys):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_standings(argparse.Namespace(after=5, limit=3))
+        cmd_standings(_args(after=5, limit=3))
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("after round 5")
         assert len(lines) == 5  # heading, three players, and the tally
@@ -180,7 +303,7 @@ class TestLimit:
 
     def test_nothing_is_said_when_nothing_is_left_out(self, british, monkeypatch, capsys):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_standings(argparse.Namespace(after=5, limit=500))
+        cmd_standings(_args(after=5, limit=500))
         assert "more" not in capsys.readouterr().out.splitlines()[-1]
 
     def test_dump_refuses_it_rather_than_ignoring_it(self):
@@ -217,7 +340,7 @@ class TestRoundIsClamped:
 
     def test_heading_reports_the_last_round_not_the_request(self, british, capsys, monkeypatch):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
-        cmd_colours(argparse.Namespace(after=123, limit=None))
+        cmd_colours(_args(after=123))
         assert "after round 7" in capsys.readouterr().out.splitlines()[0]
 
 

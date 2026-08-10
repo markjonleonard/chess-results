@@ -6,6 +6,7 @@ import argparse
 import dataclasses
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 from typing import TypeVar
@@ -178,15 +179,65 @@ def cmd_standings(args: argparse.Namespace) -> int:
     # not -- so say outright what each player is doing. A settled round needs no
     # such column, every score being complete.
     live = bool(event.unfinished(after))
+    # Nothing follows the name unless the round is live, so a settled table has
+    # nothing to knock out of line and its names are left whole.
+    width = _STANDINGS_PREFIX + _name_width(args.name_width, _STANDINGS_FIXED)
     players, dropped = _limited(event.ranking_order(after), args.limit)
     for rank, player in enumerate(players, start=1):
         line = (
             f"{rank:>4} {_points(player.score(after)):>4} "
             f"{player.start_no or '':>4}  {player.title or '':<3} {player.name}"
         )
-        print(f"{line:<52} {_state(player.play(after))}" if live else line)
+        print(f"{_fit(line, width)} {_state(player.play(after))}".rstrip() if live else line)
     _and_the_rest(dropped)
     return 0
+
+
+#: How much room a name gets before it is clipped. 28 fits all but one of the
+#: 2026 British's 108 names; 25, which the pairings table used to allow, broke
+#: four of them — and a name that overran did not merely look untidy, it shifted
+#: every column after it on that row.
+DEFAULT_NAME_WIDTH = 28
+
+#: Below this a name is more ellipsis than name, so a narrow terminal is
+#: allowed to wrap instead.
+MIN_NAME_WIDTH = 8
+
+
+def _fit(text: str, width: int) -> str:
+    """Pad ``text`` to ``width``, or clip it to fit, ending in an ellipsis.
+
+    Padding alone was the bug: ``f"{name:<25}"`` widens to the name when the
+    name is longer, so one long name pushed the rest of its row out of line
+    while every other row stayed put.
+    """
+    if width <= 0:
+        return ""
+    if len(text) <= width:
+        return f"{text:<{width}}"
+    # width - 1, not max(1, width - 1): the latter returned "a…" for a column
+    # one character wide, overrunning the very column it was asked to fit.
+    return text[: width - 1] + "…"
+
+
+def _name_width(requested: int | None, fixed: int, columns: int = 1) -> int:
+    """How much room to give each name column.
+
+    ``--name-width`` wins outright, so a wide terminal can be told to show
+    names this clips. Otherwise the table is narrowed to fit the terminal, and
+    when stdout is not one it takes the default: piped output has no width to
+    speak of, and something reproducible beats something that depends on
+    whichever terminal happened to run it.
+
+    :param fixed: columns the row spends on everything that is not a name.
+    :param columns: how many name columns share what is left.
+    """
+    if requested is not None:
+        return max(MIN_NAME_WIDTH, requested)
+    if not sys.stdout.isatty():
+        return DEFAULT_NAME_WIDTH
+    room = (shutil.get_terminal_size().columns - fixed) // columns
+    return max(MIN_NAME_WIDTH, min(DEFAULT_NAME_WIDTH, room))
 
 
 def _result(pairing: Pairing) -> str:
@@ -213,6 +264,16 @@ def _side_heading(label: str) -> str:
     return f"{'Pts':>4} {'No':>4}  {'':<3} {label}"
 
 
+#: What one side of a pairing row costs before the name starts. Measured off
+#: ``_side_heading`` rather than counted by hand, so changing either side's
+#: shape cannot leave this behind.
+_SIDE_PREFIX = len(_side_heading(""))
+
+#: A pairing row's fixed furniture: the board and result columns, both sides'
+#: prefixes, and the three spaces between the four.
+_PAIRINGS_FIXED = 4 + 5 + 2 * _SIDE_PREFIX + 3
+
+
 def cmd_pairings(args: argparse.Namespace) -> int:
     """Print one round's pairing table: who is on which board, against whom."""
     event = _fetch(args)
@@ -220,7 +281,11 @@ def cmd_pairings(args: argparse.Namespace) -> int:
     done, total = _progress(event, rnd)
     state = "" if done == total else (f", {done} of {total} results in" if done else ", no results yet")
     print(f"{event.name or event.id} — round {rnd} pairings{state}")
-    print(f"{'Bd':>4} {_side_heading('White'):<40} {'Res':<5} {_side_heading('Black')}")
+    side = _SIDE_PREFIX + _name_width(args.name_width, _PAIRINGS_FIXED, columns=2)
+    print(
+        f"{'Bd':>4} {_fit(_side_heading('White'), side)} "
+        f"{'Res':<5} {_fit(_side_heading('Black'), side)}".rstrip()
+    )
     boards, dropped = _limited(event.rounds.get(rnd, []), args.limit)
     for pairing in boards:
         white = _side(event, pairing.white, pairing.white_points_before)
@@ -231,7 +296,7 @@ def cmd_pairings(args: argparse.Namespace) -> int:
             # whatever the player was awarded for the round, if anything.
             result = "" if pairing.kind is PlayKind.UNPAIRED else _points(pairing.white_score)
             black = f"{'':>4} {'':>4}  {'':<3} {_STANDING_IN[pairing.kind]}"
-        print(f"{pairing.board:>4} {white:<40} {result:<5} {black}")
+        print(f"{pairing.board:>4} {_fit(white, side)} {result:<5} {_fit(black, side)}".rstrip())
     _and_the_rest(dropped)
     return 0
 
@@ -244,12 +309,27 @@ _STANDING_IN = {
 }
 
 
+#: A colours row before the name: score, starting number, and their separators.
+_COLOURS_PREFIX = 4 + 1 + 4 + 2
+
+#: The rest of a colours row: the two 10-wide history columns, the widest
+#: "B (absolute)" due text, and the three spaces between them.
+_COLOURS_FIXED = _COLOURS_PREFIX + 10 + 10 + len("B (absolute)") + 3
+
+#: A standings row before the name: rank, score, starting number, title.
+_STANDINGS_PREFIX = 4 + 4 + 4 + 3 + 5
+
+#: Only a live round adds the state column, and "not paired" is its longest.
+_STANDINGS_FIXED = _STANDINGS_PREFIX + len("not paired") + 1
+
+
 def cmd_colours(args: argparse.Namespace) -> int:
     """Print the colour and float history that drives the next round's pairings."""
     event = _fetch(args)
     after = _round(args.after, event)
     print(f"{event.name or event.id} — colour and float history after round {after}")
-    print(f"{'Pts':>4} {'No':>4}  {'Name':<32} {'Colours':<10} {'Floats':<10} Due")
+    width = _name_width(args.name_width, _COLOURS_FIXED)
+    print(f"{'Pts':>4} {'No':>4}  {_fit('Name', width)} {'Colours':<10} {'Floats':<10} Due")
     players, dropped = _limited(event.ranking_order(after), args.limit)
     for player in players:
         colours = "".join(c.value.upper() for c in player.colours(after))
@@ -258,7 +338,7 @@ def cmd_colours(args: argparse.Namespace) -> int:
         due_text = f"{due.value.upper()} ({strength.value})" if due else "-"
         print(
             f"{_points(player.score(after)):>4} {player.start_no or '':>4}  "
-            f"{player.name:<32} {colours:<10} {floats:<10} {due_text}"
+            f"{_fit(player.name, width)} {colours:<10} {floats:<10} {due_text}"
         )
     _and_the_rest(dropped)
     return 0
@@ -437,6 +517,17 @@ def build_parser() -> argparse.ArgumentParser:
                 type=int,
                 metavar="ROWS",
                 help="print at most this many rows, then say how many were left out",
+            )
+            # Alongside --limit, and off dump for the same reason: JSON has no
+            # columns to align, and clipping a name there would corrupt data
+            # rather than tidy a table.
+            child.add_argument(
+                "--name-width",
+                type=int,
+                metavar="CHARS",
+                help=f"room to give a player's name before clipping it "
+                f"(default {DEFAULT_NAME_WIDTH}, narrowed to fit the terminal; "
+                f"anything under {MIN_NAME_WIDTH} is treated as {MIN_NAME_WIDTH})",
             )
         if name == "pairings":
             child.add_argument(
