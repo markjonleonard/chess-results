@@ -33,7 +33,7 @@ redundant. Two consequences worth holding on to:
 
 - It resolves to the **working tree**, not a commit: uncommitted edits are live, and
   checking out another branch silently swaps the code under every project on that
-  interpreter. There is no venv isolating this.
+  interpreter. No venv isolates this.
 - Only metadata changes need a re-run of `pip install -e ".[dev]"` — new or changed
   dependencies, entry points, or a `__version__` bump. Until then `pip show` and
   `importlib.metadata.version` report the stale version while the imported code is current.
@@ -220,12 +220,12 @@ one behaves exactly as before. Do not "simplify" this back to a flat TTL.
 
 **requests-cache fixes expiry at write time**, which shapes both of the above. A round
 cached while live keeps the 5-minute lifetime even once `round_ttl` starts asking for 30
-days, so it used to be refetched on the old schedule purely to be rewritten. There are two
-ways round it and they are not interchangeable: `_extend_cached_lifetime` rewrites the
+days, so it used to be refetched on the old schedule purely to be rewritten. The
+two ways round it are not interchangeable: `_extend_cached_lifetime` rewrites the
 stored entry in place and costs nothing, which is what a settled round gets; `refresh=True`
 replaces the entry with a fresh fetch, which is what the crosstable needs because its
 content, not merely its expiry, has gone out of date. Using refresh for the round pages
-would spend the very request the fix exists to avoid.
+would spend the request the fix exists to avoid.
 
 The library is uncached by default (`ChessResults(cache=True)` opts in); the CLI caches by
 default.
@@ -296,6 +296,36 @@ pip install --index-url https://test.pypi.org/simple/ \
 
 Test the sdist as well as the wheel (`--no-binary chess-results`); only that path exercises
 building from source.
+
+## Prose
+
+The documentation is linted too, by [Vale](https://vale.sh), in CI's `docs` job.
+Two things it needs are fetched rather than committed — style packages, which
+`vale sync` restores from `.vale.ini`, and the en_GB Hunspell dictionary, which
+is LGPL and does not belong vendored into an MIT repository:
+
+```bash
+brew install vale
+vale sync
+mkdir -p .vale/styles/config/dictionaries
+for f in en_GB.aff en_GB.dic; do
+  curl -sSfL -o ".vale/styles/config/dictionaries/$f" \
+    "https://raw.githubusercontent.com/LibreOffice/dictionaries/master/en/$f"
+done
+vale --minAlertLevel=error $(git ls-files '*.md')
+```
+
+Lint the markdown **git tracks**, as CI does, rather than `vale .` — otherwise it
+reads build artefacts, Vale's own downloaded documentation and any personal notes
+in the checkout.
+
+`British.Spelling` replaces Vale's bundled en_US check, so `color`, `behavior`
+and `recognized` are errors here. Add real jargon to
+`.vale/styles/config/vocabularies/chess-results/accept.txt`, which takes regular
+expressions, rather than weakening the rule. `write-good.E-Prime` is off because
+it bans the verb "to be"; `Passive` is off because this prose describes what a
+website does to us. Errors fail CI, warnings do not — a hedge is sometimes the
+honest word.
 
 ## Tests
 

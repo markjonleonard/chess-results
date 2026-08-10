@@ -1,0 +1,9 @@
+extends: spelling
+message: "Is '%s' spelled correctly?"
+level: error
+# en_GB, fetched into .vale/styles/config/dictionaries — see .vale.ini.
+dictionaries:
+  - en_GB
+filters:
+  # Acronyms and identifiers: TRF, FIDE, SNo, art=40.
+  - '\b[A-Z]{2,}[a-z]*\b'

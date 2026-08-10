@@ -362,7 +362,7 @@ tournaments, chosen for the ways they differ:
 | 2026 British Championship | The main set: mid-event and played out, byes, withdrawals, forfeits both ways round, no starting-rank columns |
 | Frome congress section | A different column layout, starting-rank numbers, twelve requested half-point byes |
 | 19th Arad Open | 209 players, so pagination; `RtgI`/`RtgN`; a `Pts.` column beside real tie-breaks |
-| Jeddah qualifier | Caught live with a round unpaired — the only state in which `art=40`'s predictiveness can be tested |
+| Jeddah qualifier | Caught live with a round unpaired — the only state in which `art=40` can be tested for advance warning |
 | Chinese National Youth Team | A team event |
 
 Rounds 6 and 7 have two fixtures each, because the same round looks different

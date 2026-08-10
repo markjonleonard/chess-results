@@ -220,3 +220,11 @@ __marimo__/
 # chess-results exports
 *.trf
 *.pairings
+
+# Vale style packages, restored by `vale sync` from .vale.ini, and the en_GB
+# Hunspell dictionary, which is LGPL and so is fetched rather than vendored into
+# an MIT repository. The project vocabulary and the British rule are ours.
+.vale/styles/*
+!.vale/styles/config/
+!.vale/styles/British/
+.vale/styles/config/dictionaries/

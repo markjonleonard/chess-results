@@ -28,6 +28,31 @@ jobs:
       - run: ruff format --check .
       - run: mypy --strict src/chess_results
 
+  docs:
+    runs-on: ubuntu-latest
+    env:
+      # Pinned, unlike the Python tooling: a prose linter's rules are opinions,
+      # and a new release changing them would fail a build on unchanged prose.
+      VALE_VERSION: "3.17.1"
+      DICTIONARIES: https://raw.githubusercontent.com/LibreOffice/dictionaries/master/en
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Vale
+        run: |
+          curl -sSfL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin vale
+      - name: Fetch styles and the en_GB dictionary
+        run: |
+          vale sync
+          mkdir -p .vale/styles/config/dictionaries
+          for f in en_GB.aff en_GB.dic; do
+            curl -sSfL -o ".vale/styles/config/dictionaries/$f" "${DICTIONARIES}/$f"
+          done
+      # Only the markdown git tracks: this skips build artefacts, Vale's own
+      # downloaded documentation, and any personal notes left in the checkout.
+      # Errors fail the build; warnings are advisory, some hedges being honest.
+      - run: vale --minAlertLevel=error $(git ls-files '*.md')
+
   test:
     runs-on: ubuntu-latest
     strategy:
