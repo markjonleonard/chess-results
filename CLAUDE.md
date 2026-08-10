@@ -218,10 +218,14 @@ requests-cache fixing expiry at write time. Two things make it stale:
 Net effect: a finished tournament fetches the crosstable once and then never again; a live
 one behaves exactly as before. Do not "simplify" this back to a flat TTL.
 
-Known caveat, documented in the README: requests-cache fixes expiry at write time, so a
-round that settles between runs is fetched once more before it takes the long lifetime.
-The crosstable no longer suffers from this — forcing a refresh is what sidesteps it — and
-the same trick would fix the round pages if it ever seems worth doing.
+**requests-cache fixes expiry at write time**, which shapes both of the above. A round
+cached while live keeps the 5-minute lifetime even once `round_ttl` starts asking for 30
+days, so it used to be refetched on the old schedule purely to be rewritten. There are two
+ways round it and they are not interchangeable: `_extend_cached_lifetime` rewrites the
+stored entry in place and costs nothing, which is what a settled round gets; `refresh=True`
+replaces the entry with a fresh fetch, which is what the crosstable needs because its
+content, not merely its expiry, has gone out of date. Using refresh for the round pages
+would spend the very request the fix exists to avoid.
 
 The library is uncached by default (`ChessResults(cache=True)` opts in); the CLI caches by
 default.

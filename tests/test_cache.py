@@ -5,7 +5,10 @@ tests drive the client with a fake session so nothing reaches the network, and
 assert on the lifetimes it asks for.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
+import requests
 from tests.conftest import _round_fixture, fixture
 
 from chess_results.cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, CrosstableCoverage, SettledRounds
@@ -235,3 +238,98 @@ class TestCrosstableCoverageRecord:
         """Rather than trusting whatever the file happens to hold."""
         (tmp_path / "crosstable.json").write_text('{"1452107": "eight"}')
         assert CrosstableCoverage(cache_dir).rounds(1452107) == 0
+
+
+class TestASettledRoundIsNotFetchedAgainToLearnNothing:
+    """The self-correction that used to cost one request per round.
+
+    A round cached while it was live keeps the five-minute lifetime, because
+    requests-cache fixes expiry when it writes the response. Once the round
+    settles, `round_ttl` starts asking for thirty days -- but the stored entry
+    still expires on the old schedule, so it is fetched a second time purely to
+    be written back with a longer life.
+
+    Rewriting the stored entry removes that request. Forcing a refresh would
+    also have corrected the expiry, and would have spent the very request this
+    is avoiding.
+
+    These use a real `CachedSession`, the behaviour under test being
+    requests-cache's rather than ours.
+    """
+
+    @staticmethod
+    def _client_and_key(cache_dir, rnd=3):
+        from requests_cache import CachedSession
+
+        client = ChessResults(CachedSession(backend="memory"), delay=0, cache_dir=cache_dir)
+        prepared = requests.Request(
+            "GET",
+            f"{client.base_url}/tnr1452107.aspx",
+            params=client._query(2, {"rd": rnd}),
+        ).prepare()
+        return client, client.session.cache.create_key(request=prepared), prepared
+
+    @staticmethod
+    def _store(client, key, prepared, seconds):
+        """A cached response, built directly rather than round-tripped.
+
+        `save_response` wants a real urllib3 raw response to convert, which a
+        hand-made requests.Response has not got.
+        """
+        from requests_cache.models.response import CachedResponse
+
+        cached = CachedResponse(
+            status_code=200,
+            url=prepared.url,
+            expires=datetime.now(timezone.utc) + timedelta(seconds=seconds),
+        )
+        cached.cache_key = key
+        client.session.cache.responses[key] = cached
+
+    def test_a_short_lived_entry_is_given_the_long_life_in_place(self, cache_dir):
+        client, key, prepared = self._client_and_key(cache_dir)
+        self._store(client, key, prepared, LIVE_TTL)
+        before = client.session.cache.get_response(key).expires
+
+        assert client._extend_cached_lifetime(1452107, 2, {"rd": 3}, SETTLED_TTL) is True
+
+        after = client.session.cache.get_response(key).expires
+        assert after > before
+        # Thirty days out, not five minutes.
+        assert (after - datetime.now(timezone.utc)).days >= 29
+
+    def test_nothing_cached_is_not_a_failure(self, cache_dir):
+        """It simply gets fetched, as it would have been anyway."""
+        client, _, _ = self._client_and_key(cache_dir)
+        assert client._extend_cached_lifetime(1452107, 2, {"rd": 99}, SETTLED_TTL) is False
+
+    def test_an_uncached_session_is_not_a_failure_either(self, cache_dir):
+        client = ChessResults(requests.Session(), delay=0, cache_dir=cache_dir)
+        assert client._extend_cached_lifetime(1452107, 2, {"rd": 3}, SETTLED_TTL) is False
+
+
+class TestOnlyNewlySettledRoundsAreExtended:
+    """Doing it once per round, when it settles, rather than every run."""
+
+    def _run(self, cache_dir, pages_fn, extended):
+        session = FakeSession(pages_fn)
+        client = ChessResults(session, delay=0, cache_dir=cache_dir)
+        original = client._extend_cached_lifetime
+
+        def spy(tournament_id, art, params, expire_after):
+            extended.append(params.get("rd"))
+            return original(tournament_id, art, params, expire_after)
+
+        client._extend_cached_lifetime = spy
+        client.tournament(1452107)
+        return client
+
+    def test_each_round_is_extended_once_and_only_once(self, cache_dir):
+        first = []
+        self._run(cache_dir, pages, first)
+        # Rounds 1-5 settled during this run; 6 is still live and 7 is newest.
+        assert first == [1, 2, 3, 4, 5]
+
+        second = []
+        self._run(cache_dir, pages, second)
+        assert second == []  # already recorded as settled, so nothing new to do

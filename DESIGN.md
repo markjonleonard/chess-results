@@ -90,11 +90,14 @@ ChessResults(cache=True)                      # or pass your own CachedSession
 ```
 
 Against a 7-round event this took repeat runs from 18 network requests to zero.
-One caveat: requests-cache fixes a response's expiry when it stores it, so a
-round that settles between runs is fetched once more before it takes the long
-lifetime. It costs one extra fetch per round, once. The crosstable sidesteps
-this by forcing a refresh rather than shortening a lifetime it can no longer
-change; the same trick would work for round pages if it ever seems worth it.
+requests-cache fixes a response's expiry when it stores it, so a round cached
+while it was live keeps the five-minute lifetime even after it settles and the
+client starts asking for thirty days. That used to cost one extra fetch per
+round — the page was refetched on the old schedule purely to be written back
+with a longer life. The client now rewrites the stored entry in place instead,
+when a round is first recorded as settled, so the request never happens.
+Forcing a refresh would have corrected the expiry too, and would have spent the
+very request being avoided.
 
 ## Retries
 

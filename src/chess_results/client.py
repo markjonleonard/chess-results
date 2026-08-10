@@ -216,6 +216,47 @@ class ChessResults:
         response.raise_for_status()
         return response.text
 
+    def _extend_cached_lifetime(
+        self,
+        tournament_id: str | int,
+        art: int,
+        params: dict[str, str | int],
+        expire_after: int,
+    ) -> bool:
+        """Give an already-cached page a longer life, without refetching it.
+
+        requests-cache fixes a response's expiry when it writes it, so a round
+        cached while it was live keeps the short lifetime even after it settles
+        and `round_ttl` starts asking for the long one. Left alone it expires on
+        the old schedule and is fetched a second time to say nothing new.
+
+        Rewriting the stored entry avoids that request entirely, which is the
+        point: forcing a refresh would also fix the expiry but would spend the
+        very request this is trying not to spend.
+
+        Returns True when an entry was extended. False covers every ordinary
+        reason there was nothing to do -- no cache, never fetched, already
+        expired -- none of which is a fault: the page is simply fetched again
+        as it would have been.
+        """
+        cache = getattr(self.session, "cache", None)
+        if cache is None:
+            return False
+        try:
+            request = requests.Request(
+                "GET",
+                f"{self.base_url}/tnr{tournament_id}.aspx",
+                params=self._query(art, params),
+            ).prepare()
+            response = cache.get_response(cache.create_key(request=request))
+            if response is None:
+                return False
+            response.reset_expiration(expire_after)
+            cache.responses[response.cache_key] = response
+            return True
+        except Exception:  # cache surgery is an optimisation, never a blocker
+            return False
+
     def _is_cached(self, tournament_id: str | int, art: int, params: dict[str, str | int]) -> bool:
         # The backing store lives on CachedSession, not on requests.Session.
         cache = getattr(self.session, "cache", None)
@@ -358,5 +399,12 @@ class ChessResults:
             event.check_published_totals(parsed, parse_published_totals(html))
             self.coverage.record(tournament_id, event.last_round)
 
-        self.settled.record(tournament_id, settled_rounds(event))
+        # A round that settled during this run was cached with the short
+        # lifetime, and requests-cache cannot be told otherwise after the fact.
+        # Extend the stored entries in place rather than spending a request each
+        # to fetch pages that have not changed and never will again.
+        now_settled = settled_rounds(event)
+        for rnd in sorted(now_settled - self.settled.rounds(tournament_id)):
+            self._extend_cached_lifetime(tournament_id, ART_ROUND_PAIRINGS, {"rd": rnd}, SETTLED_TTL)
+        self.settled.record(tournament_id, now_settled)
         return event
