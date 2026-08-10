@@ -52,4 +52,7 @@ __all__ = [
     "parse_starting_rank",
 ]
 
-__version__ = "0.1.0"
+# A .devN suffix while the TestPyPI rehearsal is running: a version uploads
+# exactly once and deleting it does not free the filename, so 0.1.0 itself is
+# kept back for the real release. Bump the N for each further rehearsal.
+__version__ = "0.1.0.dev1"
