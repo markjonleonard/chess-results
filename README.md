@@ -264,8 +264,8 @@ the better fit.
 
 The difference is what happens after parsing. This library assembles the round pages into a
 per-player history and corrects it: it recovers byes that chess-results deletes from
-superseded round pages, tracks colours and floats, and can write the result as FIDE TRF(x)
-for a pairing engine. That is a narrower job than reproducing the site's tables, and a
+superseded round pages, tracks colours and floats, and can write the result as FIDE
+[TRF(x)](https://handbook.fide.com/files/handbook/C04Annex2_TRF16.pdf) for a pairing engine. That is a narrower job than reproducing the site's tables, and a
 different one.
 
 ## Being a good guest

@@ -96,8 +96,8 @@ chess-results being inconsistent. Note that one view holding a value the other l
 deliberately not a contradiction: the crosstable is often the fresher capture, and a round
 page carries no result until the game finishes.
 
-Searched for upstream attribution and found none: chess-results.com has no public issue
-tracker or changelog, and the Swiss-Manager manuals do not mention it. So this is observed,
+Searched for upstream attribution and found none: [chess-results.com](https://chess-results.com) has no public
+issue tracker or changelog, and the [Swiss-Manager](https://swiss-manager.at) manuals do not mention it. So this is observed,
 undocumented behaviour — do not go looking for a citation, there isn't one. It is not
 Swiss-Manager losing the data, though: the crosstable and the round pages come from the same
 upload, and the crosstable still has the byes.
@@ -205,7 +205,7 @@ read results from it, the round page being the authority. What we read is the by
 absences that round pages delete once a later round is paired, and those never change again.
 So it is fetched with `SETTLED_TTL` and `refresh=True` is passed when
 `crosstable_is_stale()` says the cached copy will not do, which is the only way round
-requests-cache fixing expiry at write time. Two things make it stale:
+[requests-cache](https://requests-cache.readthedocs.io) fixing expiry at write time. Two things make it stale:
 
 - **It covers fewer rounds than we hold.** A copy fetched before round 8 existed cannot
   supply round 8's bye, and `add_crosstable` fills only rounds we already have. This is the
@@ -364,7 +364,7 @@ silently truncated one.
 
 ## Pairing prediction
 
-`trf.py` writes FIDE TRF(x), which bbpPairings and JaVaFo read; `examples/predict_next_round.py`
+`trf.py` writes FIDE [TRF(x)](https://handbook.fide.com/files/handbook/C04Annex2_TRF16.pdf), which [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and [JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read; `examples/predict_next_round.py`
 shells out to bbpPairings. `bbpPairings.exe --dutch <file> -c` is a check mode that parses a
 whole tournament and lists discrepancies — use it to verify the format, not just to pair.
 

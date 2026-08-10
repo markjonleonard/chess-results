@@ -6,8 +6,8 @@ the code changes. The [README](README.md) is the stable, user-facing description
 
 ## Prior art
 
-There is an [R package](https://cran.r-project.org/package=chessResults) that
-scrapes chess-results, but no maintained Python equivalent. This library keeps
+There is an R package, [chessResults](https://cran.r-project.org/package=chessResults),
+that scrapes chess-results, but no maintained Python equivalent. This library keeps
 the things a Swiss pairing depends on: who played whom, with which colour, who
 floated up or down, and who took a bye.
 
@@ -22,8 +22,9 @@ Scrape after the fact and a full-point bye is simply gone — the player has no
 such round anywhere on the round pages, and their score comes out a point light.
 This is not a display option; it is the same with and without `turdet`.
 
-This is observed behaviour, not documented behaviour. chess-results.com publishes
-no changelog or issue tracker, and nothing in the Swiss-Manager manuals describes
+This is observed behaviour, not documented behaviour. [chess-results.com](https://chess-results.com)
+publishes no changelog or issue tracker, and nothing in the
+[Swiss-Manager](https://swiss-manager.at) manuals describes
 it, so whether it is deliberate or a defect is not something you can find out from
 outside. Treat the description here as what the pages were seen to do in August
 2026, not as a guarantee.
@@ -90,7 +91,8 @@ ChessResults(cache=True)                      # or pass your own CachedSession
 ```
 
 Against a 7-round event this took repeat runs from 18 network requests to zero.
-requests-cache fixes a response's expiry when it stores it, so a round cached
+[requests-cache](https://requests-cache.readthedocs.io) fixes a response's expiry
+when it stores it, so a round cached
 while it was live keeps the five-minute lifetime even after it settles and the
 client starts asking for thirty days. That used to cost one extra fetch per
 round — the page was refetched on the old schedule purely to be written back
@@ -118,9 +120,10 @@ exported so you can mount it yourself if you want it.
 
 ## Predicting the next round
 
-`chess_results.trf` writes FIDE TRF(x), which
-[bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and JaVaFo
-read. `examples/predict_next_round.py` scrapes a live tournament, resolves any
+`chess_results.trf` writes FIDE
+[TRF(x)](https://handbook.fide.com/files/handbook/C04Annex2_TRF16.pdf), which
+[bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and
+[JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read. `examples/predict_next_round.py` scrapes a live tournament, resolves any
 unfinished games from assumptions you supply, and shells out to bbpPairings:
 
 ```bash
