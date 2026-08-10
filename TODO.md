@@ -45,27 +45,42 @@ Open work on chess-results, roughly in the order it is worth doing.
       a laptop, and the upload acts as the repository rather than as a user — which
       also sidesteps this machine defaulting to the wrong GitHub account.
 
-      Blocked on one thing only, which needs a login: registering a **pending**
-      publisher on TestPyPI (the project does not exist there, so there is nothing to
-      attach an ordinary publisher to; the first upload converts it). Project
-      `chess-results`, owner `markjonleonard`, repo `chess-results`, workflow
-      `publish.yml`, environment `testpypi`. All five must match or the exchange is
-      refused.
+      **The TestPyPI rehearsal succeeded on 2026-08-10**, run 31385337061, uploading
+      `0.1.0.dev1`. Both install paths were then verified from the index in clean
+      venvs — the wheel, and the sdist via `--no-binary`, which is the one that
+      exercises building from source. The console script lands on `PATH`, the import
+      works, `py.typed` ships, and the three runtime dependencies resolve while the
+      `dev` extras correctly do not.
 
-      Two facts that shape the rehearsal:
+      Beware verifying this in the global pyenv: the editable install satisfies
+      `chess-results` already, so pip reports "already satisfied" and never contacts
+      the index at all. It looks like a pass and tests nothing. Use a throwaway venv:
 
-      - **TestPyPI is as immutable as PyPI.** A version uploads exactly once and
-        deleting it does not free the filename, so rehearse on a throwaway
-        `0.1.0.devN` in `__init__.py` and keep `0.1.0` for the release.
-      - **Verifying the install needs a fallback index**, requests, beautifulsoup4 and
-        requests-cache not being mirrored there:
-        `pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ chess-results`.
+          pip install --index-url https://test.pypi.org/simple/ \
+                      --extra-index-url https://pypi.org/simple/ chess-results
 
-      The metadata itself is already clean: `twine check --strict` passes on both
-      artifacts, `py.typed` ships in the wheel, and the licence is the SPDX
-      `License-Expression: MIT` of PEP 639 rather than the deprecated classifiers. The
-      workflow runs that same `--strict` check before publishing, so a metadata fault
-      fails the build instead of burning a version number.
+      The fallback index is required — requests, beautifulsoup4 and requests-cache are
+      not mirrored on TestPyPI.
+
+      **What is left is the real index**, and it is blocked on one thing needing a
+      login: registering a **pending** publisher on pypi.org. The project does not
+      exist there, so there is nothing to attach an ordinary publisher to; the first
+      upload converts it. Project `chess-results`, owner `markjonleonard`, repo
+      `chess-results`, workflow `release.yml`, environment `pypi`. All five must match
+      or the exchange is refused — and note two differ from the TestPyPI publisher
+      already registered, which is the easy mistake.
+
+      Releasing is then `git tag v0.1.0 && git push origin v0.1.0`.
+      `.github/workflows/release.yml` fires on `v*` rather than a button, so a release
+      is tied to one commit rather than to whatever `main` happens to be. It runs the
+      suite first — a tag push matches neither of CI's triggers, so without that a
+      release could ship code nothing had run against — then refuses to upload unless
+      the tag matches the built version, compared after PEP 440 normalisation.
+
+      The metadata is clean: `twine check --strict` passes on both artifacts, and the
+      licence is the SPDX `License-Expression: MIT` of PEP 639 rather than the
+      deprecated classifiers. Both workflows run that same `--strict` check before
+      uploading, so a fault fails the build instead of burning a version number.
 - [x] **Compare the round 8 prediction against the published pairings.** Done 2026-08-07 with
       `examples/validate_prediction.py`. Rounds 7 and 8 both reproduce **51 of 51 exactly,
       colours and bye included**, once withdrawals are supplied; 37/51 and 44/51 respectively

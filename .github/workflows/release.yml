@@ -1,0 +1,98 @@
+name: Release (PyPI)
+
+# The real index. Publishing is a deliberate act tied to one commit, so this
+# fires on a version tag rather than a button — there is no way to release
+# "whatever main happens to be right now".
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Authentication is Trusted Publishing, as on TestPyPI: GitHub mints a
+# short-lived OIDC token PyPI exchanges for upload rights, so there is no API
+# token in repository secrets and none on anyone's laptop. PyPI must be told to
+# trust this workflow first, and since the project does not exist there yet
+# that means a *pending* publisher (pypi.org -> Your projects -> Publishing),
+# which the first successful upload converts into an ordinary one:
+#
+#   Project name  chess-results
+#   Owner         markjonleonard
+#   Repository    chess-results
+#   Workflow      release.yml
+#   Environment   pypi
+#
+# All five must match or the token exchange is refused. Note two of them differ
+# from the TestPyPI publisher: the workflow is release.yml, not publish.yml,
+# and the environment is pypi, not testpypi. Registering this one with the
+# TestPyPI values is the easy mistake.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]" build twine
+
+      # CI runs on pushes to main and on pull requests, neither of which a tag
+      # push is — so without this a release could ship code no suite had run
+      # against. It is fifteen offline seconds; there is no reason to skip it.
+      - run: pytest -q
+
+      - run: python -m build
+
+      # The tag is the release's identity and __version__ is what actually gets
+      # uploaded; if they disagree, one of them is a mistake and uploading
+      # either would be wrong. Checked against the built filename rather than
+      # the source, so it compares the version as PEP 440 normalised it — the
+      # form the index will really see.
+      - name: Check the tag matches the version being built
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          built=$(ls dist/*.tar.gz | sed -E 's|.*/chess_results-(.+)\.tar\.gz|\1|')
+          if [ "$tag" != "$built" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} builds version ${built}; set __version__ and the tag to agree"
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches built version ${built}"
+
+      # The same metadata validation the index applies on upload, run here so a
+      # fault fails the build in a second rather than burning a version number:
+      # a version uploads exactly once, and deleting it does not free the name.
+      - run: python -m twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # The environment is the second lock. Trusted Publishing checks it as part
+    # of the claim, and a required-reviewer rule on it — worth adding for the
+    # real index — makes the upload wait for a human even once the tag is
+    # pushed.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/chess-results
+    permissions:
+      # The whole point: this is what lets the job request an OIDC token.
+      # Nothing else in the repository needs or gets it.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      # No repository-url: the default is the real PyPI.
+      - uses: pypa/gh-action-pypi-publish@release/v1

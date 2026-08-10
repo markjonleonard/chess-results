@@ -52,7 +52,8 @@ __all__ = [
     "parse_starting_rank",
 ]
 
-# A .devN suffix while the TestPyPI rehearsal is running: a version uploads
-# exactly once and deleting it does not free the filename, so 0.1.0 itself is
-# kept back for the real release. Bump the N for each further rehearsal.
-__version__ = "0.1.0.dev1"
+# The release workflow requires its tag to match this exactly, so the two
+# cannot drift: tagging v0.1.0 with this saying anything else fails the build
+# before it can upload. Rehearsals on TestPyPI use a throwaway .devN, since a
+# version uploads once and deleting it does not free the filename.
+__version__ = "0.1.0"
