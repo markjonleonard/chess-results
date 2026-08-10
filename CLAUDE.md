@@ -187,6 +187,32 @@ round that settles between runs is fetched once more before it takes the long li
 The library is uncached by default (`ChessResults(cache=True)` opts in); the CLI caches by
 default.
 
+## CI
+
+`.github/workflows/ci.yml`, on push to `main`, every pull request and `workflow_dispatch`.
+`lint` runs `ruff check`, `ruff format --check` and `mypy --strict` on 3.13; `test` runs
+`pytest` across 3.10-3.13 with `fail-fast: false`. No secrets and no network allowance --
+the suite is fixtures only.
+
+**The dev extra is unpinned on purpose, so expect CI to break without a commit.**
+`ruff>=0.5` and `mypy>=1.8` mean CI resolves to the newest release every run, and a new
+rule or a changed default can red the badge when nothing in the tree has changed. That is
+the trade for not chasing pins. It has happened once already: local ruff was 0.15.12, where
+formatting Python blocks inside Markdown is preview-gated; CI got 0.16.2, where it is on by
+default, and it reflowed the aligned trailing comments in the README and DESIGN examples.
+Hence `exclude = ["*.md"]` under `[tool.ruff.format]`.
+
+So when CI fails and the diff looks innocent, **check the tool version CI installed against
+the local one before suspecting the commit**, and reproduce by installing that exact version
+rather than guessing -- each guess otherwise costs a push. Note `lint` runs its steps in
+order, so a formatting failure means `mypy` never ran at all.
+
+**3.10 is in the matrix because `requires-python` and the classifiers advertise it**, not
+because anything needs it: every module carries `from __future__ import annotations` and
+there is no 3.11+ stdlib use. Raising the floor would drop a support claim without
+simplifying any code. If that claim is ever dropped, change `requires-python`, the
+classifiers and the matrix together.
+
 ## Tests
 
 Fixtures are real saved pages, mostly from the 2026 British Championship caught mid-event,
