@@ -53,13 +53,30 @@ Open work on chess-results, roughly in the order it is worth doing.
 
 ## Scope
 
-- [ ] **More views.** Parsed: round pairings (`art=2`), starting rank (`art=0`),
-      starting-rank crosstable (`art=5`), not paired (`art=40`). Not parsed: alphabetical
-      (`art=3`), and the ranking crosstable (`art=4`) which is `art=5`'s data keyed by
-      current rank rather than starting number, so it adds nothing we cannot already reach.
+- [ ] **Make `--no-crosstable` correct instead of merely cheap, using `art=40`.** Today the
+      flag saves one request and buys wrong answers: a player whose bye was deleted from its
+      round page is scored a point light, which the README has to warn about. Measured on
+      the 2026 British through round 8, it gets **four players' scores wrong** — Cooke,
+      Nevska, Chapman and Ruddy — and every one of the four is a pairing bye that `art=40`
+      marks `bye`. So one request for that page, in place of the crosstable, would fix all
+      four.
 
-      `art=1` and `art=9` were surveyed on 2026-08-09 and neither is worth parsing; the
-      reasons are the durable part and live in CLAUDE.md beside the `art=40` discussion.
+      What it cannot fix, and the item must not pretend otherwise: a *requested* half-point
+      bye prints `*`, exactly as a withdrawal does, so its half point stays lost. That
+      needs all three of a half-point bye, a round page that has dropped the row, and no
+      crosstable — Frome's round 1 byes are safe because their round page still lists them.
+      A forfeit is one-sided too, naming only the player who defaulted.
+
+      So the honest shape is: `--no-crosstable` becomes right for full-point byes and
+      absences, still approximate for requested byes, and says which it is. `parse_not_paired`
+      and `ChessResults.not_paired()` already exist; what is missing is a filling pass
+      equivalent to `add_crosstable` and the client wiring to call it.
+
+      **Not** worth doing alongside: parsing `art=3` (alphabetical) or `art=4` (the ranking
+      crosstable, which is `art=5`'s data keyed by current rank — a caller with the
+      crosstable can sort it themselves). Nor is exposing views on the CLI: it has no
+      view-shaped command at all, only reports built from `tournament()`, and `art=40` is
+      already parsed and reachable only from Python for exactly that reason.
 
 ## Housekeeping
 
