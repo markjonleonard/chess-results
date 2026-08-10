@@ -67,8 +67,11 @@ printed — and it is not offered on `dump`, truncated JSON being no use to anyo
 
 Rank, score, starting number, title and name.
 
+```bash
+chess-results standings 1452107 --after 6
 ```
-$ chess-results standings 1452107 --after 6
+
+```
 2026 British Chess Championships: Championship — after round 6
    1    5    2  GM  Adams, Michael
    2    5    3  GM  Royal, Shreyas
@@ -83,8 +86,11 @@ this round, one still at the board does not — so the heading says how far the
 round has got and each line says what that player is doing. The extra column
 appears only while a round is live.
 
+```bash
+chess-results standings 1452107
 ```
-$ chess-results standings 1452107
+
+```
 2026 British Chess Championships: Championship — during round 9: 4 of 50 results in
    1   6½    3  GM  Royal, Shreyas                   playing
    2   6½    4  IM  Grieve, Harry                    playing
@@ -101,8 +107,11 @@ One round's table: board, both players with the score each carried into the
 round, and the result. The latest round unless you name one — `pairings 1452107 6`,
 or `--after 6` if you prefer the flag the other commands take.
 
+```bash
+chess-results pairings 1452107 6
 ```
-$ chess-results pairings 1452107 6
+
+```
 2026 British Chess Championships: Championship — round 6 pairings
   Bd  Pts   No      White                     Res    Pts   No      Black
    1   4½    6  IM  Bazakutsa, Svyatoslav     ½-½     4½    4  IM  Grieve, Harry
@@ -124,8 +133,11 @@ What the next round's pairing turns on: the colours each player has had, whether
 they floated up (`U`) or down (`D`) in each round, and which colour they are due
 next.
 
+```bash
+chess-results colours 1452107 --after 6
 ```
-$ chess-results colours 1452107 --after 6
+
+```
 2026 British Chess Championships: Championship — colour and float history after round 6
  Pts   No  Name                             Colours    Floats     Due
    5    2  Adams, Michael                   WBWBWB     ------     W (mild)
@@ -145,8 +157,11 @@ it is only a preference.
 The games in the current round that have no result yet, with the scores each
 player brought into the round.
 
+```bash
+chess-results unfinished 1452107
 ```
-$ chess-results unfinished 1452107
+
+```
 round 6: 6 game(s) still unfinished
   bd2    Mcshane, Luke J (4) vs Waldhausen Gordon, Frederick (4)
   bd18   Yao, Lan (3) vs Cancedda-Dupuis, Livio (3)
