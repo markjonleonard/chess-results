@@ -159,9 +159,14 @@ information:
 
 - **Withdrawals are invisible until the round is published.** chess-results does
   not say who has withdrawn, and a player leaving changes floats and the bye for
-  everyone below them. Worse, the scraper cannot even infer it: the round the
-  player last appeared in will have had its "not paired" rows deleted once the
-  next round was paired. Pass `--withdrawn` if you know.
+  everyone below them. `Tournament.likely_withdrawn` infers what it can — a
+  player whose last rounds are all unpaired, or who never occupied a round —
+  which recovers 12 of the 18 absences across those three rounds and takes the
+  blind figures to 39/51, 49/51 and 44/50. The rest have no signal to find:
+  three of round 9's eight absentees played round 8 in full and simply never
+  came back. `examples/predict_next_round.py` applies the inference by default
+  (`--no-infer-withdrawals` opts out) and takes `--withdrawn` if you know more
+  than it does.
 - **The field must come from the crosstable, not the round page.** Deriving it
   from a superseded round page reclassifies that round's bye recipient as a
   withdrawal, which produces plausible and entirely wrong match rates.

@@ -75,6 +75,27 @@ chess-results pairings 1452107 6 --name-width 40
 Like `--limit`, it is not offered on `dump` — JSON has no columns to line up, and
 clipping a name there would corrupt data rather than tidy a table.
 
+### All the options
+
+Every command takes these; `chess-results <command> --help` prints them too.
+
+| Option | What it does |
+| --- | --- |
+| `--after N` | Report the tournament as it stood after round N |
+| `--limit N` | Print at most N rows, then say how many were left out |
+| `--name-width N` | Room for a player's name before it is clipped (default 28) |
+| `--rounds N` | Stop after N rounds instead of discovering them all |
+| `--bye-value P` | What a pairing-allocated bye is worth (default 1.0) |
+| `--delay S` | Seconds between requests (default 1.0) |
+| `--no-cache` | Always refetch, ignoring the cache |
+| `--cache-ttl S` | How long to reuse a live round's page (default 300) |
+| `--cache-dir D` | Where to keep cached pages |
+| `--no-crosstable` | Skip the crosstable request — **scores will be wrong** for anyone whose bye has been dropped from its round page |
+
+`--bye-value` is worth knowing about if your event awards half a point for a
+bye: the crosstable prints every pairing-allocated bye as a full point whatever
+the tournament actually gives, so this is what rescores it.
+
 ### standings
 
 Rank, score, starting number, title and name.
@@ -225,6 +246,25 @@ agree with the tournament's published totals.
 **Team tournaments.** chess-results reports a team competition in a different format —
 the round page pairs teams rather than players — and this library does not read it. Point
 it at one and it says so and stops, rather than reporting an empty tournament.
+
+**Most of the tournament's own metadata.** It reads the name and nothing else: not the
+organiser, the time control, the dates, the playing schedule, or the tie-break columns of
+the final ranking. Everything here is built around who played whom, so that is what it
+collects.
+
+## Related projects
+
+[**chessResults**](https://codeberg.org/SirfHaru/chessresults) is an R package that also
+scrapes chess-results.com, returning a tidy tibble of tournament information, starting
+rank, playing schedule, round results and closing rank. If you work in R, or you want the
+site's tables as published — including the metadata and tie-breaks this tool skips — it is
+the better fit.
+
+The difference is what happens after parsing. This library assembles the round pages into a
+per-player history and corrects it: it recovers byes that chess-results deletes from
+superseded round pages, tracks colours and floats, and can write the result as FIDE TRF(x)
+for a pairing engine. That is a narrower job than reproducing the site's tables, and a
+different one.
 
 ## Being a good guest
 
