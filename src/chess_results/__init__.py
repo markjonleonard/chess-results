@@ -6,7 +6,13 @@
 [Colour.BLACK, Colour.WHITE, ...]
 """
 
-from .client import ChessResults
+from .client import (
+    ChessResults,
+    RoundRobinError,
+    TeamTournamentError,
+    TournamentError,
+    TournamentNotStartedError,
+)
 from .models import (
     Absence,
     Colour,
@@ -43,8 +49,12 @@ __all__ = [
     "Player",
     "PlayerRef",
     "Preference",
+    "RoundRobinError",
     "StartingRankEntry",
+    "TeamTournamentError",
     "Tournament",
+    "TournamentError",
+    "TournamentNotStartedError",
     "parse_crosstable",
     "parse_not_paired",
     "parse_pairings",

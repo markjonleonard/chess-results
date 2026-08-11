@@ -223,3 +223,39 @@ class TestAllThreeShareOneBaseClass:
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err.startswith("chess-results: ")
+
+
+class TestTheErrorsAreImportableFromTheTopLevel:
+    """A caller catching these should not have to reach into a submodule.
+
+    `ChessResults` was exported and the errors it raises were not, so a
+    downstream consumer had to import from `chess_results.client` — a private
+    path that a refactor would break.
+    """
+
+    def test_each_is_importable_from_the_package(self):
+        import chess_results
+
+        for name in (
+            "TournamentError",
+            "TeamTournamentError",
+            "RoundRobinError",
+            "TournamentNotStartedError",
+        ):
+            assert hasattr(chess_results, name), name
+            assert name in chess_results.__all__, name
+
+    def test_the_base_class_catches_all_three(self):
+        from chess_results import TournamentError as Base
+
+        for name in ("TeamTournamentError", "RoundRobinError", "TournamentNotStartedError"):
+            import chess_results
+
+            assert issubclass(getattr(chess_results, name), Base)
+
+    def test_everything_named_in_all_actually_exists(self):
+        """The drift that caused this, caught generally rather than by name."""
+        import chess_results
+
+        missing = [n for n in chess_results.__all__ if not hasattr(chess_results, n)]
+        assert missing == []
