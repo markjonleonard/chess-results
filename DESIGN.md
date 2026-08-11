@@ -213,7 +213,10 @@ exported so you can mount it yourself.
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and
 [JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read.
 `examples/predict_next_round.py` scrapes a tournament, resolves any unfinished
-games from assumptions you supply, and shells out to bbpPairings:
+games from assumptions you supply, and shells out to bbpPairings — which is a
+separate program, not a dependency: the engine is checked for before anything is
+fetched, since the alternative is a dozen requests against chess-results.com to
+reach an error that was knowable from a path.
 
 ```bash
 python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe \

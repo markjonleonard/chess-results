@@ -16,6 +16,7 @@ decided, because a pairing engine reads scores as fact.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import tempfile
@@ -77,8 +78,43 @@ def apply_assumptions(event, assumptions: dict[str, float]) -> None:
         event.players[black].play(event.last_round).score = 1.0 - w
 
 
+BBPPAIRINGS = "https://github.com/BieremaBoyzProgramming/bbpPairings"
+
+
+def check_engine(path: str) -> None:
+    """Fail before scraping if the engine is not where --engine says it is.
+
+    Checked first because the alternative is a minute of requests against
+    chess-results to reach an error that was knowable before any of them: the
+    scrape fetches the starting rank, every round page and the crosstable, and
+    only then hands the file to a binary that is not there.
+    """
+    engine = Path(path).expanduser()
+    if engine.is_file() and os.access(engine, os.X_OK):
+        return
+    if engine.is_dir():
+        reason = "is a directory, not the executable inside it"
+    elif engine.is_file():
+        reason = "is not executable"
+    else:
+        reason = "does not exist"
+    raise SystemExit(
+        f"pairing engine {str(engine)!r} {reason}.\n"
+        "\n"
+        "This script does not pair; it writes FIDE TRF(x) and hands it to "
+        "bbpPairings, which is a separate program you build or download "
+        f"yourself:\n    {BBPPAIRINGS}\n"
+        "\n"
+        "Point --engine at the bbpPairings executable once you have one."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    # Before the scrape, so a mistyped path costs nothing and asks
+    # chess-results for nothing.
+    check_engine(args.engine)
+
     assumptions = {}
     for item in args.assume:
         name, _, score = item.rpartition("=")

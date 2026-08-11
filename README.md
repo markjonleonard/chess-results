@@ -231,6 +231,15 @@ engines read, so a program like
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) can work out
 what the next round's pairings ought to be. See `examples/predict_next_round.py`.
 
+**The engine is not included.** This writes FIDE TRF(x) and hands it over; the
+pairing itself is done by bbpPairings, which you build or download separately
+and point at with `--engine`. The example checks the path before it fetches
+anything, so a wrong one costs you a message rather than a scrape:
+
+```bash
+python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe
+```
+
 It gets most pairings right and can get all of them right, but it cannot know who
 has quietly withdrawn — and one player leaving changes the pairings for everyone
 below them. Treat a prediction as a good guess, not an announcement.
