@@ -187,6 +187,7 @@ class TestPublishedTotals:
             ("british2026_champ_crosstable", 108),
             ("british2026_champ_crosstable_final", 108),
             ("frome2026_open_crosstable", 38),
+            ("frome2026_standard_crosstable", 31),
         ],
     )
     def test_every_published_total_is_read(self, name, players):
@@ -205,10 +206,18 @@ class TestPublishedTotals:
             "british2026_champ_crosstable",
             "british2026_champ_crosstable_final",
             "frome2026_open_crosstable",
+            "frome2026_standard_crosstable",
         ],
     )
     def test_our_cells_sum_to_the_published_total_for_every_player(self, name):
-        """254 player-rows across three captures, and all of them agree."""
+        """285 player-rows across four captures, and all of them agree.
+
+        The Standard earns its place here rather than only in test_forfeit.py:
+        the arbiter's own TB1 is the one source that can say whether a
+        defaulted game was scored correctly, and Burton's row sums to the 0,5
+        it publishes only if `23b-` contributes nothing and the three `-0`
+        rounds contribute nothing either.
+        """
         event = _british(crosstable=False)
         html = fixture(f"{name}.html")
         assert event.check_published_totals(parse_crosstable(html), parse_published_totals(html)) == []

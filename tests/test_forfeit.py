@@ -14,6 +14,11 @@ the opponent's row as the same game seen from the other side. A forfeit is
 still a game -- it has an opponent and a colour -- which is what separates it
 from a bye, and what `Play.forfeit` records is that the *game* was decided by
 default. Which player defaulted is carried by the score, not the flag.
+
+The British is a nine-round championship, where a forfeit is an isolated event.
+`frome2026_standard_crosstable.html` supplies the other kind: a small congress
+section where a forfeit is one step in a player leaving the tournament. See
+TestAForfeitOnTheWayOut.
 """
 
 import pytest
@@ -145,3 +150,82 @@ class TestTheCurrentRoundKeepsItsUnpairedRows:
 
     def test_and_they_are_absent_from_the_superseded_round_eight(self, round_eight):
         assert not [p for p in round_eight if p.kind is PlayKind.UNPAIRED]
+
+
+BURTON = 9
+WEAVER = 23
+
+
+@pytest.fixture(scope="module")
+def frome_standard():
+    return parse_crosstable(fixture("frome2026_standard_crosstable.html"))
+
+
+class TestAForfeitOnTheWayOut:
+    """A congress section, where the forfeit is part of a withdrawal.
+
+    Burton's row in the Standard is the whole story in five cells::
+
+        9   Burton Louis   -½   23b-   -0   -0   -0
+
+    He took a half-point bye in round 1, defaulted his round 2 game against
+    Weaver, and was gone for rounds 3 to 5. Four of the five `PlayKind` values
+    appear on that one row, which is what makes it worth pinning: the British
+    fixtures have no requested bye at all, and the Frome Open has a requested
+    bye but no forfeit. This is the first fixture where the two meet, and the
+    first where a forfeit is followed by anything.
+
+    The `-0` run is also the withdrawal signal DESIGN.md wants to infer a
+    withdrawal from, rather than being told about one. Nothing infers it yet;
+    these tests fix the raw material in place so that a heuristic has something
+    to be right about.
+    """
+
+    def test_the_defaulted_game_reads_the_same_as_a_championship_one(self, frome_standard):
+        """`23b-` is the same shape as the British's `100w-`, on a different event."""
+        entry = next(e for e in frome_standard[BURTON] if e.round == 2)
+        assert (entry.opponent_no, entry.colour, entry.score) == (WEAVER, Colour.BLACK, 0.0)
+        assert entry.forfeit and entry.kind is PlayKind.GAME
+
+    def test_the_win_by_default_is_on_the_other_row(self, frome_standard):
+        entry = next(e for e in frome_standard[WEAVER] if e.round == 2)
+        assert (entry.opponent_no, entry.colour, entry.score) == (BURTON, Colour.WHITE, 1.0)
+        assert entry.forfeit
+
+    def test_it_is_the_only_defaulted_game_in_the_section(self, frome_standard):
+        defaulted = {(no, e.round) for no, entries in frome_standard.items() for e in entries if e.forfeit}
+        assert defaulted == {(BURTON, 2), (WEAVER, 2)}
+
+    def test_the_whole_row_is_read_kind_by_kind(self, frome_standard):
+        assert [(e.round, e.kind) for e in frome_standard[BURTON]] == [
+            (1, PlayKind.REQUESTED_BYE),
+            (2, PlayKind.GAME),
+            (3, PlayKind.UNPAIRED),
+            (4, PlayKind.UNPAIRED),
+            (5, PlayKind.UNPAIRED),
+        ]
+
+    def test_a_forfeit_is_a_game_but_an_absence_is_not(self, frome_standard):
+        """The distinction the parser has to keep: `23b-` and `-0` both score
+        nothing, and only one of them was a game the player was paired for."""
+        by_round = {e.round: e for e in frome_standard[BURTON]}
+        assert by_round[2].score == by_round[3].score == 0.0
+        assert (by_round[2].opponent_no, by_round[2].colour) == (WEAVER, Colour.BLACK)
+        assert (by_round[3].opponent_no, by_round[3].colour) == (None, None)
+        assert by_round[3].forfeit is False, "an absence is not a default"
+
+    def test_the_withdrawal_is_a_trailing_run_of_unpaired_rounds(self, frome_standard):
+        """What a withdrawal looks like, as against a late entry.
+
+        Kothari in the British is the mirror image -- `-0` in rounds 1 and 2,
+        having entered late. Both are runs of unpaired rounds; only the end
+        they sit at tells them apart.
+        """
+        unpaired = [e.round for e in frome_standard[BURTON] if e.kind is PlayKind.UNPAIRED]
+        last_round = max(e.round for e in frome_standard[BURTON])
+        assert unpaired == [3, 4, 5]
+        assert unpaired == list(range(unpaired[0], last_round + 1))
+
+    def test_the_half_point_bye_is_all_he_kept(self, frome_standard):
+        """0.5 for the round-1 bye, nothing for the default, nothing after."""
+        assert sum(e.score for e in frome_standard[BURTON]) == 0.5
