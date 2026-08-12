@@ -234,6 +234,54 @@ class Tournament:
             groups.setdefault(p.score(after), []).append(p)
         return dict(sorted(groups.items(), key=lambda kv: -kv[0]))
 
+    def rows(self) -> list[dict[str, object]]:
+        """The whole event as flat records, one per player per round.
+
+        A shape for handing to a DataFrame, a CSV writer or ``json.dump``,
+        where the assembled :class:`Player` objects are awkward and the nested
+        ``dataclasses.asdict`` output more awkward still. Rounds sort first,
+        then boards, with byes and recovered rounds last within a round --
+        those carry no board number.
+
+        Two things to know before summing anything here.
+
+        ``score`` is what the library holds, which scores an ``UNPAIRED`` round
+        0. That is not the same as a round drawn nil, and for most purposes a
+        round the player was neither paired for nor awarded anything wants to
+        read as "no result" rather than as zero -- otherwise a player who
+        withdrew after round 2 looks present, and beaten, in every round after
+        it. The distinction is left to the caller because both readings are
+        wanted in practice: pair ``score`` with ``kind`` and decide.
+
+        ``rating`` is the rating the player was paired on, estimates included,
+        and ``None`` where the event published no rating column at all.
+        """
+        return sorted(
+            (
+                {
+                    "round": play.round,
+                    "board": play.board,
+                    "name": player.name,
+                    "start_no": player.start_no,
+                    "fide_id": player.fide_id,
+                    "federation": player.federation,
+                    "title": player.title,
+                    "rating": player.rating,
+                    "opponent": play.opponent,
+                    "colour": play.colour.value if play.colour else None,
+                    "score": play.score,
+                    "kind": play.kind.value,
+                    "forfeit": play.forfeit,
+                    "points_before": play.points_before,
+                    "float_direction": play.float_direction,
+                    "from_crosstable": play.from_crosstable,
+                }
+                for player in self.players.values()
+                for play in player.plays
+            ),
+            key=_row_order,
+        )
+
     def games(self, rnd: int | None = None) -> list[Pairing]:
         """The actual games of a round: byes and "not paired" rows are not games."""
         rnd = rnd or self.last_round
@@ -325,6 +373,17 @@ class Tournament:
             if trailing_unpaired or never_played:
                 withdrawn.add(name)
         return withdrawn
+
+
+def _row_order(row: dict[str, object]) -> tuple[object, ...]:
+    """Round, then board, then name -- with the boardless rounds last.
+
+    A bye and a round recovered from the crosstable both have ``board`` None,
+    which no comparison against an int survives, so the sort key carries an
+    explicit "has no board" flag ahead of the number itself.
+    """
+    board = row["board"]
+    return (row["round"], board is None, board if isinstance(board, int) else 0, row["name"])
 
 
 def _compare(

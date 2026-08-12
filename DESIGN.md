@@ -36,7 +36,35 @@ pages. Nothing below the fetch layer knows HTTP exists.
 | Fetch | `client.py` | HTTP, round discovery, cache policy, orchestration. |
 
 `models.py` holds the dataclasses. `trf.py` and `cli.py` consume an assembled
-`Tournament`; `cache.py` is policy only.
+`Tournament`; `cache.py` is policy only. `congress.py` sits above the lot and is
+the one type not read off a page — see below.
+
+### The one type the site does not publish
+
+A UK weekend congress is five or six graded sections played in one hall under one
+set of prize rules, and chess-results numbers each section separately with
+*nothing* joining them: no congress page, no parent identifier, no link. The
+grouping lives in the entry form and the prize list, and nowhere in the data.
+
+`Congress` therefore takes its sections and their names from the caller. That
+makes it the exception to "everything here is something the site said", and the
+reason it belongs in the library anyway is that the alternative is every congress
+user writing the same loop and the same section tag — as this library's own first
+consumer did, for a year, before this existed.
+
+It deliberately offers no merged `players` dictionary. Players are keyed by name,
+so merging would drop one of two players sharing a name with no error and no
+trace. `find()` returns every match with its section, and `section_of()` answers
+`None` rather than guessing when there are two.
+
+This guards a rare case, not a common one. On Frome 2026 — 191 players, five
+sections — no name appears twice. Ten surnames span sections, four of them
+looking like families, and every one has a distinct first name: names are
+`"Surname, Firstname"`, so relatives are precisely the case that does *not*
+collide. The real risk is two unrelated people with the same full name, and the
+only thing a congress changes is that merging five sections gives the
+coincidence a field several times larger to miss. A collision *within* one
+section already collides at `Tournament` level, so nothing here can help that.
 
 Two shapes are easy to confuse. A **`Pairing`** is one row of a round's table and
 holds two players. A **`Play`** is what *one* player did in one round. `add_round`

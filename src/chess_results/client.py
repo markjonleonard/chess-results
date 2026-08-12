@@ -10,6 +10,7 @@ default is a truncated page that says nothing about being truncated.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import requests
@@ -24,6 +25,7 @@ from .cache import (
     SettledRounds,
     cached_session,
 )
+from .congress import Congress
 from .models import CrosstableEntry, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
 from .parse import (
     has_pairings,
@@ -453,4 +455,60 @@ class ChessResults:
         for rnd in sorted(now_settled - self.settled.rounds(tournament_id)):
             self._extend_cached_lifetime(tournament_id, ART_ROUND_PAIRINGS, {"rd": rnd}, SETTLED_TTL)
         self.settled.record(tournament_id, now_settled)
+        return event
+
+    def congress(
+        self,
+        sections: Mapping[str, str | int],
+        *,
+        name: str | None = None,
+        rounds: int | range | None = None,
+        bye_value: float = 1.0,
+        crosstable: bool = True,
+        skip_unreadable: bool = False,
+        progress: Callable[[str, str], None] | None = None,
+    ) -> Congress:
+        """Fetch several tournaments as one event.
+
+        ``sections`` maps the name you call each section to its tournament
+        number -- ``{"Open": 1393521, "Major": 1393522}``. The names are yours:
+        chess-results publishes nothing that groups the sections of a congress,
+        so nothing can be inferred here. Insertion order is kept, which is
+        usually strongest first and is the order everything reports in.
+
+        Every other argument is passed to :meth:`tournament` unchanged and
+        applies to all sections. ``bye_value`` in particular is a property of
+        the congress rather than of a section -- one set of conditions of entry
+        governs the lot -- so a single value is the right shape. Check it
+        against the crosstable's published totals before trusting it.
+
+        ``skip_unreadable`` records a section that raises
+        :class:`TournamentError` in :attr:`Congress.unreadable` and carries on,
+        rather than losing the whole congress to one section. This is worth
+        having because the shapes the library refuses are shapes a congress
+        really contains: a top section run as an all-play-all raises
+        :class:`RoundRobinError`, and a section that has not started yet raises
+        :class:`TournamentNotStartedError` on the morning of the event. Off by
+        default, so the quiet loss of a section has to be asked for.
+
+        ``progress`` is called with ``(section, tournament_id)`` before each
+        section is fetched. A congress is the one call in this library long
+        enough to need it: five sections at roughly seven requests each, paced a
+        second apart, is minutes of silence otherwise.
+        """
+        event = Congress(name=name)
+        for section, tournament_id in sections.items():
+            if progress is not None:
+                progress(section, str(tournament_id))
+            try:
+                event.sections[section] = self.tournament(
+                    tournament_id,
+                    rounds=rounds,
+                    bye_value=bye_value,
+                    crosstable=crosstable,
+                )
+            except TournamentError as error:
+                if not skip_unreadable:
+                    raise
+                event.unreadable[section] = error
         return event

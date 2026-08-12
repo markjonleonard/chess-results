@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from chess_results.congress import Congress
 from chess_results.parse import parse_crosstable, parse_pairings, parse_starting_rank
 from chess_results.tournament import Tournament
 
@@ -68,6 +69,34 @@ def british_played_out() -> Tournament:
     needs this. It includes the two games decided by default.
     """
     return _british(crosstable=True, rounds=BRITISH_PLAYED_ROUNDS, played_out=True)
+
+
+def _frome_section(name: str, fixture_stem: str) -> Tournament:
+    event = Tournament(id=fixture_stem, name=f"Frome Chess Congress 2026 - {name}")
+    event.add_round(parse_pairings(fixture(f"{fixture_stem}_r1.html"), 1))
+    return event
+
+
+@pytest.fixture(scope="session")
+def frome_congress() -> Congress:
+    """Two sections of one congress, which is the shape `Congress` exists for.
+
+    Round 1 of the Open and the Standard. Two sections is enough to show
+    everything that distinguishes a congress from a tournament -- the section
+    tag, the per-section lookup, the merged export -- and Frome is the event
+    the rest of the congress fixtures come from.
+
+    Round pages alone, as `frome_round_one` is and for the same reason: Frome
+    publishes no starting-rank list this suite has, and its crosstable prints
+    names without the comma, so joining the two doubles the field.
+    """
+    return Congress(
+        name="Frome Chess Congress 2026",
+        sections={
+            "Open": _frome_section("Open", "frome2026_open"),
+            "Standard": _frome_section("Standard", "frome2026_standard"),
+        },
+    )
 
 
 @pytest.fixture(scope="session")

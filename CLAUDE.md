@@ -61,6 +61,18 @@ so the tests can run offline against saved pages.
 `models.py` holds the dataclasses; `trf.py` and `cli.py` are consumers of the assembled
 `Tournament`. `cache.py` is policy only.
 
+`congress.py` holds several `Tournament`s as one event and is **the one type not read
+off a page**: chess-results publishes nothing that groups the sections of a congress, so
+the grouping and the section names come from the caller. It offers no merged `players`
+dict on purpose — merging name-keyed sections would drop one of two players sharing a
+name, silently — so `find()` returns every match with its section instead. Note this
+guards a *rare* case: Frome 2026's 191 players across five sections contain no repeated
+name, and the ten surnames that span sections all differ in first name, "Surname,
+Forename" being what keeps families apart. Do not restate it as a likely one.
+`Tournament.rows()` / `Congress.rows()` are the flat one-record-per-player-per-round
+export; note `score` scores an `UNPAIRED` round 0, which callers must read against
+`kind` rather than sum blindly.
+
 The two shapes are easy to confuse: **`Pairing`** is one row of a round's table (two
 players), **`Play`** is what one player did in one round. `add_round` turns each `Pairing`
 into one or two `Play` objects.

@@ -224,6 +224,48 @@ mcshane.colour_preference(after=6)                  # (Colour.BLACK, Preference.
 As on the command line, `after=N` pins a figure to a round; leave it off and you
 get everything scraped so far.
 
+### A congress of several sections
+
+A weekend congress runs as several graded sections, and chess-results gives each
+one its own tournament number with nothing linking them. Name them yourself and
+fetch them as one event:
+
+```python
+from chess_results import ChessResults
+
+frome = ChessResults().congress(
+    {"Open": 1393521, "Major": 1393522, "Standard": 1393526},
+    name="Frome Chess Congress 2026",
+)
+
+len(frome)                          # 3
+frome["Open"].last_round            # 5
+frome.section_of("Weaver, Alan")    # 'Standard'
+frome.player_count                  # entries across the whole congress
+```
+
+The section names are yours: nothing on the site groups a congress, so nothing
+can be guessed. Pass `skip_unreadable=True` to record a section this library
+refuses — an all-play-all top section, or one that has not started — in
+`congress.unreadable` and carry on with the rest, instead of losing the lot.
+
+### Flat rows
+
+Either a tournament or a congress will give you one record per player per round,
+which is the shape to hand to a DataFrame, a CSV writer or `json.dump`:
+
+```python
+frome.rows()[0]
+# {'round': 1, 'board': 1, 'section': 'Open', 'name': 'Jones, Steven A',
+#  'colour': 'b', 'score': 1.0, 'kind': 'game', ...}
+```
+
+Two things to know before summing anything in there. `score` scores an unpaired
+round 0, which is not the same as a round drawn nil — read `kind` alongside it,
+or a player who went home after round 2 looks present and beaten in every round
+after. And `rating` is the rating the player was paired on, estimates included,
+which is not always what the rating list says today.
+
 ## Predicting the next round
 
 The library can write your tournament out in the file format that FIDE pairing

@@ -13,6 +13,7 @@ from .client import (
     TournamentError,
     TournamentNotStartedError,
 )
+from .congress import Congress
 from .models import (
     Absence,
     Colour,
@@ -40,6 +41,7 @@ __all__ = [
     "Absence",
     "ChessResults",
     "Colour",
+    "Congress",
     "CrosstableEntry",
     "Disagreement",
     "NotPairedEntry",
