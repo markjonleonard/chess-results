@@ -386,6 +386,25 @@ or a player who went home after round 2 looks present and beaten in every round
 after. And `rating` is the rating the player was paired on, estimates included,
 which is not always what the rating list says today.
 
+### Tiebreaks
+
+`chess_results.tiebreaks` has the calculations a Swiss standardly settles ties
+with — progressive score, Buchholz, Sonneborn-Berger, black count, head-to-head
+— as plain functions over a `Player` and, where a tiebreak needs one, the
+owning `Tournament`:
+
+```python
+from chess_results.tiebreaks import buchholz, progressive_score
+
+mcshane = event.players["Mcshane, Luke J"]
+progressive_score(mcshane, after=6)      # rewards a fast start
+buchholz(mcshane, event, after=6)        # sum of opponents' scores
+```
+
+This is the arithmetic only, not a policy for which tiebreaks apply, in what
+order, or to which prize — that is usually specific to the event and belongs in
+the caller.
+
 ## Predicting the next round
 
 The library can write your tournament out in the file format that FIDE pairing
