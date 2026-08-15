@@ -35,9 +35,13 @@ pages. Nothing below the fetch layer knows HTTP exists.
 | Assemble | `tournament.py` | Per-round tables → per-player histories. |
 | Fetch | `client.py` | HTTP, round discovery, cache policy, orchestration. |
 
-`models.py` holds the dataclasses. `trf.py` and `cli.py` consume an assembled
-`Tournament`; `cache.py` is policy only. `congress.py` sits above the lot and is
-the one type not read off a page — see below.
+`models.py` holds the dataclasses. `trf.py`, `sheet.py` and `cli.py` consume an
+assembled `Tournament`; `cache.py` is policy only. `congress.py` sits above the
+lot and is the one type not read off a page — see below.
+
+`sheet.py` is the only module whose reader is a person at a noticeboard rather
+than a program, and that changes what correctness means — see
+[Printing a sheet](#printing-a-sheet).
 
 ### The one type the site does not publish
 
@@ -241,7 +245,8 @@ exported so you can mount it yourself.
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and
 [JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read.
 `examples/predict_next_round.py` scrapes a tournament, resolves any unfinished
-games from assumptions you supply, and shells out to bbpPairings — which is a
+games from assumptions you supply, and shells out to bbpPairings — passing
+`--sheet` hands the result to [`sheet.py`](#printing-a-sheet) — which is a
 separate program, not a dependency: the engine is checked for before anything is
 fetched, since the alternative is a dozen requests against chess-results.com to
 reach an error that was knowable from a path.
@@ -332,7 +337,41 @@ and a pin the arbiter could not honour one round looks like two shorter ones.
 
 A fixed board constrains where a game is played, not who plays whom, so it never
 changes a pairing — but it is a second reason board numbers do not follow from
-scores.
+scores, and `sheet.py` acts on it rather than merely reporting it.
+
+## Printing a sheet
+
+`sheet.py` renders a round as fixed-width text for a printer. It exists because a
+sheet on a wall is not the screen table with different margins: two things that a
+reader can shrug off on a terminal are wrong on paper.
+
+**Board numbers have to be chosen.** A pairing engine emits a set of pairs and no
+ordering, so numbering them in the order they arrived sends players to arbitrary
+tables. `assign_boards` sorts pairs by their better player's position in
+`ranking_order`, which puts the top scoregroup on board 1 and keeps a scoregroup
+together — the convention arbiter software follows and players expect. A round
+chess-results has already published keeps its *own* numbers instead, those being
+the arbiter's and beating any convention this could apply.
+
+**Fixed boards are placed, not footnoted.** A pin is usually an access
+requirement, so the pair is moved to that board and marked; a note at the foot of
+a page nobody transcribes does not get a player to the right table. What cannot
+be honoured — two pins on one board, a pin outside the round — becomes a
+`PairingSheet.warnings` entry printed on the sheet, never an exception. A sheet
+the arbiter corrects by hand beats no sheet five minutes before a round.
+
+Two things this got wrong first time, both worth keeping in mind when changing it:
+
+- **A round's page is not the round.** Reading `Tournament.rounds` alone prints
+  only the games, because chess-results deletes bye and "not paired" rows once a
+  later round is paired — round 6 of the 2026 British has 52 rows for a field of
+  108. Those players are recovered from `Player.plays` instead. On a wall a
+  missing row does not read as missing data; it reads as no bye having been given.
+- **The three kinds of non-game are a point apart.** A pairing-allocated bye, a
+  requested half-point bye and an unpaired player must not print alike.
+
+`render` itself takes no view: the result column is off unless asked for, and the
+opinion that a printed sheet should carry one belongs to the command.
 
 ## What this does not read
 

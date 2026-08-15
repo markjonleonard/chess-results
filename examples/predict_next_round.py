@@ -24,6 +24,7 @@ from pathlib import Path
 
 from chess_results import ChessResults
 from chess_results.models import PlayKind
+from chess_results.sheet import read_engine_pairs, render, sheet_from_pairs
 from chess_results.trf import to_trf
 
 
@@ -55,6 +56,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--total-rounds", type=int, help="rounds in the tournament (XXR)")
     parser.add_argument("--bye-value", type=float, default=1.0)
     parser.add_argument("--trf", help="keep the generated TRF here")
+    parser.add_argument(
+        "--sheet",
+        nargs="?",
+        const="-",
+        metavar="FILE",
+        help="also write a printable pairing sheet ('-' or no value for stdout). "
+        "Boards are numbered by scoregroup and fixed boards honoured, which the "
+        "listing below does not do",
+    )
+    parser.add_argument("--subtitle", metavar="TEXT", help="a line under the sheet's heading")
     return parser.parse_args(argv)
 
 
@@ -153,6 +164,17 @@ def main(argv: list[str] | None = None) -> int:
     if result.returncode:
         print(result.stdout + result.stderr, file=sys.stderr)
         return result.returncode
+
+    if args.sheet:
+        made = sheet_from_pairs(event, read_engine_pairs(out_path.read_text()))
+        text = render(made, subtitle=args.subtitle)
+        if args.sheet == "-":
+            print(text, end="")
+        else:
+            Path(args.sheet).write_text(text)
+            print(f"wrote {args.sheet}: {made.boards} boards", file=sys.stderr)
+        for warning in made.warnings:
+            print(f"warning: {warning}", file=sys.stderr)
 
     by_no = {p.start_no: p for p in event.players.values() if p.start_no}
     lines = out_path.read_text().splitlines()

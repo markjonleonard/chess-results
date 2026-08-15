@@ -44,26 +44,34 @@ That number is what you pass to every command below. The examples all use
 
 ## Command line
 
-Five commands. Each takes a tournament number.
+Six commands. Each takes a tournament number.
 
 ```bash
 chess-results standings 1452107              # who is winning
 chess-results pairings 1452107               # this round's boards
+chess-results pairing-sheet 1452107          # the same, as a page to print
 chess-results colours 1452107                # colour and float history
 chess-results unfinished 1452107             # games still being played
 chess-results dump 1452107 -o event.json     # everything, as a data file
 ```
 
-Add `--after N` to any of them to see the tournament as it stood after a
-particular round, rather than as it stands now. Ask for a round the tournament
-has not reached and you get the latest one.
+Add `--after N` to see the tournament as it stood after a particular round,
+rather than as it stands now. Ask for a round the tournament has not reached and
+you get the latest one. It shapes what `standings`, `colours`, `pairings` and
+`pairing-sheet` report; `dump` always exports the whole event and `unfinished`
+always means the round being played.
 
 `colors` is accepted as a synonym for `colours`.
 
 `--limit N` prints the first N rows and then says how many it left out. It counts
 rows rather than lines, so `--limit 10` is ten players where `| head -10` is nine
 players and a heading. It saves no time — the fetching is done before anything is
-printed — and it is not offered on `dump`, truncated JSON being no use to anyone.
+printed.
+
+It is refused rather than ignored on two commands. Truncated JSON is no use to
+anyone, so not on `dump`; and a pairing sheet missing its last boards is worse
+than no sheet, because the players on them go looking for a board that is not
+there, so not on `pairing-sheet`.
 
 `--name-width N` sets how much room a player's name gets before it is clipped to
 an `…`. The default is 28, narrowed further if your terminal is too small to fit
@@ -74,18 +82,18 @@ names you want in full:
 chess-results pairings 1452107 6 --name-width 40
 ```
 
-Like `--limit`, it is not offered on `dump` — JSON has no columns to line up, and
-clipping a name there would corrupt data rather than tidy a table.
+Not offered on `dump` — JSON has no columns to line up, and clipping a name there
+would corrupt data rather than tidy a table. `pairing-sheet` has a `--name-width`
+of its own which behaves slightly differently: it is sized for paper rather than
+for your terminal, so it is never narrowed to the window.
 
 ### All the options
 
-Every command takes these; `chess-results <command> --help` prints them too.
+`chess-results <command> --help` prints a command's own options. These affect
+what is fetched, and every command takes them:
 
 | Option | What it does |
 | --- | --- |
-| `--after N` | Report the tournament as it stood after round N |
-| `--limit N` | Print at most N rows, then say how many were left out |
-| `--name-width N` | Room for a player's name before it is clipped (default 28) |
 | `--rounds N` | Stop after N rounds instead of discovering them all |
 | `--bye-value P` | What a pairing-allocated bye is worth (default 1.0) |
 | `--delay S` | Seconds between requests (default 1.0) |
@@ -93,6 +101,14 @@ Every command takes these; `chess-results <command> --help` prints them too.
 | `--cache-ttl S` | How long to reuse a live round's page (default 300) |
 | `--cache-dir D` | Where to keep cached pages |
 | `--no-crosstable` | Skip the crosstable request — **scores will be wrong** for anyone whose bye has been dropped from its round page |
+
+These shape the reporting, and not every command takes every one:
+
+| Option | Taken by |
+| --- | --- |
+| `--after N` | `standings`, `colours`, `pairings`, `pairing-sheet` |
+| `--limit N` | `standings`, `colours`, `pairings`, `unfinished` |
+| `--name-width N` | `standings`, `colours`, `pairings`, `pairing-sheet` |
 
 `--bye-value` is worth knowing about if your event awards half a point for a
 bye: the crosstable prints every pairing-allocated bye as a full point whatever
@@ -162,6 +178,91 @@ rows are shown as chess-results publishes them — which is to say only while th
 round is the current one, since they are deleted once the next round is paired.
 See [A note on byes](#a-note-on-byes).
 
+### pairing-sheet
+
+The pairings as a page to print and pin to a noticeboard, rather than a table to
+read on screen: a repeated heading, form-feed page breaks so a long field prints
+as whole sheets, and a result column to pencil into as games finish.
+
+```bash
+chess-results pairing-sheet 1452107 --after 8 --subtitle "Starts 14:15 — Great Hall" | lpr
+```
+
+```
+2026 British Chess Championships: Championship
+Round 8 pairings
+Starts 14:15 — Great Hall
+
+ Bd  White                    Pts  Result  Black                    Pts
+-----------------------------------------------------------------------
+  1  GM Adams, Michael         5½   ½-½    GM Royal, Shreyas          6
+  2  IM Grieve, Harry          5½   1-0    IM Roberson, Peter T      5½
+  3  IM Bazakutsa, Svyatoslav  5½   0-1    GM Williams, Simon K      5½
+ ...
+  -  WFM Cooke, Suzy G          1          bye
+page 1 of 1
+```
+
+Name the round positionally, with `--round N`, or with `--after N`; all three
+mean the same thing here. Do not reach for `--rounds`, which is unrelated — it
+limits how much of the event gets scraped.
+
+A decided game prints its result, a forfeit keeping its `F` so a default does not
+read as an ordinary win. A game still to be played leaves the box empty, which is
+what makes the sheet something an arbiter can write on. `--no-results` drops the
+column and gives its four characters back to names.
+
+Everyone who is not playing keeps a row, with the reason: `bye`, `half-point bye`
+or `not paired`. Those are a point apart, so the sheet does not run them
+together — and they are rebuilt from the crosstable, because chess-results
+deletes them from a round's page once the next round is paired. See
+[A note on byes](#a-note-on-byes).
+
+#### Printing a round nobody has played yet
+
+With `--pairs`, the sheet is built from a pairing engine's output instead of a
+published round — the case this exists for, when the pairing computer has died
+and the wall still needs a sheet.
+
+```bash
+# pair the next round and print it, in one go
+python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe \
+    --sheet round8.txt --subtitle "Starts 14:15 — Great Hall"
+
+# or from an engine output file you already have
+chess-results pairing-sheet 1452107 --pairs next.txt | lpr
+```
+
+An engine emits a set of pairs and no ordering, so board numbers have to be
+chosen rather than read off. This chooses them the way arbiter software does:
+strongest pair on board 1, working down the scoregroups. A player with a fixed
+board is *placed* on it and marked, since a pin is usually an access requirement
+and a footnote nobody transcribes is no use on a wall:
+
+```
+ 14  GM Hebden, Mark L          4          CM Lishoy Gengis Parataz   4  *
+ ...
+  -  WFM Cooke, Suzy G          1          bye
+
+* board fixed for this player
+```
+
+Anything that cannot be honoured — two pins wanting one board, a pin outside the
+round — is printed on the sheet rather than raised as an error. A sheet the
+arbiter corrects by hand beats no sheet five minutes before a round.
+
+A published round, by contrast, keeps its **published board numbers**, which are
+the arbiter's own and beat any convention this could apply — so no board is moved
+and nothing is starred.
+
+**These board numbers are a convention, not a ruling**, and the pairings are only
+as good as the results they were computed from. Read
+[Predicting the next round](#predicting-the-next-round) before pinning one up.
+
+`--lines-per-page N` sets how many lines a page holds (66 by default, which is
+what a printer fed plain text uses on A4 and US Letter). `--no-pages` gives one
+continuous sheet with no breaks or page numbers, for reading on screen.
+
 ### colours
 
 What the next round's pairing turns on: the colours each player has had, whether
@@ -216,13 +317,32 @@ from chess_results import ChessResults
 event = ChessResults().tournament(1452107)           # 2026 British Championship
 mcshane = event.players["Mcshane, Luke J"]
 
-mcshane.score(after=6)                              # 4.0
+mcshane.score(after=6)                              # 5.0
 "".join(c.value for c in mcshane.colours(after=6))  # 'bwbwbw'
 mcshane.colour_preference(after=6)                  # (Colour.BLACK, Preference.MILD)
 ```
 
 As on the command line, `after=N` pins a figure to a round; leave it off and you
 get everything scraped so far.
+
+### A pairing sheet
+
+`pairing-sheet` is a thin wrapper over functions you can call directly, which
+take an assembled tournament and touch neither the network nor an engine:
+
+```python
+from chess_results import sheet
+
+made = sheet.sheet_from_round(event, 8)          # a published round
+print(sheet.render(made, results=True))
+
+pairs = sheet.read_engine_pairs(open("next.txt").read())
+made = sheet.sheet_from_pairs(event, pairs)      # an engine's output
+made.warnings                                    # what the arbiter must fix by hand
+```
+
+`render` leaves the result column off unless asked, where the command turns it
+on: it is a primitive and holds no opinion about what your sheet is for.
 
 ### A congress of several sections
 
@@ -323,6 +443,11 @@ per-player history and corrects it: it recovers byes that chess-results deletes 
 superseded round pages, tracks colours and floats, and can write the result as FIDE
 [TRF(x)](https://handbook.fide.com/files/handbook/C04Annex2_TRF16.pdf) for a pairing engine. That is a narrower job than reproducing the site's tables, and a
 different one.
+
+[`trf`](https://pypi.org/project/trf/) reads and writes the FIDE tournament report
+format. This library only ever *writes* TRF, and writes it directly, so it takes no
+dependency; if you need to read a TRF file that something else produced, that package is
+where to look.
 
 ## Being a good guest
 

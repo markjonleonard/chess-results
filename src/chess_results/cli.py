@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import TypeVar
 
-from . import __version__
+from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
 from .client import ChessResults, TournamentError
 from .models import Pairing, Play, PlayerRef, PlayKind
@@ -39,6 +39,9 @@ examples:
   chess-results pairings 1452107 6            round 6's boards and results
   chess-results colours 1452107               colour and float history, and who is due what
   chess-results unfinished 1452107            games in the latest round with no result yet
+  chess-results pairing-sheet 1452107         the latest round as a page to print
+  chess-results pairing-sheet 1452107 6       round 6, with its results filled in
+  chess-results pairing-sheet 1452107 --pairs next.txt | lpr   pin up the next round
   chess-results dump 1452107 -o event.json    the whole tournament as JSON
   chess-results standings 1452107 --limit 10  just the top ten, heading kept
 
@@ -92,6 +95,17 @@ def _round(requested: int | None, event: Tournament) -> int:
     if requested is None:
         return event.last_round
     return max(1, min(requested, event.last_round))
+
+
+def _requested_round(args: argparse.Namespace) -> int | None:
+    """The round asked for, given either positionally or as ``--round``.
+
+    Both spellings exist because ``--rounds`` (a scraping limit) is already
+    taken, and argparse would otherwise prefix-match ``--round`` onto it and
+    quietly answer a different question.
+    """
+    positional = getattr(args, "round", None)
+    return positional if positional is not None else getattr(args, "round_flag", None)
 
 
 def _points(value: float | None) -> str:
@@ -277,7 +291,8 @@ _PAIRINGS_FIXED = 4 + 5 + 2 * _SIDE_PREFIX + 3
 def cmd_pairings(args: argparse.Namespace) -> int:
     """Print one round's pairing table: who is on which board, against whom."""
     event = _fetch(args)
-    rnd = _round(args.round if args.round is not None else args.after, event)
+    asked = _requested_round(args)
+    rnd = _round(asked if asked is not None else args.after, event)
     done, total = _progress(event, rnd)
     state = "" if done == total else (f", {done} of {total} results in" if done else ", no results yet")
     print(f"{event.name or event.id} — round {rnd} pairings{state}")
@@ -358,6 +373,52 @@ def cmd_unfinished(args: argparse.Namespace) -> int:
             f"vs {game.black.name if game.black else '?'} ({_points(game.black_points_before)})"
         )
     _and_the_rest(dropped)
+    return 0
+
+
+def cmd_pairing_sheet(args: argparse.Namespace) -> int:
+    """Print a round's pairings as a sheet to put on a noticeboard."""
+    event = _fetch(args)
+    if args.pairs:
+        try:
+            pairs = sheet.read_engine_pairs(Path(args.pairs).read_text())
+        except OSError as exc:
+            print(f"chess-results: cannot read {args.pairs}: {exc}", file=sys.stderr)
+            return 2
+        made = sheet.sheet_from_pairs(event, pairs)
+        after = event.last_round
+        # A predicted round is only as good as the results it was computed from,
+        # and this sheet is going on a wall. Say so where the arbiter will see it.
+        undecided = len(event.unfinished())
+        if undecided:
+            print(
+                f"warning: round {event.last_round} still has {undecided} game(s) without a "
+                "result, so these pairings rest on assumed scores",
+                file=sys.stderr,
+            )
+    else:
+        # --after names a round here too, as it does on pairings: accepting it
+        # and reporting on a different round would be worse than refusing it.
+        asked = _requested_round(args)
+        rnd = _round(asked if asked is not None else args.after, event)
+        made = sheet.sheet_from_round(event, rnd)
+        after = rnd - 1
+
+    text = sheet.render(
+        made,
+        after=after,
+        name_width=args.name_width,
+        lines_per_page=0 if args.no_pages else args.lines_per_page,
+        subtitle=args.subtitle,
+        results=not args.no_results,
+    )
+    if args.output:
+        Path(args.output).write_text(text)
+        print(f"wrote {args.output}: {made.boards} boards over round {made.round}", file=sys.stderr)
+    else:
+        print(text, end="")
+    for warning in made.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
     return 0
 
 
@@ -454,6 +515,18 @@ COMMANDS = (
         "them — though only while the round is the current one.",
     ),
     (
+        "pairing-sheet",
+        ("sheet",),
+        cmd_pairing_sheet,
+        "print a round's pairings as a page to pin up",
+        "One round's pairings as fixed-width text for a printer: a repeated "
+        "heading, both players with the score they carry in, and form-feed page "
+        "breaks. With --pairs it renders a pairing engine's output for the round "
+        "about to be played, numbering the boards by scoregroup and placing any "
+        "fixed-board player on their own board; without it, the round given (or "
+        "the latest) exactly as chess-results published it.",
+    ),
+    (
         "colours",
         ("colors",),
         cmd_colours,
@@ -475,6 +548,7 @@ COMMANDS = (
 USAGE_ARGS = {
     "dump": "[-o FILE] <tournament-id>",
     "pairings": "<tournament-id> [<round>]",
+    "pairing-sheet": "[--pairs FILE] [-o FILE] <tournament-id> [<round>]",
 }
 
 
@@ -508,10 +582,13 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "dump":
             child.add_argument("-o", "--output", metavar="FILE", help="write JSON here instead of stdout")
-        else:
-            # Not on dump: truncated JSON is not JSON. Left off the top-level
-            # parser for the same reason, so `dump --limit` is an error rather
-            # than a flag that quietly does nothing.
+        elif name != "pairing-sheet":
+            # Off dump because truncated JSON is not JSON, and off the sheet
+            # because a pairing sheet missing its last boards is worse than no
+            # sheet: the players on them go looking for a board that is not
+            # there. Left off the top-level parser for the same reason, so
+            # `dump --limit` is an error rather than a flag that quietly does
+            # nothing.
             child.add_argument(
                 "--limit",
                 type=int,
@@ -520,7 +597,8 @@ def build_parser() -> argparse.ArgumentParser:
             )
             # Alongside --limit, and off dump for the same reason: JSON has no
             # columns to align, and clipping a name there would corrupt data
-            # rather than tidy a table.
+            # rather than tidy a table. The sheet keeps a --name-width of its
+            # own, since it is sized for paper rather than for the terminal.
             child.add_argument(
                 "--name-width",
                 type=int,
@@ -529,13 +607,68 @@ def build_parser() -> argparse.ArgumentParser:
                 f"(default {DEFAULT_NAME_WIDTH}, narrowed to fit the terminal; "
                 f"anything under {MIN_NAME_WIDTH} is treated as {MIN_NAME_WIDTH})",
             )
-        if name == "pairings":
+        if name in ("pairings", "pairing-sheet"):
             child.add_argument(
                 "round",
                 nargs="?",
                 type=int,
                 metavar="<round>",
                 help="which round to show (default the latest)",
+            )
+            # A real --round, not for its own sake but so that argparse cannot
+            # prefix-match the abbreviation onto --rounds, which means the
+            # unrelated "stop after this many rounds". That silently gave the
+            # right answer often enough to hide the mistake: asking for round 1
+            # scraped one round, whose latest round was then round 1.
+            child.add_argument(
+                "--round",
+                dest="round_flag",
+                type=int,
+                metavar="N",
+                help="which round to show; the same as giving it positionally",
+            )
+        if name == "pairing-sheet":
+            child.add_argument(
+                "--pairs",
+                metavar="FILE",
+                help="a pairing engine's output (bbpPairings -p) for the round about "
+                "to be played, instead of a round chess-results has published",
+            )
+            child.add_argument("-o", "--output", metavar="FILE", help="write the sheet here")
+            child.add_argument(
+                "--name-width",
+                type=int,
+                default=sheet.NAME_WIDTH,
+                metavar="CHARS",
+                help=f"room to give a player's name before clipping it (default "
+                f"{sheet.NAME_WIDTH}, which keeps two name columns inside 80 "
+                "columns; unlike the other commands this is not narrowed to the "
+                "terminal, the sheet being bound for a printer)",
+            )
+            child.add_argument(
+                "--subtitle",
+                metavar="TEXT",
+                help="a line under the heading, for what no page publishes: "
+                'start time, venue, e.g. "Starts 14:00 — Great Hall"',
+            )
+            child.add_argument(
+                "--lines-per-page",
+                type=int,
+                default=sheet.LINES_PER_PAGE,
+                metavar="N",
+                help=f"lines a printed page holds (default {sheet.LINES_PER_PAGE})",
+            )
+            child.add_argument(
+                "--no-results",
+                action="store_true",
+                help="drop the result column, giving names the four characters it "
+                "takes. The column is on by default: a sheet on a wall is written "
+                "on as games finish, which is what it is for",
+            )
+            child.add_argument(
+                "--no-pages",
+                action="store_true",
+                help="one continuous sheet, no page breaks or page numbers",
             )
         child.set_defaults(func=handler)
     return parser
@@ -567,6 +700,11 @@ def main(argv: list[str] | None = None) -> int:
     except BrokenPipeError:
         _silence_stdout()
         return 141  # what a shell reports for a process killed by SIGPIPE
+    except sheet.SheetError as exc:
+        # Bad engine output or a round with no pairings: the user's file or
+        # argument to fix, not a bug to show a traceback for.
+        print(f"chess-results: {exc}", file=sys.stderr)
+        return 2
     except TournamentError as exc:
         # A tournament this cannot read, or one with nothing to read yet.
         # Neither is a crash, so say so in one line rather than showing a

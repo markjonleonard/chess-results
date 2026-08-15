@@ -6,6 +6,7 @@ import re
 
 import pytest
 
+from chess_results import sheet
 from chess_results.cli import (
     _COLOURS_PREFIX,
     _SIDE_PREFIX,
@@ -17,12 +18,14 @@ from chess_results.cli import (
     _how_far,
     _limited,
     _name_width,
+    _requested_round,
     _round,
     _state,
     _warn_disagreements,
     build_parser,
     cmd_colours,
     cmd_dump,
+    cmd_pairing_sheet,
     cmd_pairings,
     cmd_standings,
     cmd_unfinished,
@@ -440,3 +443,159 @@ class TestDisagreementsAreReported:
     def test_it_goes_to_stderr_so_piped_output_stays_clean(self, british, capsys):
         _warn_disagreements(self._event(british, 1))
         assert capsys.readouterr().out == ""
+
+
+class TestPairingSheetOptions:
+    def test_round_is_accepted_positionally(self):
+        args = build_parser().parse_args(["pairing-sheet", "1393526", "1"])
+        assert _requested_round(args) == 1
+
+    def test_round_is_accepted_as_a_flag(self):
+        args = build_parser().parse_args(["pairing-sheet", "1393526", "--round", "1"])
+        assert _requested_round(args) == 1
+
+    def test_the_round_flag_no_longer_reaches_rounds(self):
+        """--round used to prefix-match onto --rounds, a scraping limit.
+
+        It gave the right answer often enough to hide the mistake: asking for
+        round 1 fetched one round, whose latest round was then round 1. Now
+        --rounds keeps its own default and only --round selects.
+        """
+        args = build_parser().parse_args(["pairing-sheet", "1393526", "--round", "3"])
+        assert args.rounds is None
+        assert _requested_round(args) == 3
+
+    def test_rounds_still_means_the_scraping_limit(self):
+        args = build_parser().parse_args(["pairing-sheet", "1393526", "--rounds", "3"])
+        assert args.rounds == 3
+        assert _requested_round(args) is None
+
+    def test_pairings_takes_the_flag_too(self):
+        args = build_parser().parse_args(["pairings", "1452107", "--round", "6"])
+        assert _requested_round(args) == 6
+
+    def test_the_result_column_is_on_unless_refused(self):
+        """A sheet on a wall is written on as games finish; that is what it is for."""
+        assert build_parser().parse_args(["pairing-sheet", "1"]).no_results is False
+        assert build_parser().parse_args(["pairing-sheet", "1", "--no-results"]).no_results is True
+
+    def test_limit_is_refused(self):
+        """A sheet missing its last boards sends those players to a board that is not there."""
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["pairing-sheet", "1452107", "--limit", "5"])
+
+
+def test_pairing_sheet_honours_after():
+    """--after names a round here as it does on pairings.
+
+    It used to be accepted and ignored, which silently reported a different
+    round from the one asked for.
+    """
+    args = build_parser().parse_args(["pairing-sheet", "1452107", "--after", "6"])
+    assert (_requested_round(args), args.after) == (None, 6)
+
+
+def test_the_round_selectors_agree():
+    """Positional, --round and --after all name the round on pairing-sheet."""
+    parse = build_parser().parse_args
+    assert _requested_round(parse(["pairing-sheet", "1", "6"])) == 6
+    assert _requested_round(parse(["pairing-sheet", "1", "--round", "6"])) == 6
+    assert parse(["pairing-sheet", "1", "--after", "6"]).after == 6
+
+
+class TestPairingSheetCommand:
+    """The handler itself, which the sheet module's own tests do not reach."""
+
+    @staticmethod
+    def _run(event, monkeypatch, capsys, **kwargs):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
+        defaults = {
+            "round": None,
+            "round_flag": None,
+            "pairs": None,
+            "output": None,
+            "subtitle": None,
+            "lines_per_page": sheet.LINES_PER_PAGE,
+            "no_pages": False,
+            "no_results": False,
+            "name_width": sheet.NAME_WIDTH,
+        }
+        code = cmd_pairing_sheet(_args(**{**defaults, **kwargs}))
+        out, err = capsys.readouterr()
+        return code, out.splitlines(), err
+
+    def test_it_prints_the_latest_round_by_default(self, british, monkeypatch, capsys):
+        code, lines, _ = self._run(british, monkeypatch, capsys)
+        assert code == 0
+        assert lines[1] == f"Round {british.last_round} pairings"
+
+    def test_a_named_round_wins_over_the_default(self, british, monkeypatch, capsys):
+        _, lines, _ = self._run(british, monkeypatch, capsys, round=5)
+        assert lines[1] == "Round 5 pairings"
+
+    def test_after_names_a_round_too(self, british, monkeypatch, capsys):
+        """It used to be accepted and ignored, reporting a different round."""
+        _, lines, _ = self._run(british, monkeypatch, capsys, after=5)
+        assert lines[1] == "Round 5 pairings"
+
+    def test_the_subtitle_reaches_the_page(self, british, monkeypatch, capsys):
+        _, lines, _ = self._run(british, monkeypatch, capsys, subtitle="Starts 14:15")
+        assert lines[2] == "Starts 14:15"
+
+    def test_the_result_column_is_printed_unless_refused(self, british, monkeypatch, capsys):
+        _, with_it, _ = self._run(british, monkeypatch, capsys, round=5)
+        _, without, _ = self._run(british, monkeypatch, capsys, round=5, no_results=True)
+        assert "Result" in with_it[3]
+        assert "Result" not in without[3]
+
+    def test_no_pages_drops_the_breaks(self, british, monkeypatch, capsys):
+        _, lines, _ = self._run(british, monkeypatch, capsys, round=5, no_pages=True)
+        assert not any(line.startswith("page ") for line in lines)
+
+    def test_output_writes_a_file_and_says_so_on_stderr(self, british, monkeypatch, capsys, tmp_path):
+        target = tmp_path / "round.txt"
+        code, lines, err = self._run(british, monkeypatch, capsys, round=5, output=str(target))
+        assert code == 0
+        assert lines == []  # the sheet went to the file, not to stdout
+        assert "boards over round 5" in err
+        assert target.read_text().splitlines()[1] == "Round 5 pairings"
+
+    def test_engine_pairs_are_read_from_a_file(self, british, monkeypatch, capsys, tmp_path):
+        numbers = sorted(p.start_no for p in british.players.values() if p.start_no)[:4]
+        pairs = tmp_path / "next.txt"
+        pairs.write_text(f"2\n{numbers[0]} {numbers[1]}\n{numbers[2]} {numbers[3]}\n")
+        code, lines, _ = self._run(british, monkeypatch, capsys, pairs=str(pairs))
+        assert code == 0
+        # The pairs are for the round after the last one scraped.
+        assert lines[1] == f"Round {british.last_round + 1} pairings"
+        assert len([line for line in lines if line.startswith(("  1 ", "  2 "))]) == 2
+
+    def test_a_missing_pairs_file_is_an_error_not_a_traceback(self, british, monkeypatch, capsys, tmp_path):
+        code, _, err = self._run(british, monkeypatch, capsys, pairs=str(tmp_path / "nope.txt"))
+        assert code == 2
+        assert "cannot read" in err
+
+    def test_a_prediction_from_an_unfinished_round_warns(self, british, monkeypatch, capsys, tmp_path):
+        """The sheet is going on a wall; say the scores it rests on are assumed."""
+        assert british.unfinished(), "fixture no longer has a live round"
+        numbers = sorted(p.start_no for p in british.players.values() if p.start_no)[:2]
+        pairs = tmp_path / "next.txt"
+        pairs.write_text(f"1\n{numbers[0]} {numbers[1]}\n")
+        _, _, err = self._run(british, monkeypatch, capsys, pairs=str(pairs))
+        assert "rest on assumed scores" in err
+
+    def test_a_warning_reaches_both_the_sheet_and_stderr(self, british, monkeypatch, capsys, tmp_path):
+        """Deliberately both, for two different readers.
+
+        The arbiter reading the printed page is the one who has to act on it, so
+        it goes on the sheet; the operator who ran the command sees it on stderr
+        without having to read the page back.
+        """
+        pairs = tmp_path / "next.txt"
+        hebden = british.players["Hebden, Mark L"]
+        other = next(p for p in british.players.values() if p.start_no and p is not hebden)
+        pairs.write_text(f"1\n{hebden.start_no} {other.start_no}\n")
+        _, lines, err = self._run(british, monkeypatch, capsys, pairs=str(pairs))
+        # A single board, but Hebden is pinned to 14, which this round has not got.
+        assert any("does not have" in line for line in err.splitlines())
+        assert any(line.startswith("! ") and "does not have" in line for line in lines)

@@ -35,6 +35,7 @@ from .parse import (
     parse_published_totals,
     parse_starting_rank,
 )
+from .sheet import PairingSheet, SheetError, SheetRow, sheet_from_pairs, sheet_from_round
 from .tournament import Tournament
 
 __all__ = [
@@ -46,12 +47,15 @@ __all__ = [
     "Disagreement",
     "NotPairedEntry",
     "Pairing",
+    "PairingSheet",
     "Play",
     "PlayKind",
     "Player",
     "PlayerRef",
     "Preference",
     "RoundRobinError",
+    "SheetError",
+    "SheetRow",
     "StartingRankEntry",
     "TeamTournamentError",
     "Tournament",
@@ -62,6 +66,8 @@ __all__ = [
     "parse_pairings",
     "parse_published_totals",
     "parse_starting_rank",
+    "sheet_from_pairs",
+    "sheet_from_round",
 ]
 
 # The release workflow requires its tag to match this exactly, so the two

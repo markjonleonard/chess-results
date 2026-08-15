@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Layout
+
+`src/chess_results/` is the package (see Architecture below); `tests/` is fixtures-only
+pytest, one file per module plus cross-cutting concerns (`test_forfeit.py`,
+`test_not_paired.py`, `test_unreadable_tournaments.py`); `examples/` holds
+`predict_next_round.py`, the bbpPairings integration point (see Pairing prediction below).
+`DESIGN.md` and `PERSONAL-NOTES.md` are working notes for the human maintainer, not
+generated or read by any code.
+
 ## Commands
 
 ```bash
@@ -45,7 +54,13 @@ event the fixtures come from):
 ```bash
 chess-results standings 1452107              # console script, same as python -m chess_results.cli
 chess-results colours 1452107 --after 6
+chess-results pairing-sheet 1452107 --after 8 # the printable sheet
 ```
+
+The full command set is `standings`, `pairings`, `pairing-sheet`, `colours` (`colors`
+accepted as a synonym), `unfinished` and `dump` (JSON export). All six take a tournament
+number and, except `dump`, an `--after N` round selector; see README.md for the complete
+option table (`--rounds`, `--bye-value`, `--delay`, `--no-cache`, `--limit`, `--name-width`).
 
 ## Architecture
 
@@ -58,8 +73,38 @@ so the tests can run offline against saved pages.
 | Assemble | `tournament.py` | Per-round tables → per-player histories. |
 | Fetch | `client.py` | HTTP, round auto-detection, cache policy, orchestration. |
 
-`models.py` holds the dataclasses; `trf.py` and `cli.py` are consumers of the assembled
-`Tournament`. `cache.py` is policy only.
+`models.py` holds the dataclasses; `trf.py`, `sheet.py` and `cli.py` are consumers of the
+assembled `Tournament`. `cache.py` is policy only.
+
+`sheet.py` renders a round as fixed-width text for a printer, and is the only module whose
+audience is a player at a noticeboard rather than a program. Two consequences that look
+like over-engineering and are not:
+
+- **It assigns board numbers rather than enumerating them.** An engine emits a set of
+  pairs and no ordering, so `assign_boards` sorts pairs by their better player's position
+  in `ranking_order` — top scoregroup on board 1. `sheet_from_round`, by contrast, keeps
+  the *published* numbers, which are the arbiter's own and beat any convention.
+- **It places fixed boards rather than footnoting them.** A pin is usually an access
+  requirement, so `fixed_board_number` wins over the ranking and the pair is moved to that
+  board. What cannot be honoured becomes a `PairingSheet.warnings` entry printed on the
+  sheet — never an exception, because a sheet an arbiter corrects by hand beats no sheet
+  five minutes before a round.
+- **A round's page is not the round.** `sheet_from_round` must rebuild the bye and "not
+  paired" rows from `Player.plays`, because `Tournament.rounds` holds what the page said
+  and chess-results deletes those rows once a later round is paired — round 6 of the
+  British has 52 rows for a field of 108. This was shipped wrong once, and the test that
+  should have caught it compared the sheet against `Tournament.rounds`, so it asserted the
+  bug against itself. Assert against the field instead.
+- **The three kinds of non-game are a point apart** and must not print alike; see
+  `NOT_PLAYING_TEXT`. Frome's Standard section has a full-point bye among half-point ones,
+  which is the fixture that shows it.
+
+Note `fixed_board_number` reads boards off plays that pass `counts_for_colour`, so a
+synthetic `Play` with no `colour` yields `None` and any test built from one will silently
+find no pin.
+
+`render` keeps the result column off by default while the CLI turns it on. That split is
+deliberate: the module is a primitive and holds no view, the command holds the view.
 
 `congress.py` holds several `Tournament`s as one event and is **the one type not read
 off a page**: chess-results publishes nothing that groups the sections of a congress, so
