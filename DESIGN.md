@@ -167,13 +167,31 @@ the counts below.
 ## Checking the reading
 
 Two views of one upload give something to check against. Both checks are
-tripwires: they are clean on every fixture and against live events, so a hit means
-a parser has misread something rather than chess-results.com being inconsistent.
+tripwires, clean on every fixture, so a hit means a parser has misread something
+rather than chess-results.com being inconsistent — with one confirmed exception
+below, tied to the *newest* round rather than to whether a parser is right.
 
 - **`check_published_totals`** requires the round-by-round cells parsed from a
   crosstable row to sum to the total that row publishes. It compares the
   crosstable against *itself*, not against the assembled history — a published
   total and an assembled score cover the same rounds only sometimes.
+
+  **The newest round's byes can trip it, and finishing the round does not fix
+  it.** Caught on tnr1484241 (2nd Swindon Congress, Minor section, 2026-08-29):
+  two players who took a requested bye in round 3 — then the newest round —
+  showed a crosstable row whose cells already included that bye, `1b½ 8w0 -½`
+  summing to 1.0, while the row's own `Pts.` column still read `0,5` and its
+  `Rk.` matched the stale figure. Re-checked with a fresh, uncached fetch once
+  round 3 had every result in: identical stale `0,5`. So this is not a live
+  round settling in front of the check — every other requested bye in the same
+  tournament, all from rounds 1 and 2, is unaffected. The one thing distinguishing
+  the two broken rows is that their bye belongs to the round chess-results still
+  treats as current, and elsewhere in this codebase that status changes only
+  once the *next* round is paired (see byes vanishing from a superseded round's
+  page, above) — so the aggregate may simply wait for the same trigger. Unconfirmed:
+  round 4 was not yet paired at either check. `Tournament`'s own assembled score
+  is unaffected regardless — it is built from the round page, not this total —
+  so the warning is real but does not corrupt `standings` or `pairings` output.
 - **`Tournament.disagreements`** records any field where a round page and the
   crosstable contradict each other. A value one view holds and the other lacks is
   not a contradiction: the crosstable is often the fresher capture, and a round

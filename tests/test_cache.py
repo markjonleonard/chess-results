@@ -222,6 +222,57 @@ class TestTheCrosstableIsNotTreatedAsLive:
         assert later.coverage.rounds(1452107) == 9
 
 
+class TestStartingRankIsRefetchedWhileLive:
+    """A live event can renumber players, and the join to the crosstable is by number.
+
+    Caught live on tnr1484241 (2nd Swindon Congress, Minor section, 2026-08-30):
+    an arbiter moved a misplaced entry mid-event, and everyone below it shifted
+    down one seat. A cached starting-rank fetched before that happened then
+    attributed a shifted player's crosstable row to whoever now held their *old*
+    number -- 201 false disagreements where a fresh fetch found 3. Nothing about
+    a settled tournament can drift this way, so this only refetches while the
+    event still might.
+    """
+
+    @staticmethod
+    def _starting_rank(session):
+        return [c for c in session.calls if c["params"]["art"] == 0]
+
+    def test_a_settled_tournament_is_fetched_once(self, cache_dir):
+        session = FakeSession(played_out_pages)
+        ChessResults(session, delay=0, cache_dir=cache_dir).tournament(1452107)
+        assert len(self._starting_rank(session)) == 1
+
+    def test_a_live_tournament_is_fetched_a_second_time(self, cache_dir):
+        session = FakeSession(pages)
+        ChessResults(session, delay=0, cache_dir=cache_dir).tournament(1452107)
+        calls = self._starting_rank(session)
+        assert len(calls) == 2
+        assert calls[0]["force_refresh"] is False
+        assert calls[1]["force_refresh"] is True
+
+    def test_a_bounded_scrape_is_treated_as_still_live_too(self, cache_dir):
+        """``rounds=3`` stops the scrape at round 3 regardless of how far the
+        real tournament has actually got. event.unfinished() only sees what
+        was fetched -- rounds 1-3 of a finished event are all long decided --
+        so on its own it would call this "settled" with no idea whether that
+        is true past the point we chose to stop looking."""
+        session = FakeSession(played_out_pages)
+        ChessResults(session, delay=0, cache_dir=cache_dir).tournament(1452107, rounds=3)
+        calls = self._starting_rank(session)
+        assert len(calls) == 2
+        assert calls[1]["force_refresh"] is True
+
+    def test_a_settled_tournament_is_not_refetched_on_the_next_run(self, cache_dir):
+        first = FakeSession(played_out_pages)
+        ChessResults(first, delay=0, cache_dir=cache_dir).tournament(1452107)
+
+        second = FakeSession(played_out_pages)
+        ChessResults(second, delay=0, cache_dir=cache_dir).tournament(1452107)
+        assert len(self._starting_rank(second)) == 1
+        assert self._starting_rank(second)[0]["force_refresh"] is False
+
+
 class TestCrosstableCoverageRecord:
     def test_it_starts_empty(self, cache_dir):
         assert CrosstableCoverage(cache_dir).rounds(1452107) == 0

@@ -25,6 +25,7 @@ from chess_results.cli import (
     build_parser,
     cmd_colours,
     cmd_dump,
+    cmd_history,
     cmd_pairing_sheet,
     cmd_pairings,
     cmd_standings,
@@ -41,7 +42,7 @@ def _args(**kwargs):
     option to the parser does not mean editing every construction in this file
     — which is exactly what --name-width would otherwise have cost.
     """
-    return argparse.Namespace(**{"after": None, "limit": None, "name_width": None, **kwargs})
+    return argparse.Namespace(**{"after": None, "limit": None, "name_width": None, "women": False, **kwargs})
 
 
 def test_shared_options_parse_before_the_subcommand():
@@ -127,6 +128,117 @@ class TestStandingsDistinguishALiveRoundFromASettledOne:
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("after round 5")
         assert not any(line.endswith("playing") for line in lines[1:])
+
+
+class TestHistory:
+    """One player's round-by-round record."""
+
+    def test_the_heading_tells_a_live_round_from_a_settled_one_too(self, british, monkeypatch, capsys):
+        # The same wrong instinct that shaped `standings`' heading (see
+        # `_how_far`) crept back in here as a hardcoded "through round N" --
+        # which reads as still in progress even after the round has settled.
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_history(_args(after=5, player="Mcshane, Luke J"))
+        assert capsys.readouterr().out.splitlines()[0].endswith("after round 5")
+        cmd_history(_args(after=6, player="Mcshane, Luke J"))
+        assert capsys.readouterr().out.splitlines()[0].endswith("during round 6: 46 of 52 results in")
+
+    def test_a_players_full_record(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_history(_args(after=5, player="Mcshane, Luke J"))
+        rows = capsys.readouterr().out.splitlines()[2:]
+        assert rows[:5] == [
+            "  1  B     1  Bowcott-Terry, Finlay        1",
+            "  2  W     1  Wells, Peter K               ½",
+            "  3  B     7  Ledger, Andrew J             ½",
+            "  4  W    10  Turner, Max N                1",
+            "  5  B     4  Pert, Richard G              1",
+        ]
+        assert rows[-1] == "Total: 4"
+
+    def test_matches_a_case_insensitive_substring(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_history(_args(after=5, player="mcshane"))
+        assert capsys.readouterr().out.splitlines()[0].startswith("Mcshane, Luke J")
+
+    def test_an_exact_name_wins_outright(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_history(_args(after=5, player="Mcshane, Luke J"))
+        assert capsys.readouterr().out.splitlines()[0].startswith("Mcshane, Luke J")
+
+    def test_no_match_is_an_error(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        assert cmd_history(_args(after=5, player="Not A Real Player")) == 2
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert "no player matching" in err
+
+    def test_a_blank_query_matches_nobody_not_everybody(self, british, monkeypatch, capsys):
+        """An empty needle is a substring of every name -- deliberately rejected
+        before that search runs, rather than reporting the whole field as an
+        ambiguous match."""
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        assert cmd_history(_args(after=5, player="  ")) == 2
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert "no player matching" in err
+
+    def test_more_than_one_match_is_an_error_not_a_guess(self, british, monkeypatch, capsys):
+        # "Kanyamarala, Tarun" and "Kanyamarala, Trisha" share this surname.
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        assert cmd_history(_args(after=5, player="kanyamarala")) == 2
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert "Kanyamarala, Tarun" in err
+        assert "Kanyamarala, Trisha" in err
+
+    def test_a_round_with_no_game_reads_as_a_dash_not_a_crash(self, british, monkeypatch, capsys):
+        """Round 6 has byes and unpaired players -- see `_STANDING_IN`."""
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_history(_args(after=6, player="Mcshane, Luke J"))
+        rows = capsys.readouterr().out.splitlines()[2:-1]
+        assert all(re.match(r"^\s*\d+\s+[WB-]\s+\d*\s+\S", row) for row in rows)
+
+    def test_a_bye_shows_its_actual_value_not_just_the_word(self, frome_round_one, monkeypatch, capsys):
+        """Standings can get away with the bare word "bye" because the total
+        already carries its value -- but history lays a whole season out row
+        by row, where a full point and a half point would otherwise look
+        identical. Norris, Zack took a requested (half-point) bye in round 1."""
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: frome_round_one)
+        cmd_history(_args(after=1, player="Norris, Zack"))
+        rows = capsys.readouterr().out.splitlines()[2:]
+        assert rows[0].endswith("bye (½)")
+
+
+class TestWomensStandings:
+    """--women narrows the table to players the starting-rank list marks as women."""
+
+    def test_only_women_are_listed(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        women = {name for name, p in british.players.items() if (p.sex or "").lower() == "w"}
+        assert women, "fixture no longer marks any player as a woman"
+        cmd_standings(_args(after=5, women=True))
+        rows = capsys.readouterr().out.splitlines()[2:]
+        assert len(rows) == len(women)
+        assert all(any(name in row for name in women) for row in rows)
+
+    def test_ranked_among_themselves_not_the_whole_field(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        cmd_standings(_args(after=5, women=True))
+        rows = capsys.readouterr().out.splitlines()[2:]
+        assert [int(row.split()[0]) for row in rows] == list(range(1, len(rows) + 1))
+
+    def test_an_event_with_no_such_column_is_an_error_not_an_empty_table(
+        self, frome_round_one, monkeypatch, capsys
+    ):
+        # An empty table would read as "no women entered", which is exactly
+        # backwards for the women's-prize case this flag exists for when what
+        # actually happened is that the event publishes no sex column at all.
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: frome_round_one)
+        assert cmd_standings(_args(after=1, women=True)) == 2
+        out, err = capsys.readouterr()
+        assert out == ""
+        assert "no player" in err and "marked as a woman" in err
 
 
 class TestPairings:
@@ -301,7 +413,7 @@ class TestLimit:
         cmd_standings(_args(after=5, limit=3))
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].endswith("after round 5")
-        assert len(lines) == 5  # heading, three players, and the tally
+        assert len(lines) == 6  # title, column heading, three players, and the tally
         assert lines[-1] == "… and 105 more"
 
     def test_nothing_is_said_when_nothing_is_left_out(self, british, monkeypatch, capsys):

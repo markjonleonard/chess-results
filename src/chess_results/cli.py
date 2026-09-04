@@ -14,7 +14,7 @@ from typing import TypeVar
 from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
 from .client import ChessResults, TournamentError
-from .models import Pairing, Play, PlayerRef, PlayKind
+from .models import Pairing, Play, Player, PlayerRef, PlayKind
 from .tournament import Tournament
 
 T = TypeVar("T")
@@ -38,6 +38,7 @@ examples:
   chess-results pairings 1452107              the latest round's boards and results
   chess-results pairings 1452107 6            round 6's boards and results
   chess-results colours 1452107               colour and float history, and who is due what
+  chess-results history 1452107 "Evans, Wendy" one player's round-by-round record
   chess-results unfinished 1452107            games in the latest round with no result yet
   chess-results pairing-sheet 1452107         the latest round as a page to print
   chess-results pairing-sheet 1452107 6       round 6, with its results filled in
@@ -46,6 +47,17 @@ examples:
   chess-results standings 1452107 --limit 10  just the top ten, heading kept
 
 Run "chess-results <command> --help" for a command's own options.
+
+predicting the next round's pairings:
+  Not one of the commands above -- it needs a pairing engine of your own, and
+  none of this CLI's output formats are meant to feed one. See
+  examples/predict_next_round.py in the source distribution, which writes FIDE
+  TRF(x) and hands it to bbpPairings (https://github.com/BieremaBoyzProgramming/bbpPairings):
+
+    python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe
+
+  Full details, including how to fill in an unfinished game's result with
+  --assume, are in the README's "Predicting the next round" section.
 """
 
 
@@ -154,6 +166,18 @@ def _and_the_rest(dropped: int) -> None:
         print(f"… and {dropped} more")
 
 
+def _is_woman(player: Player) -> bool:
+    """Whether the starting-rank list marked this player as a woman.
+
+    Compared case-insensitively: most events use ``"w"``, but Warsaw marks men
+    as ``"M"`` instead, so an event's other convention might just as well be
+    ``"W"``. An event that publishes no such column marks nobody, which
+    ``cmd_standings`` treats as an error rather than an empty table -- see
+    there.
+    """
+    return (player.sex or "").lower() == "w"
+
+
 def _state(play: Play | None) -> str:
     """What a player is doing in the round being reported on."""
     if play is None:
@@ -187,6 +211,20 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
 def cmd_standings(args: argparse.Namespace) -> int:
     event = _fetch(args)
+    if args.women and not any(_is_woman(p) for p in event.players.values()):
+        # An empty table here reads as "no women entered" -- exactly backwards
+        # for the women's-prize case this flag exists for, if what actually
+        # happened is that this event's starting-rank list carries no sex
+        # column at all. Many domestic congresses do not; the British and Arad
+        # do. The two are indistinguishable from the data alone when nobody is
+        # marked, so say so plainly rather than print a table that looks final.
+        print(
+            f"chess-results: no player in {event.name or event.id} is marked as a woman "
+            "on the starting-rank list -- either none are entered, or this event "
+            "does not publish that column at all",
+            file=sys.stderr,
+        )
+        return 2
     after = _round(args.after, event)
     print(f"{event.name or event.id} — {_how_far(event, after)}")
     # Mid-round the scores are not comparable -- some include this round, some do
@@ -196,7 +234,15 @@ def cmd_standings(args: argparse.Namespace) -> int:
     # Nothing follows the name unless the round is live, so a settled table has
     # nothing to knock out of line and its names are left whole.
     width = _STANDINGS_PREFIX + _name_width(args.name_width, _STANDINGS_FIXED)
-    players, dropped = _limited(event.ranking_order(after), args.limit)
+    heading = f"{'Rk':>4} {'Pts':>4} {'No':>4}  {'':<3} Name"
+    print(f"{_fit(heading, width)} {'This round' if live else ''}".rstrip())
+    ranked = event.ranking_order(after)
+    if args.women:
+        # Ranked among themselves, not by their place in the whole field: a
+        # women's prize table starts back at 1st, it does not skip to wherever
+        # the first woman fell overall.
+        ranked = [p for p in ranked if _is_woman(p)]
+    players, dropped = _limited(ranked, args.limit)
     for rank, player in enumerate(players, start=1):
         line = (
             f"{rank:>4} {_points(player.score(after)):>4} "
@@ -338,6 +384,85 @@ _STANDINGS_PREFIX = 4 + 4 + 4 + 3 + 5
 _STANDINGS_FIXED = _STANDINGS_PREFIX + len("not paired") + 1
 
 
+def _find_player(event: Tournament, query: str) -> list[Player]:
+    """Every player ``query`` could mean: an exact name, or else a case-insensitive substring.
+
+    ``event.players`` is keyed by the exact "Surname, Forename" string
+    chess-results publishes, which nobody types from memory. An exact hit wins
+    outright, so a full name that happens to also be a substring of a longer
+    one -- unlikely, but names collide -- is never shadowed by it. Anything
+    other than one match is for the caller to report: silently picking the
+    wrong Wendy is worse than asking again.
+    """
+    if query in event.players:
+        return [event.players[query]]
+    needle = query.strip().lower()
+    if not needle:
+        # An empty needle is a substring of every name, which would turn a
+        # blank query into "the whole field" rather than "no player given".
+        return []
+    return [p for name, p in event.players.items() if needle in name.lower()]
+
+
+def _history_heading() -> str:
+    return f"{'Rd':>3}  {'Cl':<2}  {'Bd':>3}  Opponent"
+
+
+def _history_row(rnd: int, play: Play | None) -> str:
+    """One line of a player's round-by-round history, up to the opponent name."""
+    colour = play.colour.value.upper() if play and play.colour else "-"
+    board = play.board if play and play.board else ""
+    opponent = (play.opponent or "") if play else ""
+    return f"{rnd:>3}  {colour:<2}  {board!s:>3}  {opponent}"
+
+
+#: A history row before the opponent's name: round, colour, board, and their separators.
+_HISTORY_PREFIX = len(_history_heading()) - len("Opponent")
+
+#: A round with no game at all adds the result column, and "not paired" is its longest.
+_HISTORY_FIXED = _HISTORY_PREFIX + len("not paired") + 1
+
+
+def _history_result(play: Play | None) -> str:
+    """Like `_state`, but a bye spells out what it was actually worth.
+
+    `_state` prints every bye as plain "bye" -- fine on `standings`, where the
+    player's total already carries the value -- but `history` lays a whole
+    season out side by side, so a full-point and a half-point bye would
+    otherwise look identical on two different rows of the same table.
+    """
+    if play is not None and play.kind in (PlayKind.PAIRING_BYE, PlayKind.REQUESTED_BYE):
+        return f"bye ({_points(play.score)})"
+    return _state(play)
+
+
+def cmd_history(args: argparse.Namespace) -> int:
+    """Print one player's round-by-round record: colour, opponent, board, result."""
+    event = _fetch(args)
+    matches = _find_player(event, args.player)
+    if len(matches) != 1:
+        if matches:
+            names = ", ".join(sorted(p.name for p in matches))
+            print(f"chess-results: {args.player!r} matches more than one player: {names}", file=sys.stderr)
+        else:
+            print(
+                f"chess-results: no player matching {args.player!r} in {event.name or event.id}",
+                file=sys.stderr,
+            )
+        return 2
+    player = matches[0]
+    after = _round(args.after, event)
+    print(f"{player.name} — round-by-round history, {_how_far(event, after)}")
+    width = _name_width(args.name_width, _HISTORY_FIXED)
+    total = _HISTORY_PREFIX + width
+    print(f"{_fit(_history_heading(), total)} Result")
+    for rnd in range(1, after + 1):
+        play = player.play(rnd)
+        print(f"{_fit(_history_row(rnd, play), total)} {_history_result(play)}".rstrip())
+    print(f"Total: {_points(player.score(after))}")
+    return 0
+
+
 def cmd_colours(args: argparse.Namespace) -> int:
     """Print the colour and float history that drives the next round's pairings."""
     event = _fetch(args)
@@ -458,7 +583,7 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
         default=default(None),
         metavar="ROUND",
         help="report on this round rather than the latest; clamped to the "
-        "rounds played (standings, colours and pairings)",
+        "rounds played (standings, colours, history and pairings)",
     )
     group.add_argument(
         "--no-crosstable",
@@ -535,6 +660,16 @@ COMMANDS = (
         "are due next — the history a Swiss pairing engine works from.",
     ),
     (
+        "history",
+        (),
+        cmd_history,
+        "print one player's round-by-round record",
+        "One player's colour, opponent, board and result for every round up to "
+        "the one asked for. Matched by exact name or any case-insensitive "
+        'substring of it — "evans" finds "Evans, Wendy" as well as the full '
+        "name does, but is an error instead of a guess if it finds more than one.",
+    ),
+    (
         "unfinished",
         (),
         cmd_unfinished,
@@ -549,6 +684,7 @@ USAGE_ARGS = {
     "dump": "[-o FILE] <tournament-id>",
     "pairings": "<tournament-id> [<round>]",
     "pairing-sheet": "[--pairs FILE] [-o FILE] <tournament-id> [<round>]",
+    "history": "<tournament-id> <player>",
 }
 
 
@@ -582,30 +718,51 @@ def build_parser() -> argparse.ArgumentParser:
         )
         if name == "dump":
             child.add_argument("-o", "--output", metavar="FILE", help="write JSON here instead of stdout")
-        elif name != "pairing-sheet":
-            # Off dump because truncated JSON is not JSON, and off the sheet
-            # because a pairing sheet missing its last boards is worse than no
-            # sheet: the players on them go looking for a board that is not
-            # there. Left off the top-level parser for the same reason, so
-            # `dump --limit` is an error rather than a flag that quietly does
-            # nothing.
+        else:
+            if name not in ("pairing-sheet", "history"):
+                # Off dump because truncated JSON is not JSON, off the sheet
+                # because a pairing sheet missing its last boards is worse than
+                # no sheet: the players on them go looking for a board that is
+                # not there, and off history because one player has no rows to
+                # cut -- its length is the round count, not the field size.
+                # Left off the top-level parser for the same reason, so
+                # `dump --limit` is an error rather than a flag that quietly
+                # does nothing.
+                child.add_argument(
+                    "--limit",
+                    type=int,
+                    metavar="ROWS",
+                    help="print at most this many rows, then say how many were left out",
+                )
+            if name != "pairing-sheet":
+                # Off dump for the same reason as --limit: JSON has no columns
+                # to align, and clipping a name there would corrupt data rather
+                # than tidy a table. The sheet keeps a --name-width of its own,
+                # since it is sized for paper rather than for the terminal.
+                child.add_argument(
+                    "--name-width",
+                    type=int,
+                    metavar="CHARS",
+                    help=f"room to give a player's name before clipping it "
+                    f"(default {DEFAULT_NAME_WIDTH}, narrowed to fit the terminal; "
+                    f"anything under {MIN_NAME_WIDTH} is treated as {MIN_NAME_WIDTH})",
+                )
+        if name == "standings":
             child.add_argument(
-                "--limit",
-                type=int,
-                metavar="ROWS",
-                help="print at most this many rows, then say how many were left out",
+                "--women",
+                action="store_true",
+                help="only players the starting-rank list marks as women, "
+                "ranked among themselves rather than the whole field -- for a "
+                "women's prize table. An error, not an empty table, if this "
+                "event's starting-rank list marks nobody as a woman -- many "
+                "domestic congresses publish no such column at all.",
             )
-            # Alongside --limit, and off dump for the same reason: JSON has no
-            # columns to align, and clipping a name there would corrupt data
-            # rather than tidy a table. The sheet keeps a --name-width of its
-            # own, since it is sized for paper rather than for the terminal.
+        if name == "history":
             child.add_argument(
-                "--name-width",
-                type=int,
-                metavar="CHARS",
-                help=f"room to give a player's name before clipping it "
-                f"(default {DEFAULT_NAME_WIDTH}, narrowed to fit the terminal; "
-                f"anything under {MIN_NAME_WIDTH} is treated as {MIN_NAME_WIDTH})",
+                "player",
+                metavar="<player>",
+                help="a player's name, or any case-insensitive part of it, "
+                'e.g. "Evans, Wendy" or just "evans"',
             )
         if name in ("pairings", "pairing-sheet"):
             child.add_argument(

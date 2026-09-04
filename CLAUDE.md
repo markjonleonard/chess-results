@@ -148,10 +148,28 @@ every player in the event and buries a genuine disagreement.
 
 Where both views *do* have a round, `add_crosstable` compares them and records any
 contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Nothing has
-ever tripped it — the two come from the same upload — so treat a hit as a parser bug, not as
-chess-results.com being inconsistent. Note that one view holding a value the other lacks is
-deliberately not a contradiction: the crosstable is often the fresher capture, and a round
-page carries no result until the game finishes.
+ever tripped that comparison — the two come from the same upload — so treat a hit there as
+a parser bug, not as chess-results.com being inconsistent. Note that one view holding a
+value the other lacks is deliberately not a contradiction: the crosstable is often the
+fresher capture, and a round page carries no result until the game finishes.
+
+**`check_published_totals` is a different comparison, and the newest round's byes can trip
+it — durably, not just while live.** It checks the crosstable against itself —
+round-by-round cells summed against that row's own `Pts.`/`TB1` column — so unlike the
+round-page comparison above it needs no second view to disagree with. Caught on tnr1484241
+(2nd Swindon Congress, Minor section, 2026-08-29): two players who had just taken a
+round-3 requested bye showed cells summing higher than the row's own published total —
+`1b½ 8w0 -½` sums to 1.0, but `Pts.` read `0,5`, with `Rk.` matching the stale figure. The
+first catch was mid-round (29 of 30 results in); a second, fresh, uncached fetch once every
+round-3 result was in showed the identical stale `0,5` — so finishing the round is not what
+fixes this, and the theory that it would was wrong. Every other requested bye in the same
+tournament, all from rounds 1 and 2, sums correctly; only the two in the round chess-results
+still treats as current are wrong, which points at the same trigger already documented above
+for byes vanishing from a superseded round's page — the *next* round being paired — rather
+than at anything about halves or byes generally. Unconfirmed, since round 4 had not been
+paired at either check: re-check once it is. This does not corrupt anything downstream
+either way: `Tournament`'s assembled score comes from the round page, not from this total,
+so `standings` and `pairings` were both already correct while the warning fired.
 
 Searched for upstream attribution and found none: [chess-results.com](https://chess-results.com) has no public
 issue tracker or changelog, and the [Swiss-Manager](https://swiss-manager.at) manuals do not mention it. So this is observed,
@@ -290,6 +308,25 @@ So it is fetched with `SETTLED_TTL` and `refresh=True` is passed when
 Net effect: a finished tournament fetches the crosstable once and then never again; a live
 one behaves exactly as before. Do not "simplify" this back to a flat TTL.
 
+**The starting-rank list gets the same "while it is still live" refetch, for a reason found
+the hard way.** It was assumed fixed once an event began -- the "1 day" above -- because
+starting numbers are supposed to be assigned once and never move. **Caught wrong on
+tnr1484241** (2nd Swindon Congress, Minor section, 2026-08-30): an arbiter moved one
+misplaced entry mid-event, and the sixteen players below it all shifted down one seat.
+`add_crosstable` joins entirely by starting number (`tournament.py`'s `by_number` map), so a
+starting-rank page cached from before the renumbering went on attributing every shifted
+player's crosstable row to whoever now held their *old* number -- 201 false "disagreements"
+where a fresh fetch of the same tournament found the true 3. It is not only the crosstable
+join that a stale number corrupts: `ranking_order`, the pairing sheet's board assignment and
+the TRF export all read `Player.start_no` too. `client.tournament()` now refetches the
+starting rank with `refresh=True` whenever the real tournament might still be live: its own
+last fetched round is unfinished, *or* `rounds=` bounded the scrape, in which case
+`event.unfinished()` cannot see far enough to say either way and the honest assumption is
+that it might be. That is not `crosstable_is_stale()` itself -- its round-coverage branch has
+no equivalent here, there being no round-by-round coverage to fall behind on -- but the same
+reasoning as its liveness branch: nothing here can drift once an event has settled, only
+while it has not, or while a caller has chosen not to look far enough to tell.
+
 **requests-cache fixes expiry at write time**, which shapes both of the above. A round
 cached while live keeps the 5-minute lifetime even once `round_ttl` starts asking for 30
 days, so it used to be refetched on the old schedule purely to be rewritten. The
@@ -327,77 +364,6 @@ because anything needs it: every module carries `from __future__ import annotati
 there is no 3.11+ stdlib use. Raising the floor would drop a support claim without
 simplifying any code. If that claim is ever dropped, change `requires-python`, the
 classifiers and the matrix together.
-
-## Releasing
-
-Published to PyPI as `chess-results`. Both indexes authenticate by **Trusted Publishing**:
-GitHub mints a short-lived OIDC token the index exchanges for upload rights, so there is no
-API token in repository secrets and none on a laptop, and the upload acts as the repository
-rather than as a user. Never add a token; there is nowhere to put one.
-
-- `.github/workflows/publish.yml` — TestPyPI, manual trigger. Rehearse here on a throwaway
-  `0.1.0.devN`.
-- `.github/workflows/release.yml` — PyPI, on a `v*` tag. Runs the suite first (a tag push
-  matches neither of CI's triggers, so without it a release could ship untested code), then
-  refuses to upload unless the tag equals the built version, compared after PEP 440
-  normalisation. So a forgotten `__version__` bump fails the build rather than shipping.
-
-To release: set `__version__`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
-
-Each index needs its own trusted publisher, and the two differ in **two** of five fields —
-copying one across is the easy mistake:
-
-| | TestPyPI | PyPI |
-| --- | --- | --- |
-| Project / Owner / Repository | `chess-results` / `markjonleonard` / `chess-results` | same |
-| Workflow | `publish.yml` | `release.yml` |
-| Environment | `testpypi` | `pypi` |
-
-A project that does not exist yet takes a *pending* publisher, which the first upload
-converts into an ordinary one.
-
-**Verifying an upload needs a throwaway venv.** The editable install already satisfies
-`chess-results` in the global pyenv, so pip reports "already satisfied" and never contacts
-the index — it looks like a pass and tests nothing. From TestPyPI the fallback index is
-required too, requests, beautifulsoup4 and requests-cache not being mirrored there:
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ chess-results
-```
-
-Test the sdist as well as the wheel (`--no-binary chess-results`); only that path exercises
-building from source.
-
-## Prose
-
-The documentation is linted too, by [Vale](https://vale.sh), in CI's `docs` job.
-Two things it needs are fetched rather than committed — style packages, which
-`vale sync` restores from `.vale.ini`, and the en_GB Hunspell dictionary, which
-is LGPL and does not belong vendored into an MIT repository:
-
-```bash
-brew install vale
-vale sync
-mkdir -p .vale/styles/config/dictionaries
-for f in en_GB.aff en_GB.dic; do
-  curl -sSfL -o ".vale/styles/config/dictionaries/$f" \
-    "https://raw.githubusercontent.com/LibreOffice/dictionaries/master/en/$f"
-done
-vale --minAlertLevel=error $(git ls-files '*.md')
-```
-
-Lint the markdown **git tracks**, as CI does, rather than `vale .` — otherwise it
-reads build artefacts, Vale's own downloaded documentation and any personal notes
-in the checkout.
-
-`British.Spelling` replaces Vale's bundled en_US check, so `color`, `behavior`
-and `recognized` are errors here. Add real jargon to
-`.vale/styles/config/vocabularies/chess-results/accept.txt`, which takes regular
-expressions, rather than weakening the rule. `write-good.E-Prime` is off because
-it bans the verb "to be"; `Passive` is off because this prose describes what a
-website does to us. Errors fail CI, warnings do not — a hedge is sometimes the
-honest word.
 
 ## Tests
 

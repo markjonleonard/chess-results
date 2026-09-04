@@ -6,13 +6,32 @@ the field contains byes and unpaired players, and the tournament publishes no
 starting-rank columns on its pairing pages.
 """
 
-from chess_results.models import Colour, PlayKind, Preference
+from chess_results.models import Colour, PlayKind, Preference, StartingRankEntry
+from chess_results.tournament import Tournament
 
 
 class TestPlayerHistories:
     def test_starting_numbers_come_from_the_starting_rank_list(self, british):
         assert british.players["Mcshane, Luke J"].start_no == 1
         assert british.players["Bazakutsa, Svyatoslav"].start_no == 6
+
+    def test_a_second_starting_rank_overwrites_the_first(self):
+        """A live event can renumber players -- an arbiter moving a misplaced
+        entry, say -- so a later starting-rank fetch must win outright, not
+        merely fill in what the first one left blank.
+
+        Caught live on tnr1484241 (2nd Swindon Congress, Minor section,
+        2026-08-30): 16 players shifted down one seat mid-event, and a
+        crosstable joined against the old numbering attributed a shifted
+        player's rows to whoever now held their *old* number, producing 201
+        false "disagreements" from what a fresh fetch reported as 3.
+        """
+        event = Tournament(id="x")
+        event.add_starting_rank([StartingRankEntry(start_no=31, name="Matilal, Tamal")])
+        assert event.players["Matilal, Tamal"].start_no == 31
+        event.add_starting_rank([StartingRankEntry(start_no=43, name="Matilal, Tamal", sex="w")])
+        assert event.players["Matilal, Tamal"].start_no == 43
+        assert event.players["Matilal, Tamal"].sex == "w"
 
     def test_colour_history(self, british):
         mcshane = british.players["Mcshane, Luke J"]

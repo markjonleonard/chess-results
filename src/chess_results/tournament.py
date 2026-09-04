@@ -57,6 +57,7 @@ class Tournament:
             p.title = p.title or e.title
             p.federation = e.federation
             p.fide_id = e.fide_id
+            p.sex = e.sex
 
     def add_round(self, pairings: list[Pairing]) -> None:
         if not pairings:

@@ -226,6 +226,11 @@ class Player:
     title: str | None = None
     federation: str | None = None
     fide_id: str | None = None
+    #: The starting-rank list's own marker for a woman, when it publishes one
+    #: at all -- ``"w"`` on most events, but Warsaw marks men as ``"M"`` instead
+    #: and may capitalise the other way too, so callers should compare
+    #: case-insensitively rather than against a single literal.
+    sex: str | None = None
     #: Assigned to a fixed board number for the whole event.
     fixed_board: bool = False
     plays: list[Play] = field(default_factory=list)

@@ -389,6 +389,7 @@ class ChessResults:
 
         wanted = range(1, rounds + 1) if isinstance(rounds, int) else rounds
         previous: object = None
+        truncated = False
         for rnd in wanted or range(1, MAX_ROUNDS + 1):
             page = self.fetch(
                 tournament_id,
@@ -422,6 +423,30 @@ class ChessResults:
                 break
             previous = signature
             event.add_round(pairings)
+        else:
+            # The loop ran out of ``wanted`` without chess-results itself ever
+            # saying "no more rounds" -- i.e. ``rounds=`` (an int or a range,
+            # either one a caller-chosen bound) cut this scrape off, not the
+            # real tournament. event.unfinished() only sees what we fetched,
+            # so on its own it would call a tournament "settled" that is
+            # still live past the point we stopped looking.
+            truncated = rounds is not None
+
+        if event.rounds and (truncated or event.unfinished()):
+            # Starting numbers are supposed to be fixed once an event begins,
+            # but a live one can still have them corrected -- an arbiter
+            # moving a misplaced entry, say, which renumbers everyone below
+            # it. add_crosstable joins entirely by starting number, so a stale
+            # cached copy of this page then attributes a shifted player's
+            # crosstable row to whoever now holds their *old* number, and
+            # ranking_order, the pairing sheet's board assignment and the TRF
+            # export all inherit the wrong number too. Refetched whenever the
+            # real tournament might still be live -- its own latest round is
+            # unfinished, or ``rounds=`` means we cannot tell -- for the same
+            # reason the crosstable is: nothing here can drift once an event
+            # has settled, only while it has not.
+            html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL, refresh=True)
+            event.add_starting_rank(parse_starting_rank(html))
 
         if crosstable and event.rounds:
             # Fetched once and parsed twice: the round-by-round cells, and the
