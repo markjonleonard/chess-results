@@ -36,6 +36,7 @@ from pathlib import Path
 
 from chess_results import ChessResults
 from chess_results.models import PlayKind
+from chess_results.tournament import Tournament
 from chess_results.trf import to_trf
 
 
@@ -57,7 +58,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def field(event, rnd: int) -> set[str]:
+def field(event: Tournament, rnd: int) -> set[str]:
     """Who actually occupied round ``rnd``, byes included.
 
     Taken from the reconciled histories rather than the round page, which may
@@ -70,7 +71,7 @@ def field(event, rnd: int) -> set[str]:
     }
 
 
-def published(event, rnd: int) -> tuple[set[tuple[str, str]], str | None]:
+def published(event: Tournament, rnd: int) -> tuple[set[tuple[str, str]], str | None]:
     """The (white, black) pairs and bye recipient as the arbiter published them."""
     pairs: set[tuple[str, str]] = set()
     bye = None
@@ -80,12 +81,13 @@ def published(event, rnd: int) -> tuple[set[tuple[str, str]], str | None]:
                 bye = player.name
     for pairing in event.rounds[rnd]:
         if pairing.kind is PlayKind.GAME:
+            assert pairing.black is not None, "a GAME pairing always has a black player"
             pairs.add((pairing.white.name, pairing.black.name))
     return pairs, bye
 
 
 def predict(
-    event, after: int, engine: str, total_rounds: int | None, withdrawn: set[str]
+    event: Tournament, after: int, engine: str, total_rounds: int | None, withdrawn: set[str]
 ) -> tuple[set[tuple[str, str]], str | None]:
     trf = to_trf(event, after=after, total_rounds=total_rounds, withdrawn=withdrawn)
     trf_path = Path(tempfile.mkstemp(suffix=".trf")[1])
@@ -113,7 +115,13 @@ def predict(
     return pairs, bye
 
 
-def report(label, predicted, predicted_bye, actual, actual_bye) -> int:
+def report(
+    label: str,
+    predicted: set[tuple[str, str]],
+    predicted_bye: str | None,
+    actual: set[tuple[str, str]],
+    actual_bye: str | None,
+) -> int:
     exact = predicted & actual
     as_sets_pred = {frozenset(p) for p in predicted}
     as_sets_actual = {frozenset(p) for p in actual}

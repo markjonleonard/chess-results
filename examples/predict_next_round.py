@@ -25,6 +25,7 @@ from pathlib import Path
 from chess_results import ChessResults
 from chess_results.models import PlayKind
 from chess_results.sheet import read_engine_pairs, render, sheet_from_pairs
+from chess_results.tournament import Tournament
 from chess_results.trf import to_trf
 
 
@@ -69,11 +70,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def apply_assumptions(event, assumptions: dict[str, float]) -> None:
+def apply_assumptions(event: Tournament, assumptions: dict[str, float]) -> None:
     """Fill in results for games still in progress."""
     for pairing in event.rounds[event.last_round]:
         if pairing.kind is not PlayKind.GAME or pairing.white_score is not None:
             continue
+        assert pairing.black is not None, "a GAME pairing always has a black player"
         white, black = pairing.white.name, pairing.black.name
         if white in assumptions:
             w = assumptions[white]
@@ -85,8 +87,11 @@ def apply_assumptions(event, assumptions: dict[str, float]) -> None:
                 f"{white} vs {black}. Decide it with --assume."
             )
         pairing.white_score, pairing.black_score = w, 1.0 - w
-        event.players[white].play(event.last_round).score = w
-        event.players[black].play(event.last_round).score = 1.0 - w
+        white_play = event.players[white].play(event.last_round)
+        black_play = event.players[black].play(event.last_round)
+        assert white_play is not None and black_play is not None, "both just played this round"
+        white_play.score = w
+        black_play.score = 1.0 - w
 
 
 BBPPAIRINGS = "https://github.com/BieremaBoyzProgramming/bbpPairings"

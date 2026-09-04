@@ -23,7 +23,7 @@ pytest tests/test_tournament.py::TestStandings::test_scoregroups_are_ordered_hig
 
 ruff check .                                # lint (config in pyproject.toml)
 ruff format .                               # formatter is adopted; keep it clean
-mypy --strict src/chess_results             # clean, and CI enforces it — keep it that way
+mypy --strict src/chess_results examples    # clean, and CI enforces it — keep it that way
 ```
 
 Repository, distribution and import name all agree: `chess-results` / `chess-results` /
@@ -342,9 +342,9 @@ default.
 ## CI
 
 `.github/workflows/ci.yml`, on push to `main`, every pull request and `workflow_dispatch`.
-`lint` runs `ruff check`, `ruff format --check` and `mypy --strict` on 3.13; `test` runs
-`pytest` across 3.10-3.13 with `fail-fast: false`. No secrets and no network allowance --
-the suite is fixtures only.
+`lint` runs `ruff check`, `ruff format --check` and `mypy --strict` (the last against both
+`src/chess_results` and `examples`) on 3.13; `test` runs `pytest` across 3.10-3.13 with
+`fail-fast: false`. No secrets and no network allowance -- the suite is fixtures only.
 
 **The dev extra is unpinned on purpose, so expect CI to break without a commit.**
 `ruff>=0.5` and `mypy>=1.8` mean CI resolves to the newest release every run, and a new
