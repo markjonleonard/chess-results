@@ -6,7 +6,7 @@ the field contains byes and unpaired players, and the tournament publishes no
 starting-rank columns on its pairing pages.
 """
 
-from chess_results.models import Colour, PlayKind, Preference, StartingRankEntry
+from chess_results.models import Colour, Play, PlayKind, Preference, StartingRankEntry
 from chess_results.tournament import Tournament
 
 
@@ -164,3 +164,69 @@ class TestLikelyWithdrawn:
         assert any(
             p.kind is PlayKind.REQUESTED_BYE for pl in frome_round_one.players.values() for p in pl.plays
         )
+
+
+class TestPerformanceRating:
+    """FIDE Title Regulations 1.4.8: Rp = Ra + dp (verified against
+    handbook.fide.com/chapter/B012024, 2026-08-30)."""
+
+    def test_matches_a_hand_worked_example(self, british):
+        # Mcshane's first five rounds: 1, ½, ½, 1, 1 against opponents rated
+        # 2232, 2313, 2312, 2273 and 2410 -- average 2308.0, 80% score, dp(80)=240.
+        assert british.performance_rating("Mcshane, Luke J", after=5) == 2548
+
+    def test_an_unrated_opponent_counts_as_1400(self):
+        event = Tournament(id="x")
+        event.player("Me").rating = 2000
+        event.player("Opponent")  # left unrated, the default
+        event.player("Me").plays.append(
+            Play(round=1, kind=PlayKind.GAME, colour=Colour.WHITE, opponent="Opponent", score=1.0)
+        )
+        # A 100% score is "necessarily indeterminate" per 1.4.9 but shown
+        # notionally as dp=800; Ra is the unrated opponent's assumed 1400.
+        assert event.performance_rating("Me") == 1400 + 800
+
+    def test_a_published_rating_of_zero_also_counts_as_unrated(self):
+        """chess-results prints an unrated player's Rtg as the literal digit
+        "0", not a blank cell -- caught on tnr1484241 (2nd Swindon Congress,
+        Minor section, 2026-08-30), where several players carry Rtg 0 while
+        the column is populated for everyone else. Player.rating stores that
+        0 verbatim, so this must not be read as a real rating of zero."""
+        event = Tournament(id="x")
+        event.player("Me").rating = 2000
+        event.player("Opponent").rating = 0
+        event.player("Me").plays.append(
+            Play(round=1, kind=PlayKind.GAME, colour=Colour.WHITE, opponent="Opponent", score=1.0)
+        )
+        assert event.performance_rating("Me") == 1400 + 800
+
+    def test_a_50_percent_score_matches_the_opponent_average_exactly(self):
+        event = Tournament(id="x")
+        event.player("Me").rating = 2000
+        event.player("A").rating = 2000
+        event.player("B").rating = 2200
+        event.player("Me").plays.extend(
+            [
+                Play(round=1, kind=PlayKind.GAME, colour=Colour.WHITE, opponent="A", score=1.0),
+                Play(round=2, kind=PlayKind.GAME, colour=Colour.BLACK, opponent="B", score=0.0),
+            ]
+        )
+        assert event.performance_rating("Me") == 2100  # dp(50) == 0
+
+    def test_a_bye_has_no_opponent_and_is_excluded(self):
+        """The same exclusion `Player.opponents` already makes -- with no game
+        left to count, there is nothing to compute a performance from."""
+        event = Tournament(id="x")
+        event.player("Me").plays.append(Play(round=1, kind=PlayKind.PAIRING_BYE, score=1.0))
+        assert event.performance_rating("Me") is None
+
+    def test_an_unfinished_game_is_excluded_until_it_has_a_result(self):
+        event = Tournament(id="x")
+        event.player("Opponent").rating = 2000
+        event.player("Me").plays.append(
+            Play(round=1, kind=PlayKind.GAME, colour=Colour.WHITE, opponent="Opponent", score=None)
+        )
+        assert event.performance_rating("Me") is None
+
+    def test_no_player_by_that_name_is_none_not_an_error(self):
+        assert Tournament(id="x").performance_rating("Nobody") is None

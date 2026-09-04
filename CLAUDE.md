@@ -147,11 +147,29 @@ exceed the rounds played, so a column that breaks that is refused and the functi
 every player in the event and buries a genuine disagreement.
 
 Where both views *do* have a round, `add_crosstable` compares them and records any
-contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Nothing has
-ever tripped that comparison — the two come from the same upload — so treat a hit there as
-a parser bug, not as chess-results.com being inconsistent. Note that one view holding a
-value the other lacks is deliberately not a contradiction: the crosstable is often the
-fresher capture, and a round page carries no result until the game finishes.
+contradiction in `Tournament.disagreements`; the CLI prints those to stderr. Note that one
+view holding a value the other lacks is deliberately not a contradiction: the crosstable is
+often the fresher capture, and a round page carries no result until the game finishes.
+
+**A live round's own bye can trip this comparison — treat that specific shape of hit as
+chess-results.com, not a parser bug.** Caught on tnr1484240 (2nd Swindon Chess Congress,
+Major section, 2026-08-31) mid-round 6 (8 of 28 results in): `kind` disagreed, `pairing_bye`
+from the round page against `unpaired` from the crosstable, for the one player floating down
+to the bye that round. A `--no-cache` re-fetch reproduced it identically, and the raw pages
+confirm it is not our parsers disagreeing with each other: `art=2&rd=6` lists the player's row
+as `bye`, while `art=5`'s crosstable prints `-0` (not paired, no round-6 opponent) in the same
+player's round-6 cell. That is the same trigger already documented above and below for byes
+vanishing from a superseded round's page and for `check_published_totals` — the crosstable
+not yet reflecting the *current* round's bye, which only the next round being paired settles
+— surfacing through a third comparison now. Sibling section tnr1484241 hit the
+`check_published_totals` shape of it two days earlier, so this looks like a property of the
+congress's live rounds generally rather than one section's fluke. Still unconfirmed whether
+pairing round 7 clears it, for the same reason as below: nobody has stayed watching long
+enough. Narrow the "nothing has tripped this" claim to *every finished round* of every event
+in the suite, which remains true — this is a live-round-only failure mode. It does not
+corrupt anything downstream: `add_crosstable` only compares where the round page already has
+a play, never overwrites it, so `Jones, Michael R` still shows the correct `bye` in
+`standings` while the warning fires.
 
 **`check_published_totals` is a different comparison, and the newest round's byes can trip
 it — durably, not just while live.** It checks the crosstable against itself —
@@ -277,6 +295,16 @@ why this survived so long.
 and internationally at once prints `RtgI` and `RtgN` and no `Rtg`, which left every rating
 `None` — silently, an unrated player being a legitimate thing for a field to contain.
 `_RATING_LABELS` tries `Rtg`, then `RtgI`, then `RtgN`.
+
+**An unrated player's rating is not blank — it is the literal digit `0`.** Confirmed on
+tnr1484241 (2nd Swindon Congress, Minor section, 2026-08-30): several players carry `Rtg` 0
+while the column is populated for everyone else, so `_int()` parses it as `Player.rating = 0`
+rather than `None`. Nothing downstream should treat that `0` as a real rating — the FIDE
+performance-rating calculation in `Tournament.performance_rating` is the one consumer that
+would otherwise be badly wrong (an unrated opponent counting as rating 0 instead of the FIDE
+default of 1400 dragged one real player's figure from a true 1473 down to 913), so it treats a
+`0` the same as a missing rating rather than checking only `is not None`. Any future numeric
+use of `rating` needs the same care.
 
 **Redirects must be followed.** chess-results 302s the bare domain to a numbered mirror
 (S1/S2/S3), so every logical fetch is two HTTP requests. Relevant when counting cache hits.

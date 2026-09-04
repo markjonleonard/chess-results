@@ -154,7 +154,8 @@ class TestHistory:
             "  4  W    10  Turner, Max N                1",
             "  5  B     4  Pert, Richard G              1",
         ]
-        assert rows[-1] == "Total: 4"
+        assert rows[-2] == "Total: 4"
+        assert rows[-1] == "Performance: 2548"
 
     def test_matches_a_case_insensitive_substring(self, british, monkeypatch, capsys):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
@@ -196,7 +197,7 @@ class TestHistory:
         """Round 6 has byes and unpaired players -- see `_STANDING_IN`."""
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
         cmd_history(_args(after=6, player="Mcshane, Luke J"))
-        rows = capsys.readouterr().out.splitlines()[2:-1]
+        rows = capsys.readouterr().out.splitlines()[2:-2]
         assert all(re.match(r"^\s*\d+\s+[WB-]\s+\d*\s+\S", row) for row in rows)
 
     def test_a_bye_shows_its_actual_value_not_just_the_word(self, frome_round_one, monkeypatch, capsys):

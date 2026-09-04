@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
@@ -17,6 +18,126 @@ from .models import (
     PlayKind,
     StartingRankEntry,
 )
+
+
+def _round_half_up(value: float) -> int:
+    """Round to the nearest integer, 0.5 rounding up.
+
+    FIDE's own convention (Title Regulations 1.4.7, 1.4.9) for both the
+    average opponent rating and the score percentage in a performance-rating
+    calculation -- Python's own ``round`` uses banker's rounding instead,
+    which would round 0.5 down as often as up.
+    """
+    return math.floor(value + 0.5)
+
+
+#: FIDE Title Regulations 1.4.9: percentage score to rating difference,
+#: verified against handbook.fide.com/chapter/B012024 (2026-08-30). Symmetric
+#: about p=50 -> dp=0; a 0% or 100% score is "necessarily indeterminate" but
+#: shown notionally as ∓800/+800.
+_FIDE_DP_TABLE = {
+    100: 800,
+    99: 677,
+    98: 589,
+    97: 538,
+    96: 501,
+    95: 470,
+    94: 444,
+    93: 422,
+    92: 401,
+    91: 383,
+    90: 366,
+    89: 351,
+    88: 336,
+    87: 322,
+    86: 309,
+    85: 296,
+    84: 284,
+    83: 273,
+    82: 262,
+    81: 251,
+    80: 240,
+    79: 230,
+    78: 220,
+    77: 211,
+    76: 202,
+    75: 193,
+    74: 184,
+    73: 175,
+    72: 166,
+    71: 158,
+    70: 149,
+    69: 141,
+    68: 133,
+    67: 125,
+    66: 117,
+    65: 110,
+    64: 102,
+    63: 95,
+    62: 87,
+    61: 80,
+    60: 72,
+    59: 65,
+    58: 57,
+    57: 50,
+    56: 43,
+    55: 36,
+    54: 29,
+    53: 21,
+    52: 14,
+    51: 7,
+    50: 0,
+    49: -7,
+    48: -14,
+    47: -21,
+    46: -29,
+    45: -36,
+    44: -43,
+    43: -50,
+    42: -57,
+    41: -65,
+    40: -72,
+    39: -80,
+    38: -87,
+    37: -95,
+    36: -102,
+    35: -110,
+    34: -117,
+    33: -125,
+    32: -133,
+    31: -141,
+    30: -149,
+    29: -158,
+    28: -166,
+    27: -175,
+    26: -184,
+    25: -193,
+    24: -202,
+    23: -211,
+    22: -220,
+    21: -230,
+    20: -240,
+    19: -251,
+    18: -262,
+    17: -273,
+    16: -284,
+    15: -296,
+    14: -309,
+    13: -322,
+    12: -336,
+    11: -351,
+    10: -366,
+    9: -383,
+    8: -401,
+    7: -422,
+    6: -444,
+    5: -470,
+    4: -501,
+    3: -538,
+    2: -589,
+    1: -677,
+    0: -800,
+}
 
 
 @dataclass
@@ -227,6 +348,46 @@ class Tournament:
                 p.name,
             ),
         )
+
+    def performance_rating(self, name: str, after: int | None = None) -> int | None:
+        """A player's FIDE-standard rating performance for this tournament.
+
+        FIDE Title Regulations 1.4.8: ``Rp = Ra + dp``, where ``Ra`` is the
+        opponents' average rating (1.4.7, halves rounded up) and ``dp`` is read
+        off the percentage-score table in 1.4.9 (verified against
+        handbook.fide.com/chapter/B012024, 2026-08-30) -- a 0% or 100% score is
+        "necessarily indeterminate" there but shown notionally as ∓800/+800.
+        An unrated opponent counts as 1400 (1.4.6(4)) -- and chess-results
+        prints an unrated player's rating as the literal digit ``0``, not a
+        blank cell (confirmed on tnr1484241, 2026-08-30: several players carry
+        ``Rtg`` 0 despite the column being present for everyone else), so a
+        zero is treated as unrated too, not as a real rating of zero.
+
+        This is the everyday performance figure, not a norm submission -- FIDE
+        norms carry further eligibility rules (minimum games, rating floors,
+        anti-cheating provisions) this does not apply.
+
+        Byes and "not paired" rounds have no opponent and are excluded, same as
+        :meth:`Player.opponents`. ``None`` if the player has no game to count.
+        """
+        player = self.players.get(name)
+        if player is None:
+            return None
+        games = [
+            p
+            for p in player.plays
+            if p.opponent and p.score is not None and (after is None or p.round <= after)
+        ]
+        if not games:
+            return None
+        ratings = []
+        for p in games:
+            opponent = self.players.get(p.opponent) if p.opponent else None
+            ratings.append(opponent.rating if opponent and opponent.rating else 1400)
+        average_opponent = _round_half_up(sum(ratings) / len(ratings))
+        total_score = sum(p.score for p in games if p.score is not None)
+        percentage = max(0, min(100, _round_half_up(total_score / len(games) * 100)))
+        return average_opponent + _FIDE_DP_TABLE[percentage]
 
     def scoregroups(self, after: int | None = None) -> dict[float, list[Player]]:
         """Players grouped by score, highest first, each group in ranking order."""

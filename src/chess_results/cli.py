@@ -437,7 +437,7 @@ def _history_result(play: Play | None) -> str:
 
 
 def cmd_history(args: argparse.Namespace) -> int:
-    """Print one player's round-by-round record: colour, opponent, board, result."""
+    """Print one player's round-by-round record and FIDE performance rating."""
     event = _fetch(args)
     matches = _find_player(event, args.player)
     if len(matches) != 1:
@@ -460,6 +460,9 @@ def cmd_history(args: argparse.Namespace) -> int:
         play = player.play(rnd)
         print(f"{_fit(_history_row(rnd, play), total)} {_history_result(play)}".rstrip())
     print(f"Total: {_points(player.score(after))}")
+    performance = event.performance_rating(player.name, after)
+    if performance is not None:
+        print(f"Performance: {performance}")
     return 0
 
 
@@ -665,9 +668,10 @@ COMMANDS = (
         cmd_history,
         "print one player's round-by-round record",
         "One player's colour, opponent, board and result for every round up to "
-        "the one asked for. Matched by exact name or any case-insensitive "
-        'substring of it — "evans" finds "Evans, Wendy" as well as the full '
-        "name does, but is an error instead of a guess if it finds more than one.",
+        "the one asked for, plus their FIDE-standard rating performance for the "
+        "tournament. Matched by exact name or any case-insensitive substring of "
+        'it — "evans" finds "Evans, Wendy" as well as the full name does, but is '
+        "an error instead of a guess if it finds more than one.",
     ),
     (
         "unfinished",
