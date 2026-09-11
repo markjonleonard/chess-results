@@ -11,6 +11,15 @@ TRF(x) file and hands it to bbpPairings.
 Each --assume names a player in an unfinished game and the score they take
 (1, 0.5 or 0); their opponent takes the rest. Every unfinished game must be
 decided, because a pairing engine reads scores as fact.
+
+An event with no rounds played yet predicts round 1 from the starting rank
+alone, but needs --initial-color (white1 or black1) as well: bbpPairings can
+infer round 1's colour from any later round's colour history, but round 1 of
+an unstarted event has none to infer from and refuses to pair without it.
+
+    python predict_next_round.py 1489496 \
+        --engine ~/repos/other/bbpPairings/bbpPairings.exe \
+        --initial-color white1
 """
 
 from __future__ import annotations
@@ -22,8 +31,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-from chess_results import ChessResults
+from chess_results import ChessResults, TournamentNotStartedError
+from chess_results.cache import STARTING_RANK_TTL
+from chess_results.client import ART_STARTING_RANK
 from chess_results.models import PlayKind
+from chess_results.parse import parse_starting_rank, parse_tournament_name
 from chess_results.sheet import read_engine_pairs, render, sheet_from_pairs
 from chess_results.tournament import Tournament
 from chess_results.trf import to_trf
@@ -56,6 +68,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--total-rounds", type=int, help="rounds in the tournament (XXR)")
     parser.add_argument("--bye-value", type=float, default=1.0)
+    parser.add_argument(
+        "--initial-color",
+        choices=["white1", "black1"],
+        help="who gets white in round 1 (required when predicting round 1 of an "
+        "unstarted event; ignored otherwise, since later rounds already have "
+        "colours to infer from)",
+    )
     parser.add_argument("--trf", help="keep the generated TRF here")
     parser.add_argument(
         "--sheet",
@@ -136,9 +155,27 @@ def main(argv: list[str] | None = None) -> int:
         name, _, score = item.rpartition("=")
         assumptions[name.strip()] = float(score)
 
-    event = ChessResults().tournament(args.tournament_id, bye_value=args.bye_value)
+    client = ChessResults()
+    try:
+        event = client.tournament(args.tournament_id, bye_value=args.bye_value)
+    except TournamentNotStartedError:
+        if args.initial_color is None:
+            raise SystemExit(
+                f"tournament {args.tournament_id} has no played rounds; predicting "
+                "round 1 needs --initial-color white1|black1, since bbpPairings has "
+                "no colour history to infer it from"
+            ) from None
+        html = client.fetch(args.tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
+        event = Tournament(
+            id=str(args.tournament_id), name=parse_tournament_name(html), bye_value=args.bye_value
+        )
+        event.add_starting_rank(parse_starting_rank(html))
     print(f"{event.name} — {len(event.players)} players, {event.last_round} rounds scraped", file=sys.stderr)
-    apply_assumptions(event, assumptions)
+
+    if event.last_round:
+        apply_assumptions(event, assumptions)
+    elif assumptions:
+        print("warning: --assume is ignored predicting round 1, nothing has been played yet", file=sys.stderr)
 
     withdrawn = set(args.withdrawn)
     if not args.no_infer_withdrawals:
@@ -155,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
         event,
         total_rounds=args.total_rounds,
         withdrawn=withdrawn,
+        initial_color=args.initial_color if not event.last_round else None,
     )
     trf_path = Path(args.trf) if args.trf else Path(tempfile.mkstemp(suffix=".trf")[1])
     trf_path.write_text(trf)

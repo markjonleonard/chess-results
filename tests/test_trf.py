@@ -122,6 +122,44 @@ class TestRoundIsClamped:
             to_trf(played, after=99)
 
 
+@pytest.fixture(scope="module")
+def unstarted():
+    """Starting rank only -- no round has been played, as before round 1."""
+    event = Tournament(id="1452107", name="unstarted")
+    event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
+    return event
+
+
+class TestUnstartedTournament:
+    """Predicting round 1 needs a zero-round file, which used to be unreachable:
+    passing ``after=0`` explicitly hit the same floor that clamps an
+    out-of-range ``after`` up to the last played round, so it silently
+    produced a fake fully-absent round 1 instead of an empty one."""
+
+    def test_after_0_matches_the_default(self, unstarted):
+        assert to_trf(unstarted, after=0, total_rounds=9) == to_trf(unstarted, total_rounds=9)
+
+    def test_no_round_columns_are_written(self, unstarted):
+        text = to_trf(unstarted, total_rounds=9)
+        line = next(line for line in text.splitlines() if "Mcshane" in line)
+        assert len(line) <= 89  # the file ends at the score/rank columns, before round 1's
+
+    def test_xxr_reflects_total_rounds_not_a_fabricated_round(self, unstarted):
+        assert "XXR 9" in to_trf(unstarted, total_rounds=9)
+
+    def test_initial_color_is_written(self, unstarted):
+        text = to_trf(unstarted, total_rounds=9, initial_color="white1")
+        assert text.splitlines()[-1] == "XXC white1"
+
+    def test_initial_color_rejects_a_bad_value(self, unstarted):
+        with pytest.raises(TrfError, match="white1"):
+            to_trf(unstarted, total_rounds=9, initial_color="purple")
+
+    def test_initial_color_is_refused_once_a_round_exists(self, played):
+        with pytest.raises(TrfError, match="already has colours"):
+            to_trf(played, after=6, total_rounds=9, initial_color="white1")
+
+
 class TestNonStandardByeValues:
     """bbpPairings recomputes every score from the results and refuses a file
     whose totals disagree, so what a bye is worth has to be stated."""

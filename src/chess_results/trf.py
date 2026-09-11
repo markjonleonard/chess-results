@@ -142,6 +142,7 @@ def to_trf(
     total_rounds: int | None = None,
     bye_value: float | None = None,
     withdrawn: set[str] | None = None,
+    initial_color: str | None = None,
 ) -> str:
     """Render a tournament as TRF(x), covering rounds 1..``after``.
 
@@ -158,10 +159,29 @@ def to_trf(
     is omitted for the standard full point, which needs no declaration. Getting
     this wrong is not cosmetic: bbpPairings recomputes every player's score from
     their results and refuses the file outright if the total disagrees.
+
+    ``initial_color`` writes bbpPairings' ``XXC white1``/``black1`` extension,
+    declaring who gets white in round 1. Only accepted when ``after`` resolves
+    to 0 (an unstarted tournament, ``event.last_round == 0`` with no ``after``
+    given): once a round has been played its colours are already in the file
+    and the engine infers the initial colour from them itself. Predicting
+    round 1 of an unstarted tournament is the one case with no colour to
+    infer from at all, and bbpPairings refuses to pair such a file without it.
     """
-    # Clamped: a round beyond the last one played would pad every player line
-    # with empty round columns and inflate XXR, which a pairing engine misreads.
-    after = event.last_round if after is None else max(1, min(after, event.last_round))
+    # Clamped to what the event actually has: a round beyond the last one
+    # played would pad every player line with empty round columns and
+    # inflate XXR, which a pairing engine misreads. Unlike an upper bound, 0
+    # is a real request -- an unstarted tournament -- not an error, so it is
+    # not floored away.
+    after = event.last_round if after is None else min(max(after, 0), event.last_round)
+    if initial_color is not None:
+        if after != 0:
+            raise TrfError(
+                f"initial_color is only for an unstarted tournament (after=0); "
+                f"round {after} already has colours to infer from"
+            )
+        if initial_color not in ("white1", "black1"):
+            raise TrfError(f"initial_color must be 'white1' or 'black1', not {initial_color!r}")
     unfinished = [
         (rnd, p)
         for rnd in range(1, after + 1)
@@ -190,4 +210,6 @@ def to_trf(
     bye_value = event.bye_value if bye_value is None else bye_value
     if bye_value != 1.0:
         lines.append(f"BBU {bye_value:4.1f}")
+    if initial_color is not None:
+        lines.append(f"XXC {initial_color}")
     return "\n".join(lines) + "\n"

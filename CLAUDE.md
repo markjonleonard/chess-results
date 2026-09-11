@@ -160,16 +160,25 @@ confirm it is not our parsers disagreeing with each other: `art=2&rd=6` lists th
 as `bye`, while `art=5`'s crosstable prints `-0` (not paired, no round-6 opponent) in the same
 player's round-6 cell. That is the same trigger already documented above and below for byes
 vanishing from a superseded round's page and for `check_published_totals` — the crosstable
-not yet reflecting the *current* round's bye, which only the next round being paired settles
-— surfacing through a third comparison now. Sibling section tnr1484241 hit the
-`check_published_totals` shape of it two days earlier, so this looks like a property of the
-congress's live rounds generally rather than one section's fluke. Still unconfirmed whether
-pairing round 7 clears it, for the same reason as below: nobody has stayed watching long
-enough. Narrow the "nothing has tripped this" claim to *every finished round* of every event
+not yet reflecting the *current* round's bye — surfacing through a third comparison now.
+Sibling section tnr1484241 hit the `check_published_totals` shape of it two days earlier, so
+this looks like a property of the congress's live rounds generally rather than one section's
+fluke. Narrow the "nothing has tripped this" claim to *every finished round* of every event
 in the suite, which remains true — this is a live-round-only failure mode. It does not
 corrupt anything downstream: `add_crosstable` only compares where the round page already has
 a play, never overwrites it, so `Jones, Michael R` still shows the correct `bye` in
 `standings` while the warning fires.
+
+**For this specific comparison, the round finishing is what clears it — the next round need
+not be paired.** Watched live on tnr1489316 (4th Torquay Riviera Congress PM Open,
+2026-09-06): the same shape of disagreement (`Walley, A Clive` requested-bye, `Costello,
+Colin A` pairing-bye, both `unpaired` in the crosstable) was present mid-round-2 (11 of 12
+results in) and gone on a `--no-cache` re-fetch once the 12th result was in — while round 3
+was still unpaired (`event.last_round` stayed 2). That is the opposite trigger from
+`check_published_totals` below, where a fresh fetch with the round fully finished still read
+the stale total and only the next round pairing was ever confirmed to help. Do not assume
+one comparison's trigger for the other: this one settles on the round's own completion,
+that one needs the next round paired.
 
 **`check_published_totals` is a different comparison, and the newest round's byes can trip
 it — durably, not just while live.** It checks the crosstable against itself —
