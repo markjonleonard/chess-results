@@ -26,7 +26,11 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check --output-format=github .
       - run: ruff format --check .
-      - run: mypy --strict src/chess_results examples
+      # predict_ecf_rating.py imports the sibling ecf-rating package on purpose
+      # (see its docstring) -- that package deliberately stays out of this
+      # project's dependencies, so it is never installed here and mypy cannot
+      # resolve it. Exclude just that file rather than weakening --strict.
+      - run: mypy --strict --exclude '^examples/predict_ecf_rating\.py$' src/chess_results examples
 
   docs:
     runs-on: ubuntu-latest
