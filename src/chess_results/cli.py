@@ -14,7 +14,7 @@ from typing import TypeVar
 from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
 from .client import ChessResults, TournamentError
-from .models import Pairing, Play, Player, PlayerRef, PlayKind, StartingRankEntry
+from .models import Entrants, Pairing, Play, Player, PlayerRef, PlayKind, StartingRankEntry
 from .tournament import Tournament
 
 T = TypeVar("T")
@@ -79,8 +79,8 @@ def _fetch(args: argparse.Namespace) -> Tournament:
     return event
 
 
-def _starting_rank(args: argparse.Namespace) -> list[StartingRankEntry]:
-    """The starting-rank list alone, needing no round to have been paired yet.
+def _entrants(args: argparse.Namespace) -> Entrants:
+    """The starting-rank page alone, needing no round to have been paired yet.
 
     Separate from ``_fetch``, which assembles a full ``Tournament`` and refuses
     an event with no played rounds — ``players`` is the one report that must
@@ -89,7 +89,7 @@ def _starting_rank(args: argparse.Namespace) -> list[StartingRankEntry]:
     client = ChessResults(
         delay=args.delay, cache=not args.no_cache, cache_dir=args.cache_dir, live_ttl=args.cache_ttl
     )
-    return client.starting_rank(args.tournament_id)
+    return client.entrants(args.tournament_id)
 
 
 def _warn_disagreements(event: Tournament) -> None:
@@ -247,7 +247,14 @@ def cmd_players(args: argparse.Namespace) -> int:
     because it reads the starting-rank page alone rather than assembling any
     round.
     """
-    entries = _starting_rank(args)
+    entrants = _entrants(args)
+    entries = entrants.players
+    heading = entrants.name or entrants.id
+    if entrants.dates:
+        heading += f" — {entrants.dates}"
+    print(heading)
+    if entrants.time_control:
+        print(f"Time control: {entrants.time_control}")
     print(f"{len(entries)} player(s)")
     width = _PLAYERS_PREFIX + _name_width(args.name_width, _PLAYERS_FIXED)
     print(f"{_fit(_rank_heading('Name'), width)} {'Rtg':>4}  Fed")

@@ -93,6 +93,24 @@ class StartingRankEntry:
 
 
 @dataclass(frozen=True)
+class Entrants:
+    """The starting-rank page (art=0), read once.
+
+    Works before round 1 is paired, unlike `Tournament`, which needs at least
+    one round assembled. ``time_control`` and ``dates`` are only ever set when
+    the organiser filled in Swiss-Manager's or ChessManager's tournament
+    parameters -- many events, the 2026 British Championship among them,
+    publish neither.
+    """
+
+    id: str
+    name: str | None
+    time_control: str | None
+    dates: str | None
+    players: list[StartingRankEntry]
+
+
+@dataclass(frozen=True)
 class CrosstableEntry:
     """One player's round as shown in a crosstable (``art=5``).
 

@@ -34,7 +34,7 @@ from chess_results.cli import (
     cmd_unfinished,
     main,
 )
-from chess_results.models import Disagreement, Play, PlayKind, StartingRankEntry
+from chess_results.models import Disagreement, Entrants, Play, PlayKind, StartingRankEntry
 
 
 def _args(**kwargs):
@@ -509,10 +509,25 @@ class TestPlayers:
         StartingRankEntry(start_no=3, name="Haythornthwaite, Clare", rating=None, title="WCM"),
     ]
 
-    def _run(self, monkeypatch, capsys, entries=None, limit=None, name_width=None):
-        monkeypatch.setattr(
-            "chess_results.cli._starting_rank", lambda args: entries if entries is not None else self.ENTRIES
+    def _run(
+        self,
+        monkeypatch,
+        capsys,
+        entries=None,
+        limit=None,
+        name_width=None,
+        name=None,
+        time_control=None,
+        dates=None,
+    ):
+        entrants = Entrants(
+            id="1489496",
+            name=name,
+            time_control=time_control,
+            dates=dates,
+            players=entries if entries is not None else self.ENTRIES,
         )
+        monkeypatch.setattr("chess_results.cli._entrants", lambda args: entrants)
         assert cmd_players(_args(limit=limit, name_width=name_width)) == 0
         return capsys.readouterr().out.splitlines()
 
@@ -527,18 +542,36 @@ class TestPlayers:
 
     def test_lists_every_entry_with_starting_number_and_name(self, monkeypatch, capsys):
         lines = self._run(monkeypatch, capsys)
-        assert lines[0] == "3 player(s)"
-        assert len(lines) == 5
-        assert "Elkin, Dave" in lines[2]
-        assert lines[2].strip().startswith("1")
+        assert lines[1] == "3 player(s)"
+        assert len(lines) == 6
+        assert "Elkin, Dave" in lines[3]
+        assert lines[3].strip().startswith("1")
 
     def test_rating_is_shown_when_present_and_blank_when_not(self, monkeypatch, capsys):
         lines = self._run(monkeypatch, capsys)
-        assert "1900" in lines[2]
-        assert lines[4].rstrip().endswith("Haythornthwaite, Clare")
+        assert "1900" in lines[3]
+        assert lines[5].rstrip().endswith("Haythornthwaite, Clare")
+
+    def test_heading_falls_back_to_the_tournament_id_when_the_page_has_no_name(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys)
+        assert lines[0] == "1489496"
+
+    def test_name_and_dates_head_the_report_when_the_page_has_them(self, monkeypatch, capsys):
+        lines = self._run(
+            monkeypatch, capsys, name="Warsaw Summer IM Round-Robin", dates="2026/08/27 to 2026/08/31"
+        )
+        assert lines[0] == "Warsaw Summer IM Round-Robin — 2026/08/27 to 2026/08/31"
+
+    def test_time_control_is_printed_when_the_page_publishes_one(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys, time_control="Standard: 90min +30sec increment per move")
+        assert lines[1] == "Time control: Standard: 90min +30sec increment per move"
+
+    def test_time_control_line_is_omitted_when_the_page_does_not_publish_one(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys)
+        assert not any(line.startswith("Time control:") for line in lines)
 
     def test_title_is_shown(self, monkeypatch, capsys):
-        assert "WCM" in self._run(monkeypatch, capsys)[4]
+        assert "WCM" in self._run(monkeypatch, capsys)[5]
 
     def test_limit_truncates_and_says_how_many_are_left(self, monkeypatch, capsys):
         lines = self._run(monkeypatch, capsys, limit=1)
@@ -546,9 +579,9 @@ class TestPlayers:
 
     def test_an_empty_field_still_prints_a_heading(self, monkeypatch, capsys):
         lines = self._run(monkeypatch, capsys, entries=[])
-        assert lines[0] == "0 player(s)"
-        assert lines[1].startswith("  No      Name")
-        assert lines[1].rstrip().endswith("Rtg  Fed")
+        assert lines[1] == "0 player(s)"
+        assert lines[2].startswith("  No      Name")
+        assert lines[2].rstrip().endswith("Rtg  Fed")
 
 
 class TestUnfinished:

@@ -255,6 +255,23 @@ would have to come first.
 paired" rows. Round auto-detection therefore requires at least one `PlayKind.GAME`; without
 that check the scraper invents rounds and makes the whole active field look withdrawn.
 
+**The starting-rank page's tournament-details table (organiser, time control, dates, ...)
+is only there before the event starts.** `parse_tournament_details` reads it where present,
+but "present" is not "whenever the organiser filled it in" — it is "whenever the organiser
+filled it in *and* the event has not yet been paired". Confirmed on tnr1449763 (MEGA BIG
+NORMS WARSAW SUMMER '26 IM ROUND-ROBIN - B): the pre-event fixture
+(`warsaw2026_notstarted_startingrank.html`) carries the whole block -- Organizer, Federation,
+Chief Arbiter, Time control, Location, Number of rounds, Tournament type, Rating
+calculation, Date, Rating-Ø, Pairing program -- and a live re-fetch of the same tournament
+after it had finished carries none of it, `Time control` and `Organizer` both absent from
+the raw response. The 2026 British and every other mid-or-post-event fixture in the suite
+already carry none of it either, which used to read as "this organiser didn't fill the
+parameters in" -- Warsaw shows that is not the whole story. Unconfirmed: whether it
+disappears the moment round 1 is paired or only once the event is further along, there
+being no mid-event capture of an organiser who filled the block in. Harmless either way for
+`players`, which is exactly the command that runs before a round exists and therefore the
+one place this data is most likely to still be there.
+
 **Parsing is header-driven, never by fixed offsets.** chess-results emits one header row
 mixing `<th>` (labelled columns) with `<td>` (the two player-name columns), so `_cells`
 reads both. Tournaments switch columns on and off — the starting-rank `No.` columns are

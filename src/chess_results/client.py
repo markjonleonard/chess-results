@@ -26,7 +26,7 @@ from .cache import (
     cached_session,
 )
 from .congress import Congress
-from .models import CrosstableEntry, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
+from .models import CrosstableEntry, Entrants, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
 from .parse import (
     has_pairings,
     is_combined_pairings,
@@ -36,6 +36,7 @@ from .parse import (
     parse_pairings,
     parse_published_totals,
     parse_starting_rank,
+    parse_tournament_details,
     parse_tournament_name,
 )
 from .tournament import Tournament
@@ -308,8 +309,22 @@ class ChessResults:
             return False
 
     def starting_rank(self, tournament_id: str | int) -> list[StartingRankEntry]:
-        return parse_starting_rank(
-            self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
+        return self.entrants(tournament_id).players
+
+    def entrants(self, tournament_id: str | int) -> Entrants:
+        """The field and tournament header, from the starting-rank page alone.
+
+        One fetch serves all of it, rather than a separate request per piece
+        of the same page.
+        """
+        html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
+        details = parse_tournament_details(html)
+        return Entrants(
+            id=str(tournament_id),
+            name=parse_tournament_name(html),
+            time_control=details.get("Time control"),
+            dates=details.get("Date"),
+            players=parse_starting_rank(html),
         )
 
     def round_ttl(self, tournament_id: str | int, rnd: int) -> int:

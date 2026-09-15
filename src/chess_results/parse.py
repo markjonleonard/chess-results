@@ -425,6 +425,34 @@ def parse_tournament_name(html: str) -> str | None:
     return None
 
 
+def parse_tournament_details(html: str) -> dict[str, str]:
+    """The tournament-details table on the starting-rank page (organiser,
+    time control, dates, and the like).
+
+    Printed only when the organiser filled in Swiss-Manager's or
+    ChessManager's tournament parameters -- the 2026 British Championship
+    carries none of it, so an empty dict is a normal result, not a parse
+    failure. The table has no id or class of its own, so it is recognised by
+    shape instead: every row exactly two ``<td class="CR">`` cells, label
+    then value.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    for table in soup.find_all("table"):
+        rows = table.find_all("tr", recursive=False)
+        details: dict[str, str] = {}
+        for row in rows:
+            cells = row.find_all("td", recursive=False)
+            if len(cells) != 2 or any(c.get("class") != ["CR"] for c in cells):
+                details = {}
+                break
+            label = _text(cells[0])
+            if label:
+                details[label] = _text(cells[1])
+        if details:
+            return details
+    return {}
+
+
 def has_pairings(html: str) -> bool:
     """True if the page contains a pairing table (used to detect the last round)."""
     return any(_header_row(t, "Bo.") for t in _data_tables(html))

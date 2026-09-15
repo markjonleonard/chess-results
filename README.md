@@ -130,18 +130,37 @@ the tournament actually gives, so this is what rescores it.
 
 Starting number, title, name, rating and federation for every entrant — the
 field, straight off the starting-rank list. The only command that works before
-a tournament's first round has been paired.
+a tournament's first round has been paired. When the organiser filled in
+Swiss-Manager's or ChessManager's tournament parameters, this is also the one
+place the event's name, dates and time control get printed — that header
+disappears from this same page once the event is under way.
 
 ```bash
 chess-results players 1489496
 ```
 
 ```
+Trowbridge Rapidplay 2026-2027
 18 player(s)
   No      Name                          Rtg  Fed
    1      Dave Elkin                   1900
    2      Mark J Leonard               1829
    3      Tim Kirkman                  1743
+   …
+```
+
+```bash
+chess-results players 1449763   # before the event starts
+```
+
+```
+MEGA BIG NORMS WARSAW SUMMER ‘26 IM ROUND-ROBIN - B — 2026/08/27 to 2026/08/31
+Time control: Standard: 90min +30sec increment per move starting from move 1
+10 player(s)
+  No      Name                          Rtg  Fed
+   1  IM  Miś, Mieszko                 2401
+   2  IM  Gnojek, Petr                 2399
+   3  CM  Terkiewicz, Bruno            2369
    …
 ```
 
