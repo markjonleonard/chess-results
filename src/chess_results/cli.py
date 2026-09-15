@@ -14,7 +14,7 @@ from typing import TypeVar
 from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
 from .client import ChessResults, TournamentError
-from .models import Pairing, Play, Player, PlayerRef, PlayKind
+from .models import Pairing, Play, Player, PlayerRef, PlayKind, StartingRankEntry
 from .tournament import Tournament
 
 T = TypeVar("T")
@@ -33,6 +33,7 @@ much longer once a round has settled.
 
 EPILOG = """\
 examples:
+  chess-results players 1452107               the field, by starting number -- works before round 1
   chess-results standings 1452107             the standings after the latest round
   chess-results standings 1452107 --after 6   the standings as they were after round 6
   chess-results pairings 1452107              the latest round's boards and results
@@ -76,6 +77,19 @@ def _fetch(args: argparse.Namespace) -> Tournament:
     )
     _warn_disagreements(event)
     return event
+
+
+def _starting_rank(args: argparse.Namespace) -> list[StartingRankEntry]:
+    """The starting-rank list alone, needing no round to have been paired yet.
+
+    Separate from ``_fetch``, which assembles a full ``Tournament`` and refuses
+    an event with no played rounds — ``players`` is the one report that must
+    work on the morning of the event, before that.
+    """
+    client = ChessResults(
+        delay=args.delay, cache=not args.no_cache, cache_dir=args.cache_dir, live_ttl=args.cache_ttl
+    )
+    return client.starting_rank(args.tournament_id)
 
 
 def _warn_disagreements(event: Tournament) -> None:
@@ -206,6 +220,42 @@ def cmd_dump(args: argparse.Namespace) -> int:
         print(f"wrote {args.output}", file=sys.stderr)
     else:
         print(text)
+    return 0
+
+
+def _rank_heading(label: str) -> str:
+    return f"{'No':>4}  {'':<3} {label}"
+
+
+def _rank_row(entry: StartingRankEntry) -> str:
+    return f"{entry.start_no:>4}  {entry.title or '':<3} {entry.name}"
+
+
+#: A players row before the name: starting number and title, matching `_rank_heading`.
+_PLAYERS_PREFIX = len(_rank_heading(""))
+
+#: The rating and federation columns after the name.
+_PLAYERS_TRAILING = len(f" {'Rtg':>4}  Fed")
+
+_PLAYERS_FIXED = _PLAYERS_PREFIX + _PLAYERS_TRAILING
+
+
+def cmd_players(args: argparse.Namespace) -> int:
+    """Print the field from the starting-rank list.
+
+    The one report that works before a tournament's first round is paired,
+    because it reads the starting-rank page alone rather than assembling any
+    round.
+    """
+    entries = _starting_rank(args)
+    print(f"{len(entries)} player(s)")
+    width = _PLAYERS_PREFIX + _name_width(args.name_width, _PLAYERS_FIXED)
+    print(f"{_fit(_rank_heading('Name'), width)} {'Rtg':>4}  Fed")
+    shown, dropped = _limited(entries, args.limit)
+    for entry in shown:
+        rating = "" if entry.rating is None else str(entry.rating)
+        print(f"{_fit(_rank_row(entry), width)} {rating:>4}  {entry.federation or ''}".rstrip())
+    _and_the_rest(dropped)
     return 0
 
 
@@ -616,6 +666,15 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
 
 
 COMMANDS = (
+    (
+        "players",
+        (),
+        cmd_players,
+        "list the field from the starting-rank list",
+        "Starting number, title, name, rating and federation for every entrant, "
+        "read from the starting-rank list alone. Works before the first round is "
+        "paired, unlike every other command here.",
+    ),
     (
         "dump",
         (),

@@ -44,9 +44,10 @@ That number is what you pass to every command below. The examples all use
 
 ## Command line
 
-Six commands. Each takes a tournament number.
+Seven commands. Each takes a tournament number.
 
 ```bash
+chess-results players 1452107                # the field, before or after the event starts
 chess-results standings 1452107              # who is winning
 chess-results pairings 1452107               # this round's boards
 chess-results pairing-sheet 1452107          # the same, as a page to print
@@ -54,6 +55,12 @@ chess-results colours 1452107                # colour and float history
 chess-results unfinished 1452107             # games still being played
 chess-results dump 1452107 -o event.json     # everything, as a data file
 ```
+
+`players` is the one command that works before the tournament has started: every
+other one needs at least one round to have been paired, and fails with a clear
+error if you try them on an event that has not begun. `players` reads the
+starting-rank list alone, which chess-results publishes as soon as the field is
+entered.
 
 Add `--after N` to see the tournament as it stood after a particular round,
 rather than as it stands now. Ask for a round the tournament has not reached and
@@ -90,7 +97,7 @@ for your terminal, so it is never narrowed to the window.
 ### All the options
 
 `chess-results <command> --help` prints a command's own options. These affect
-what is fetched, and every command takes them:
+what is fetched, and every command accepts them:
 
 | Option | What it does |
 | --- | --- |
@@ -102,17 +109,41 @@ what is fetched, and every command takes them:
 | `--cache-dir D` | Where to keep cached pages |
 | `--no-crosstable` | Skip the crosstable request — **scores will be wrong** for anyone whose bye has been dropped from its round page |
 
+`players` accepts but ignores `--rounds`, `--bye-value`, `--cache-ttl` and
+`--no-crosstable` — it fetches the starting-rank page alone, never a round or
+the crosstable, so none of the four has anything to act on. `--delay`,
+`--no-cache` and `--cache-dir` still apply.
+
 These shape the reporting, and not every command takes every one:
 
 | Option | Taken by |
 | --- | --- |
 | `--after N` | `standings`, `colours`, `pairings`, `pairing-sheet` |
-| `--limit N` | `standings`, `colours`, `pairings`, `unfinished` |
-| `--name-width N` | `standings`, `colours`, `pairings`, `pairing-sheet` |
+| `--limit N` | `players`, `standings`, `colours`, `pairings`, `unfinished` |
+| `--name-width N` | `players`, `standings`, `colours`, `pairings`, `pairing-sheet` |
 
 `--bye-value` is worth knowing about if your event awards half a point for a
 bye: the crosstable prints every pairing-allocated bye as a full point whatever
 the tournament actually gives, so this is what rescores it.
+
+### players
+
+Starting number, title, name, rating and federation for every entrant — the
+field, straight off the starting-rank list. The only command that works before
+a tournament's first round has been paired.
+
+```bash
+chess-results players 1489496
+```
+
+```
+18 player(s)
+  No      Name                          Rtg  Fed
+   1      Dave Elkin                   1900
+   2      Mark J Leonard               1829
+   3      Tim Kirkman                  1743
+   …
+```
 
 ### standings
 

@@ -3,6 +3,7 @@ import copy
 import json
 import os
 import re
+from typing import ClassVar
 
 import pytest
 
@@ -28,11 +29,12 @@ from chess_results.cli import (
     cmd_history,
     cmd_pairing_sheet,
     cmd_pairings,
+    cmd_players,
     cmd_standings,
     cmd_unfinished,
     main,
 )
-from chess_results.models import Disagreement, Play, PlayKind
+from chess_results.models import Disagreement, Play, PlayKind, StartingRankEntry
 
 
 def _args(**kwargs):
@@ -57,6 +59,12 @@ def test_shared_options_parse_after_the_subcommand():
 
 def test_bye_value_defaults_to_a_full_point():
     assert build_parser().parse_args(["standings", "1"]).bye_value == 1.0
+
+
+def test_players_is_registered_on_the_parser():
+    args = build_parser().parse_args(["players", "1489496"])
+    assert args.func is cmd_players
+    assert args.tournament_id == "1489496"
 
 
 def test_colors_is_accepted_as_a_synonym_for_colours():
@@ -490,6 +498,57 @@ class TestDump:
         path = tmp_path / "event.json"
         self._run(british, monkeypatch, str(path))
         assert "\\u" not in path.read_text(encoding="utf-8")
+
+
+class TestPlayers:
+    """The starting-rank list alone -- the one report that needs no round paired."""
+
+    ENTRIES: ClassVar = [
+        StartingRankEntry(start_no=1, name="Elkin, Dave", rating=1900, federation="ENG"),
+        StartingRankEntry(start_no=2, name="Leonard, Mark J", rating=1829, federation="ENG"),
+        StartingRankEntry(start_no=3, name="Haythornthwaite, Clare", rating=None, title="WCM"),
+    ]
+
+    def _run(self, monkeypatch, capsys, entries=None, limit=None, name_width=None):
+        monkeypatch.setattr(
+            "chess_results.cli._starting_rank", lambda args: entries if entries is not None else self.ENTRIES
+        )
+        assert cmd_players(_args(limit=limit, name_width=name_width)) == 0
+        return capsys.readouterr().out.splitlines()
+
+    def test_never_goes_through_fetch(self, monkeypatch, capsys):
+        """`_fetch` refuses an unstarted event; `players` must not use it."""
+
+        def boom(args):
+            raise AssertionError("players must not call _fetch")
+
+        monkeypatch.setattr("chess_results.cli._fetch", boom)
+        self._run(monkeypatch, capsys)
+
+    def test_lists_every_entry_with_starting_number_and_name(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys)
+        assert lines[0] == "3 player(s)"
+        assert len(lines) == 5
+        assert "Elkin, Dave" in lines[2]
+        assert lines[2].strip().startswith("1")
+
+    def test_rating_is_shown_when_present_and_blank_when_not(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys)
+        assert "1900" in lines[2]
+        assert lines[4].rstrip().endswith("Haythornthwaite, Clare")
+
+    def test_title_is_shown(self, monkeypatch, capsys):
+        assert "WCM" in self._run(monkeypatch, capsys)[4]
+
+    def test_limit_truncates_and_says_how_many_are_left(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys, limit=1)
+        assert lines[-1] == "… and 2 more"
+
+    def test_an_empty_field_still_prints_a_heading(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys, entries=[])
+        assert lines[0] == "0 player(s)"
+        assert lines[1].startswith("  No      Name")
+        assert lines[1].rstrip().endswith("Rtg  Fed")
 
 
 class TestUnfinished:
