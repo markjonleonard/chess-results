@@ -80,13 +80,15 @@ an ordered list of them.
 | View | URL | Parsed by |
 | --- | --- | --- |
 | Round pairings | `art=2&rd=N` | `parse_pairings` |
-| Starting rank | `art=0` | `parse_starting_rank` |
+| Starting rank | `art=0` | `parse_starting_rank`, `parse_tournament_details` |
 | Starting-rank crosstable | `art=5` | `parse_crosstable`, `parse_published_totals` |
 | Not paired | `art=40` | `parse_not_paired` |
 
 A scrape walks the rounds from 1 upward until a page has no games, then fetches
 the crosstable. The starting rank supplies numbers, titles, ratings and
-federations, which pairing pages often omit.
+federations, which pairing pages often omit — and, before the event starts,
+the tournament's own name, dates and time control (see
+[What this does not read](#what-this-does-not-read)).
 
 `art=40` lists only the players who have missed a round, as a grid of one column
 per round marked `*` not paired, `bye` a bye, `0F` a forfeit. It is the most
@@ -188,8 +190,8 @@ below, tied to the *newest* round rather than to whether a parser is right.
   the two broken rows is that their bye belongs to the round chess-results still
   treats as current, and elsewhere in this codebase that status changes only
   once the *next* round is paired (see byes vanishing from a superseded round's
-  page, above) — so the aggregate may simply wait for the same trigger. Unconfirmed:
-  round 4 was not yet paired at either check. `Tournament`'s own assembled score
+  page, above) — so the aggregate may simply wait for the same trigger. Not confirmed,
+  since round 4 was not yet paired at either check. `Tournament`'s own assembled score
   is unaffected regardless — it is built from the round page, not this total —
   so the warning is real but does not corrupt `standings` or `pairings` output.
 - **`Tournament.disagreements`** records any field where a round page and the
@@ -429,13 +431,20 @@ of `TournamentError`, so a caller catches one thing and the CLI prints one line.
   tournament numbers were tried while hunting for a played one, and four had not
   begun.
 
-Also unread, but no error, since these are simply outside what it collects:
-**most tournament metadata** — no organiser, time control, dates, playing
-schedule, or the tie-break columns of the final ranking.
+Also unread, but no error, since most of it is simply outside what this collects:
+no organiser, chief arbiter, playing schedule, or the tie-break columns of the
+final ranking. **Time control and dates are a partial exception** — `players`
+surfaces them (`parse_tournament_details`, `Entrants.time_control`/`.dates`),
+but only when the organiser filled in Swiss-Manager's or ChessManager's
+parameters *and* the event has not yet been paired. Confirmed on tnr1449763:
+the pre-event page carries the whole details block, and a fresh fetch of the
+same tournament after it finished carries none of it — not the crosstable, not
+the round pages, nothing rereads it once a round exists, so no other command
+sees it either.
 
-For the site's tables as published, including the metadata and tie-breaks,
-[chessResults](https://cran.r-project.org/package=chessResults) is an R package
-covering that ground.
+For the site's tables as published, including the fuller metadata and
+tie-breaks this still skips, [chessResults](https://cran.r-project.org/package=chessResults)
+is an R package covering that ground.
 
 ## Things worth knowing
 
@@ -459,7 +468,7 @@ covering that ground.
   results and refuses the file if the totals disagree.
 - **Points are written two ways in one tournament.** Round-by-round cells use `½`;
   a total is rendered in the server's locale and can arrive as `4,5`. A comma is
-  always a decimal separator here, no points value being large enough to need a
+  always a decimal separator here — no points value is large enough to need a
   thousands separator.
 - **Be polite.** The client sleeps between requests (`delay`, default 1s), pacing
   only those that actually reach the server, and identifies itself.
@@ -471,7 +480,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-320 tests, none touching the network. Fixtures are real saved pages from five
+492 tests, none touching the network. Fixtures are real saved pages from seven
 tournaments, chosen for the ways they differ:
 
 | Event | What it covers |

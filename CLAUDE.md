@@ -57,10 +57,12 @@ chess-results colours 1452107 --after 6
 chess-results pairing-sheet 1452107 --after 8 # the printable sheet
 ```
 
-The full command set is `standings`, `pairings`, `pairing-sheet`, `colours` (`colors`
-accepted as a synonym), `unfinished` and `dump` (JSON export). All six take a tournament
-number and, except `dump`, an `--after N` round selector; see README.md for the complete
-option table (`--rounds`, `--bye-value`, `--delay`, `--no-cache`, `--limit`, `--name-width`).
+The full command set is `players`, `standings`, `pairings`, `pairing-sheet`, `colours`
+(`colors` accepted as a synonym), `history`, `unfinished` and `dump` (JSON export). All
+eight take a tournament number and, except `dump` and `players`, an `--after N` round
+selector; see
+README.md for the complete option table (`--rounds`, `--bye-value`, `--delay`, `--no-cache`,
+`--limit`, `--name-width`).
 
 ## Architecture
 
@@ -260,17 +262,18 @@ is only there before the event starts.** `parse_tournament_details` reads it whe
 but "present" is not "whenever the organiser filled it in" — it is "whenever the organiser
 filled it in *and* the event has not yet been paired". Confirmed on tnr1449763 (MEGA BIG
 NORMS WARSAW SUMMER '26 IM ROUND-ROBIN - B): the pre-event fixture
-(`warsaw2026_notstarted_startingrank.html`) carries the whole block -- Organizer, Federation,
-Chief Arbiter, Time control, Location, Number of rounds, Tournament type, Rating
-calculation, Date, Rating-Ø, Pairing program -- and a live re-fetch of the same tournament
-after it had finished carries none of it, `Time control` and `Organizer` both absent from
-the raw response. The 2026 British and every other mid-or-post-event fixture in the suite
-already carry none of it either, which used to read as "this organiser didn't fill the
-parameters in" -- Warsaw shows that is not the whole story. Unconfirmed: whether it
-disappears the moment round 1 is paired or only once the event is further along, there
-being no mid-event capture of an organiser who filled the block in. Harmless either way for
-`players`, which is exactly the command that runs before a round exists and therefore the
-one place this data is most likely to still be there.
+(`warsaw2026_notstarted_startingrank.html`) carries the whole block -- `Organizer`,
+`Federation`, `Chief Arbiter`, `Time control`, `Location`, `Number of rounds`,
+`Tournament type`, `Rating calculation`, `Date`, `Rating-Ø`, `Pairing program` -- and a
+live re-fetch of the same tournament after it had finished carries none of it, `Time
+control` and `Organizer` both absent from the raw response. The 2026 British and every
+other mid-or-post-event fixture in the suite already carry none of it either, which used to
+read as "this organiser didn't fill the parameters in" -- Warsaw shows that is not the whole
+story. Not confirmed: whether it disappears the moment round 1 is paired, or only once the
+event is further along — nobody has caught a mid-event organiser who'd filled the block in,
+so there's nothing yet to check against. Either way it is harmless for `players`, which is
+exactly the command that runs before a round exists and therefore the one place this data
+is most likely to still be there.
 
 **Parsing is header-driven, never by fixed offsets.** chess-results emits one header row
 mixing `<th>` (labelled columns) with `<td>` (the two player-name columns), so `_cells`
@@ -319,7 +322,7 @@ why this survived so long.
 
 **Rating columns vary too.** An event rated on one list prints `Rtg`; one rated nationally
 and internationally at once prints `RtgI` and `RtgN` and no `Rtg`, which left every rating
-`None` — silently, an unrated player being a legitimate thing for a field to contain.
+`None` — silently, since an unrated player is a legitimate thing for a field to contain.
 `_RATING_LABELS` tries `Rtg`, then `RtgI`, then `RtgN`.
 
 **An unrated player's rating is not blank — it is the literal digit `0`.** Confirmed on
@@ -345,7 +348,7 @@ JSON sidecar next to the cache so the knowledge survives between runs.
 
 **The crosstable is cached hard too, and replaced rather than expired.** It used to take
 the live 5-minute lifetime, flat, on the reasoning that it holds live results — but we never
-read results from it, the round page being the authority. What we read is the byes and
+read results from it; the round page is the authority. What we read is the byes and
 absences that round pages delete once a later round is paired, and those never change again.
 So it is fetched with `SETTLED_TTL` and `refresh=True` is passed when
 `crosstable_is_stale()` says the cached copy will not do, which is the only way round
@@ -377,7 +380,7 @@ starting rank with `refresh=True` whenever the real tournament might still be li
 last fetched round is unfinished, *or* `rounds=` bounded the scrape, in which case
 `event.unfinished()` cannot see far enough to say either way and the honest assumption is
 that it might be. That is not `crosstable_is_stale()` itself -- its round-coverage branch has
-no equivalent here, there being no round-by-round coverage to fall behind on -- but the same
+no equivalent here, since there is no round-by-round coverage to fall behind on -- but the same
 reasoning as its liveness branch: nothing here can drift once an event has settled, only
 while it has not, or while a caller has chosen not to look far enough to tell.
 
@@ -441,9 +444,9 @@ and `_r8.html` is round 8 played.
 `_r9.html` and `_crosstable_final.html` were captured on 2026-08-09 for the two defaulted
 games (see `test_forfeit.py`); round 9 was still being played, so **there is no
 complete-tournament fixture** — rounds 1-8 are as far as a fully-decided event goes.
-Round 9's page keeps its "not paired" rows, being the current round at capture and the last
-round of the event, which makes it the only round page in the set that still lists the
-absent players.
+Round 9's page keeps its "not paired" rows because it was the current round at capture and
+the last round of the event, which makes it the only round page in the set that still
+lists the absent players.
 
 `conftest.py` offers `british` (full pipeline, crosstable reconciled, mid-event — what most
 tests want), `british_rounds_only` (round pages alone, so a test can show what

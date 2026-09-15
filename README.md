@@ -494,18 +494,20 @@ and it says so and stops, rather than reporting an empty tournament.
 months ahead of the first game, and "this has not started yet" is more use than a table of
 zeroes.
 
-**Most of the tournament's own metadata.** It reads the name and nothing else: not the
-organiser, the time control, the dates, the playing schedule, or the tie-break columns of
-the final ranking. Everything here is built around who played whom, so that is what it
-collects.
+**Most of the tournament's own metadata.** Every command reads the name; `players` also
+prints the dates and time control, but only when the organiser published them and only
+before the event has been paired — that header disappears from the same page once a round
+exists. Nothing here reads the organiser, the chief arbiter, the playing schedule, or the
+tie-break columns of the final ranking. Everything here is built around who played whom, so
+that is what it collects.
 
 ## Related projects
 
 [**chessResults**](https://codeberg.org/SirfHaru/chessresults) is an R package that also
 scrapes chess-results.com, returning a tidy tibble of tournament information, starting
 rank, playing schedule, round results and closing rank. If you work in R, or you want the
-site's tables as published — including the metadata and tie-breaks this tool skips — it is
-the better fit.
+site's tables as published — including the fuller tournament metadata and the tie-breaks
+this tool skips — it is the better fit.
 
 The difference is what happens after parsing. This library assembles the round pages into a
 per-player history and corrects it: it recovers byes that chess-results deletes from
