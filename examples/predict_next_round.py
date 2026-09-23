@@ -59,7 +59,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="append",
         default=[],
         metavar="NAME",
-        help="player who will not be paired next round",
+        help="player who will not be paired next round; repeat for each one. Any "
+        'unique abbreviation will do, e.g. "Sally" or "David W" for "David L Weston"',
     )
     parser.add_argument(
         "--no-infer-withdrawals",
@@ -111,6 +112,37 @@ def apply_assumptions(event: Tournament, assumptions: dict[str, float]) -> None:
         assert white_play is not None and black_play is not None, "both just played this round"
         white_play.score = w
         black_play.score = 1.0 - w
+
+
+def _words(name: str) -> list[str]:
+    return name.replace(",", " ").casefold().split()
+
+
+def _abbreviates(query: str, name: str) -> bool:
+    """Whether every word of ``query`` begins a different word of ``name``."""
+    words = _words(name)
+    for token in _words(query):
+        match = next((w for w in words if w.startswith(token)), None)
+        if match is None:
+            return False
+        words.remove(match)
+    return True
+
+
+def resolve_player(event: Tournament, query: str) -> str:
+    """The one player ``query`` names, exactly or by abbreviation.
+
+    Exits rather than guessing, because a name that matches nobody would
+    otherwise be ignored and that player paired as if they were playing.
+    """
+    if query in event.players:
+        return query
+    matches = sorted(name for name in event.players if _abbreviates(query, name))
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        raise SystemExit(f"--withdrawn {query!r} matches {len(matches)} players: {'; '.join(matches)}")
+    raise SystemExit(f"--withdrawn {query!r} matches no player in {event.name}")
 
 
 BBPPAIRINGS = "https://github.com/BieremaBoyzProgramming/bbpPairings"
@@ -177,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     elif assumptions:
         print("warning: --assume is ignored predicting round 1, nothing has been played yet", file=sys.stderr)
 
-    withdrawn = set(args.withdrawn)
+    withdrawn = {resolve_player(event, query) for query in args.withdrawn}
     if not args.no_infer_withdrawals:
         inferred = event.likely_withdrawn() - withdrawn
         if inferred:
