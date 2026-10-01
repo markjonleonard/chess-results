@@ -13,6 +13,7 @@ column labels and the words "bye" / "not paired".
 
 from __future__ import annotations
 
+import datetime
 import re
 
 from bs4 import BeautifulSoup, Tag
@@ -25,6 +26,8 @@ from .models import (
     Pairing,
     PlayerRef,
     PlayKind,
+    SearchResult,
+    SearchResults,
     StartingRankEntry,
 )
 
@@ -642,3 +645,90 @@ def parse_not_paired(html: str) -> list[NotPairedEntry]:
             )
         )
     return entries
+
+
+#: Where the search page cuts a tournament's name. A cut that lands on a space
+#: loses it with the rest of the whitespace, so a name this long may have been
+#: cut: 49 is "possibly", and the full name costs one cached request to check.
+SEARCH_NAME_LIMIT = 50
+
+#: How many tournaments the search says matched, whatever it printed.
+_SEARCH_TOTAL = re.compile(r"With this selection (\d+) tournaments? w(?:as|ere) found")
+
+
+def parse_search_form(html: str) -> dict[str, str]:
+    """The hidden fields the search form must be posted back with.
+
+    ASP.NET refuses a postback that does not carry the view state it issued, so
+    these are read off the page the form came from rather than known in advance.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    return {
+        str(i["name"]): str(i.get("value", ""))
+        for i in soup.find_all("input", {"type": "hidden"})
+        if i.get("name")
+    }
+
+
+def _search_date(text: str) -> datetime.date | None:
+    try:
+        return datetime.datetime.strptime(text.strip(), "%Y/%m/%d").date()
+    except ValueError:
+        return None
+
+
+def parse_search_results(html: str) -> SearchResults:
+    """The tournaments a search listed, and how many matched in all.
+
+    Header-driven like every other parser here. The header carries the
+    tournament's federation and the time control's federation under the same
+    ``FED`` label; the first is the tournament's.
+
+    A page with no table is "nothing found" only when the page says so: a
+    results page with neither rows nor the site's own count is a page this does
+    not understand, and an empty answer would hide that.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    text = " ".join(soup.get_text().split())
+    found = _SEARCH_TOTAL.search(text)
+    results: list[SearchResult] = []
+    for table in soup.find_all("table"):
+        if table.find("table") is not None:
+            continue  # a layout table around the real one, whose rows it would repeat
+        located = _header_row(table, "No.")
+        if located is None or "dbkey" not in located[0]:
+            continue
+        header, position = located
+        columns = _Columns(header)
+        for row in table.select("tr")[position + 1 :]:
+            cells = [_text(c) for c in _cells(row)]
+            if len(cells) != len(header):
+                continue  # a spacer or footer, not a row of the table
+            tid = columns.value(cells, columns.index("dbkey"))
+            if not tid.isdigit():
+                continue
+
+            def column(label: str, cells: list[str] = cells, columns: _Columns = columns) -> str | None:
+                return columns.value(cells, columns.index(label)) or None
+
+            results.append(
+                SearchResult(
+                    id=tid,
+                    name=columns.value(cells, columns.index("Tournament")),
+                    name_truncated=len(columns.value(cells, columns.index("Tournament")))
+                    >= SEARCH_NAME_LIMIT - 1,
+                    federation=column("FED"),
+                    start_date=_search_date(columns.value(cells, columns.index("from"))),
+                    end_date=_search_date(columns.value(cells, columns.index("to"))),
+                    director=column("Tournament director"),
+                    organizer=column("Organizer(s)"),
+                    chief_arbiter=column("Chief Arbiter"),
+                    location=column("Location"),
+                    time_control=column("Time control"),
+                    rounds=_int(columns.value(cells, columns.index("Rd."))),
+                    players=_int(columns.value(cells, columns.index("n"))),
+                )
+            )
+    if not results and not (found and int(found.group(1)) == 0) and "No tournament was found" not in text:
+        raise ValueError("not a chess-results search page: no result table and no count")
+    return SearchResults(results=results, total=int(found.group(1)) if found else len(results))

@@ -42,9 +42,18 @@ https://chess-results.com/tnr1452107.aspx
 That number is what you pass to every command below. The examples all use
 `1452107`, the 2026 British Championship.
 
+If you only have a name, `search` finds the number:
+
+```bash
+chess-results search "Derbyshire Congress"
+```
+
+and `sections` lists every section of a congress from any one of its numbers.
+Both are described [below](#search).
+
 ## Command line
 
-Seven commands. Each takes a tournament number.
+Nine commands. Each takes a tournament number, except `search`, which takes a name.
 
 ```bash
 chess-results players 1452107                # the field, before or after the event starts
@@ -54,6 +63,8 @@ chess-results pairing-sheet 1452107          # the same, as a page to print
 chess-results colours 1452107                # colour and float history
 chess-results unfinished 1452107             # games still being played
 chess-results dump 1452107 -o event.json     # everything, as a data file
+chess-results sections 823027                # every section of a congress, with entrant counts
+chess-results search "Derbyshire Congress"   # find a tournament number by name
 ```
 
 `players` is the one command that works before the tournament has started: every
@@ -109,7 +120,9 @@ what is fetched, and every command accepts them:
 | `--cache-dir D` | Where to keep cached pages |
 | `--no-crosstable` | Skip the crosstable request — **scores will be wrong** for anyone whose bye has been dropped from its round page |
 
-`players` accepts but ignores `--rounds`, `--bye-value`, `--cache-ttl` and
+`search` and `sections` read the tournament search rather than a tournament, so
+they take `--delay`, `--no-cache` and `--cache-dir` and ignore the rest. `players`
+accepts but ignores `--rounds`, `--bye-value`, `--cache-ttl` and
 `--no-crosstable` — it fetches the starting-rank page alone, never a round or
 the crosstable, so none of the four has anything to act on. `--delay`,
 `--no-cache` and `--cache-dir` still apply.
@@ -119,12 +132,64 @@ These shape the reporting, and not every command takes every one:
 | Option | Taken by |
 | --- | --- |
 | `--after N` | `standings`, `colours`, `pairings`, `pairing-sheet` |
-| `--limit N` | `players`, `standings`, `colours`, `pairings`, `unfinished` |
+| `--limit N` | `players`, `standings`, `colours`, `pairings`, `unfinished`, `search` |
 | `--name-width N` | `players`, `standings`, `colours`, `pairings`, `pairing-sheet` |
 
 `--bye-value` is worth knowing about if your event awards half a point for a
 bye: the crosstable prints every pairing-allocated bye as a full point whatever
 the tournament actually gives, so this is what rescores it.
+
+### search
+
+Finds tournaments in chess-results' own database, newest first. Every filter is a
+case-insensitive substring match on the site's side, and they combine:
+
+```
+$ chess-results search "Derbyshire Congress" --limit 3
+15 tournament(s) found, showing 3
+ 1256721  2025-09-20 to 2025-09-21    24  3rd Derbyshire Congress FOUNDATION
+ 1256715  2025-09-20 to 2025-09-21    25  3rd Derbyshire Congress MAJOR
+ 1256719  2025-09-20 to 2025-09-21    26  3rd Derbyshire Congress MINOR
+```
+
+The columns are the tournament number, its dates, the number of entrants and its
+name. `--organizer`, `--director`, `--location`, `--ends-from`, `--ends-to` and
+`--finished` narrow it further, and `--limit` caps the list (default 100). The
+heading always gives the full count, so a cut-off list says so.
+
+The site cuts names at 50 characters in these results, and a name that long is
+marked with `…`. `sections` and `players` show names in full. Searches are never
+cached.
+
+### sections
+
+Every section of a congress, with the number who entered each and the total, from
+the number of any one section:
+
+```
+$ chess-results sections 1063614
+Derbyshire Congress — 2024-11-23 to 2024-11-24
+ 1063614  Open             31
+ 1063618  Major            28
+ 1063620  Intermediate     40
+ 1063621  Minor            31
+ 1063623  Foundation       19
+          Total           149
+```
+
+`--summary` prints the same on one line, `Open 31; Major 28; Intermediate 40;
+Minor 31; Foundation 19 (2024)`, and `--json` prints it as data. Counts come from
+the search, so no tournament page is read. Sections are listed in tournament
+number order.
+
+chess-results does not link the sections of a congress, so they are found by what
+they share: the same organiser, starting and ending on the same dates. That is an
+inference. A congress whose sections run different dates is not found whole, and
+two unrelated events from one organiser over the same dates would be merged. If
+it matters, check the list against the congress's own page. Section labels are
+the words in each name that the others lack, so they are only as clean as the
+organiser's naming: "FIDE Open" rather than "Open" when only some titles say
+"FIDE".
 
 ### players
 
@@ -394,6 +459,30 @@ made.warnings                                    # what the arbiter must fix by 
 `render` leaves the result column off unless asked, where the command turns it
 on: it is a primitive and holds no opinion about what your sheet is for.
 
+### Finding sections and tournaments
+
+```python
+from chess_results import ChessResults
+
+client = ChessResults()
+
+event = client.sections(823027)
+event.summary()     # 'Open 30; Major 25; Intermediate 45; Minor 19; Foundation 25 (2023)'
+event.total         # 144
+for section in event.sections:
+    section.id, section.label, section.players   # ('823027', 'Open', 30), ...
+
+found = client.search("Derbyshire Congress", ends_from="2024-01-01")
+found.total         # how many matched, which can exceed len(found)
+found.truncated     # True when `limit` cut the list short
+found[0].name, found[0].id, found[0].players
+```
+
+`search` takes `name`, `tournament_id`, `organizer`, `director`, `arbiter`,
+`location`, `ends_from`, `ends_to` (a `date` or `"YYYY-MM-DD"`), `finished_only` and
+`limit`, and needs at least one criterion. A name of 49 or more characters may have
+been cut by the site; `SearchResult.name_truncated` says so.
+
 ### A congress of several sections
 
 A weekend congress runs as several graded sections, and chess-results gives each
@@ -414,8 +503,17 @@ frome.section_of("Weaver, Alan")    # 'Standard'
 frome.player_count                  # entries across the whole congress
 ```
 
-The section names are yours: nothing on the site groups a congress, so nothing
-can be guessed. Pass `skip_unreadable=True` to record a section this library
+The section names are yours: nothing on the site groups a congress. To have them
+suggested, `sections` finds them from any one section's number (see
+[Finding sections and tournaments](#finding-sections-and-tournaments)):
+
+```python
+client = ChessResults()
+found = client.sections(1346570)
+milton_keynes = client.congress({s.label: s.id for s in found.sections}, name=found.name)
+```
+
+Pass `skip_unreadable=True` to record a section this library
 refuses — an all-play-all top section, or one that has not started — in
 `congress.unreadable` and carry on with the rest, instead of losing the lot.
 

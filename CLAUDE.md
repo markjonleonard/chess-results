@@ -58,9 +58,9 @@ chess-results pairing-sheet 1452107 --after 8 # the printable sheet
 ```
 
 The full command set is `players`, `standings`, `pairings`, `pairing-sheet`, `colours`
-(`colors` accepted as a synonym), `history`, `unfinished` and `dump` (JSON export). All
-eight take a tournament number and, except `dump` and `players`, an `--after N` round
-selector; see
+(`colors` accepted as a synonym), `history`, `unfinished`, `dump` (JSON export), `sections`
+and `search`. All but `search` take a tournament number, and all but `dump`, `players`,
+`sections` and `search` an `--after N` round selector; see
 README.md for the complete option table (`--rounds`, `--bye-value`, `--delay`, `--no-cache`,
 `--limit`, `--name-width`).
 
@@ -123,6 +123,26 @@ export; note `score` scores an `UNPAIRED` round 0, which callers must read again
 The two shapes are easy to confuse: **`Pairing`** is one row of a round's table (two
 players), **`Play`** is what one player did in one round. `add_round` turns each `Pairing`
 into one or two `Play` objects.
+
+## Search and sections
+
+`ChessResults.search` and `.sections` read chess-results' tournament database
+(`TurnierSuche.aspx`), not a tournament, and differ from every other fetch in four ways.
+
+- **It is a form post.** The page must be fetched first for its view state and posted back
+  with it, so a search is two requests, and neither is cached: a cache does not store a
+  post, and the form is fetched with `expire_after=0` so stale view state is never replayed.
+- **The site cuts names at 50 characters, silently.** A congress title loses its section
+  label off the end, so `parse_search_results` sets `SearchResult.name_truncated` for 49 or
+  more, and `sections()` reads the full name from the starting-rank page for those alone.
+  Without that, all of Milton Keynes 2026's sections look the same.
+- **The result table sits inside layout tables** whose rows would repeat it, so the parser
+  takes only a table with no table nested in it.
+- **The entrant count (`n`) comes with the row**, so `sections()` needs no tournament page.
+
+`sections()` groups by inference: same organiser (director, then the first two words of the
+name, when it is empty) and the same start and end dates. `sections.py` holds that and the
+label rule, is pure, and its limits are written at the top of that module and in the README.
 
 ## The non-obvious things
 

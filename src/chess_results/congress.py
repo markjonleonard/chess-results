@@ -6,7 +6,8 @@ its own tournament number, with nothing on the site tying them together. There
 is no congress page, no parent identifier, no link between the sections. The
 grouping exists in the entry form and the prize list and nowhere in the data.
 
-So the grouping has to come from the caller, which is what separates this from
+So the grouping has to come from the caller -- :meth:`ChessResults.sections` can propose
+one, by inference from the search -- which is what separates this from
 everything else in the library: :class:`Congress` is the one type not read off
 a page. What it saves is the loop and the section tag that every congress user
 would otherwise write, plus the lookups that only make sense once the sections

@@ -56,6 +56,11 @@ reason it belongs in the library anyway is that the alternative is every congres
 user writing the same loop and the same section tag — as this library's own first
 consumer did, for a year, before this existed.
 
+`ChessResults.sections` can suggest the grouping, and that is an inference rather than
+something the site said: sections of a congress share an organiser and their start and end
+dates, and the search lists both. It is kept apart from `Congress` for that reason. The
+caller still names the sections they want; `sections()` only proposes a list to start from.
+
 It deliberately offers no merged `players` dictionary. Players are keyed by name,
 so merging would drop one of two players sharing a name with no error and no
 trace. `find()` returns every match with its section, and `section_of()` answers

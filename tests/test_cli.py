@@ -1,5 +1,6 @@
 import argparse
 import copy
+import datetime
 import json
 import os
 import re
@@ -30,11 +31,22 @@ from chess_results.cli import (
     cmd_pairing_sheet,
     cmd_pairings,
     cmd_players,
+    cmd_search,
+    cmd_sections,
     cmd_standings,
     cmd_unfinished,
     main,
 )
-from chess_results.models import Disagreement, Entrants, Play, PlayKind, StartingRankEntry
+from chess_results.models import (
+    Disagreement,
+    Entrants,
+    Play,
+    PlayKind,
+    SearchResult,
+    SearchResults,
+    StartingRankEntry,
+)
+from chess_results.sections import group_sections
 
 
 def _args(**kwargs):
@@ -804,3 +816,134 @@ class TestPairingSheetCommand:
         # A single board, but Hebden is pinned to 14, which this round has not got.
         assert any("does not have" in line for line in err.splitlines())
         assert any(line.startswith("! ") and "does not have" in line for line in lines)
+
+
+def _row(tid, name, players, **kwargs):
+    return SearchResult(
+        id=tid,
+        name=name,
+        organizer="Org",
+        start_date=datetime.date(2023, 9, 23),
+        end_date=datetime.date(2023, 9, 24),
+        players=players,
+        **kwargs,
+    )
+
+
+class _SearchClient:
+    """Stands in for ChessResults: the commands only ever call these two."""
+
+    def __init__(self, rows):
+        self.rows = rows
+        self.asked = None
+
+    def search(self, name=None, **kwargs):
+        self.asked = {"name": name, **kwargs}
+        shown = self.rows[: kwargs["limit"]]
+        return SearchResults(shown, len(self.rows))
+
+    def sections(self, tournament_id):
+        return group_sections(self.rows[0], self.rows)
+
+
+ROWS = [
+    _row("823027", "Derbyshire Congress Open", 30),
+    _row("823029", "Derbyshire Congress Major", 25),
+    _row("823031", "Derbyshire Congress Intermediate", 45),
+]
+
+
+def _run_search_command(monkeypatch, capsys, argv, rows=ROWS):
+    client = _SearchClient(rows)
+    monkeypatch.setattr("chess_results.cli._client", lambda args: client)
+    args = build_parser().parse_args(argv)
+    code = args.func(args)
+    return code, capsys.readouterr(), client
+
+
+class TestSections:
+    def test_is_registered_on_the_parser(self):
+        args = build_parser().parse_args(["sections", "823027"])
+        assert args.func is cmd_sections
+        assert (args.tournament_id, args.json, args.summary) == ("823027", False, False)
+
+    def test_prints_each_section_and_the_total(self, monkeypatch, capsys):
+        code, out, _ = _run_search_command(monkeypatch, capsys, ["sections", "823027"])
+        assert code == 0
+        lines = out.out.splitlines()
+        assert lines[0] == "Derbyshire Congress — 2023-09-23 to 2023-09-24"
+        assert lines[1].split() == ["823027", "Open", "30"]
+        assert lines[-1].split() == ["Total", "100"]
+
+    def test_summary_is_the_one_line_form(self, monkeypatch, capsys):
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["sections", "823027", "--summary"])
+        assert out.out.splitlines() == ["Open 30; Major 25; Intermediate 45 (2023)", "Total: 100"]
+
+    def test_json_carries_the_ids_and_counts(self, monkeypatch, capsys):
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["sections", "823027", "--json"])
+        payload = json.loads(out.out)
+        assert payload["total"] == 100
+        assert payload["start_date"] == "2023-09-23"
+        assert payload["sections"][0] == {
+            "label": "Open",
+            "id": "823027",
+            "name": "Derbyshire Congress Open",
+            "players": 30,
+        }
+
+    def test_takes_no_row_options_that_make_no_sense(self):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["sections", "823027", "--name-width", "20"])
+
+
+class TestSearch:
+    def test_is_registered_on_the_parser(self):
+        args = build_parser().parse_args(["search", "Derbyshire", "--organizer", "Woodhouse"])
+        assert (args.func, args.query, args.organizer) == (cmd_search, "Derbyshire", "Woodhouse")
+
+    def test_the_name_is_optional_given_a_filter(self):
+        assert build_parser().parse_args(["search", "--organizer", "x"]).query is None
+
+    def test_passes_the_filters_through(self, monkeypatch, capsys):
+        argv = ["search", "Derbyshire", "--director", "D", "--ends-from", "2024-01-01", "--finished"]
+        _, _, client = _run_search_command(monkeypatch, capsys, argv)
+        assert client.asked["name"] == "Derbyshire"
+        assert (client.asked["director"], client.asked["ends_from"], client.asked["finished_only"]) == (
+            "D",
+            "2024-01-01",
+            True,
+        )
+        assert client.asked["limit"] == 100
+
+    def test_lists_number_dates_count_and_name(self, monkeypatch, capsys):
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "Derbyshire"])
+        lines = out.out.splitlines()
+        assert lines[0] == "3 tournament(s) found"
+        assert lines[1].split(maxsplit=4)[0::4] == ["823027", "30  Derbyshire Congress Open"]
+        assert "2023-09-23 to 2023-09-24" in lines[1]
+
+    def test_a_cut_off_list_says_so(self, monkeypatch, capsys):
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "Derbyshire", "--limit", "2"])
+        assert out.out.splitlines()[0] == "3 tournament(s) found, showing 2"
+
+    def test_a_name_the_site_cut_is_marked_and_explained(self, monkeypatch, capsys):
+        rows = [_row("1", "x" * 50, 5, name_truncated=True)]
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "x"], rows)
+        assert ("x" * 50 + "…") in out.out
+        assert "cuts names at 50 characters" in out.out
+
+    def test_nothing_found_is_said(self, monkeypatch, capsys):
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "zzz"], [])
+        assert out.out.strip() == "no tournaments found"
+
+    def test_json_reports_the_total_and_whether_it_was_cut(self, monkeypatch, capsys):
+        _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "D", "--limit", "1", "--json"])
+        payload = json.loads(out.out)
+        assert (payload["total"], payload["truncated"], len(payload["results"])) == (3, True, 1)
+        assert payload["results"][0]["start_date"] == "2023-09-23"
+
+    def test_with_nothing_to_search_for_it_is_a_usage_error(self, monkeypatch, capsys):
+        code, out, client = _run_search_command(monkeypatch, capsys, ["search"])
+        assert code == 2
+        assert "needs a name" in out.err
+        assert client.asked is None

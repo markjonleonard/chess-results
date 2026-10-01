@@ -14,7 +14,17 @@ from typing import TypeVar
 from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
 from .client import ChessResults, TournamentError
-from .models import Entrants, Pairing, Play, Player, PlayerRef, PlayKind, StartingRankEntry
+from .models import (
+    Entrants,
+    EventSections,
+    Pairing,
+    Play,
+    Player,
+    PlayerRef,
+    PlayKind,
+    SearchResults,
+    StartingRankEntry,
+)
 from .tournament import Tournament
 
 T = TypeVar("T")
@@ -45,6 +55,9 @@ examples:
   chess-results pairing-sheet 1452107 6       round 6, with its results filled in
   chess-results pairing-sheet 1452107 --pairs next.txt | lpr   pin up the next round
   chess-results dump 1452107 -o event.json    the whole tournament as JSON
+  chess-results sections 823027               every section of that event, and how many entered each
+  chess-results sections 823027 --summary     the same on one line: Open 30; Major 25; ... (2023)
+  chess-results search "Derbyshire Congress"  find tournament numbers by name, newest first
   chess-results standings 1452107 --limit 10  just the top ten, heading kept
 
 Run "chess-results <command> --help" for a command's own options.
@@ -90,6 +103,16 @@ def _entrants(args: argparse.Namespace) -> Entrants:
         delay=args.delay, cache=not args.no_cache, cache_dir=args.cache_dir, live_ttl=args.cache_ttl
     )
     return client.entrants(args.tournament_id)
+
+
+def _client(args: argparse.Namespace) -> ChessResults:
+    """A client for the commands that read the search, not a tournament's pages."""
+    return ChessResults(delay=args.delay, cache=not args.no_cache, cache_dir=args.cache_dir)
+
+
+def _print_json(payload: object) -> None:
+    """Dates as ISO strings, which is what the rest of the world expects of a date."""
+    print(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
 
 
 def _warn_disagreements(event: Tournament) -> None:
@@ -263,6 +286,84 @@ def cmd_players(args: argparse.Namespace) -> int:
         rating = "" if entry.rating is None else str(entry.rating)
         print(f"{_fit(_rank_row(entry), width)} {rating:>4}  {entry.federation or ''}".rstrip())
     _and_the_rest(dropped)
+    return 0
+
+
+def _dates(start: object, end: object) -> str:
+    if start is None:
+        return ""
+    return f"{start}" if start == end or end is None else f"{start} to {end}"
+
+
+def cmd_search(args: argparse.Namespace) -> int:
+    """Search chess-results' tournament database and list what matched."""
+    criteria = (args.query, args.organizer, args.director, args.location, args.ends_from, args.ends_to)
+    if not any(criteria) and not args.finished:
+        print("chess-results: search needs a name or at least one of the filters", file=sys.stderr)
+        return 2
+    found: SearchResults = _client(args).search(
+        args.query,
+        organizer=args.organizer,
+        director=args.director,
+        location=args.location,
+        ends_from=args.ends_from,
+        ends_to=args.ends_to,
+        finished_only=args.finished,
+        limit=args.limit if args.limit is not None else 100,
+    )
+    if args.json:
+        _print_json(
+            {
+                "total": found.total,
+                "truncated": found.truncated,
+                "results": [dataclasses.asdict(r) for r in found],
+            }
+        )
+        return 0
+    if not found:
+        print("no tournaments found")
+        return 0
+    print(f"{found.total} tournament(s) found" + (f", showing {len(found)}" if found.truncated else ""))
+    for r in found:
+        count = "" if r.players is None else str(r.players)
+        cut = "…" if r.name_truncated else ""
+        print(f"{r.id:>8}  {_dates(r.start_date, r.end_date):<23} {count:>5}  {r.name}{cut}")
+    if any(r.name_truncated for r in found):
+        print("… the site cuts names at 50 characters; `sections` and `players` show them in full")
+    return 0
+
+
+def _section_table(event: EventSections) -> list[str]:
+    width = max(len(s.label) for s in event.sections)
+    lines = [
+        f"{s.id:>8}  {s.label:<{width}}  {'?' if s.players is None else s.players:>5}" for s in event.sections
+    ]
+    return [*lines, f"{'':>8}  {'Total':<{width}}  {event.total:>5}"]
+
+
+def cmd_sections(args: argparse.Namespace) -> int:
+    """List every section of the event a tournament belongs to, with entrant counts."""
+    event = _client(args).sections(args.tournament_id)
+    if args.json:
+        _print_json(
+            {
+                "name": event.name,
+                "start_date": event.start_date,
+                "end_date": event.end_date,
+                "total": event.total,
+                "sections": [
+                    {"label": s.label, "id": s.id, "name": s.result.name, "players": s.players}
+                    for s in event.sections
+                ],
+            }
+        )
+        return 0
+    if args.summary:
+        print(event.summary())
+        print(f"Total: {event.total}")
+        return 0
+    print(f"{event.name} — {_dates(event.start_date, event.end_date)}")
+    print("\n".join(_section_table(event)))
     return 0
 
 
@@ -683,6 +784,28 @@ COMMANDS = (
         "paired, unlike every other command here.",
     ),
     (
+        "sections",
+        (),
+        cmd_sections,
+        "list the sections of an event with entrant counts",
+        "Every section of the congress a tournament belongs to, and how many "
+        "entered each, with the total. chess-results links sections together "
+        "nowhere, so they are found by what they share -- the same organiser, "
+        "starting and ending on the same dates -- which is an inference, not a "
+        "fact. A congress whose sections run different dates is not found whole. "
+        "Counts are the site's own and need no tournament page read.",
+    ),
+    (
+        "search",
+        (),
+        cmd_search,
+        "find tournaments by name, organiser, director or place",
+        "Searches chess-results' tournament database, newest first, and prints "
+        "each match's tournament number, dates and entrant count. Every filter is "
+        "a case-insensitive substring match on the site's side, and they combine. "
+        "The site cuts names at 50 characters in these results.",
+    ),
+    (
         "dump",
         (),
         cmd_dump,
@@ -752,6 +875,8 @@ COMMANDS = (
 #: Commands whose arguments are not simply a tournament id, for the usage line.
 USAGE_ARGS = {
     "dump": "[-o FILE] <tournament-id>",
+    "search": "[filters] [<name>]",
+    "sections": "[--summary | --json] <tournament-id>",
     "pairings": "<tournament-id> [<round>]",
     "pairing-sheet": "[--pairs FILE] [-o FILE] <tournament-id> [<round>]",
     "history": "<tournament-id> <player>",
@@ -783,11 +908,39 @@ def build_parser() -> argparse.ArgumentParser:
             description=description,
             parents=[_shared(defaults=False)],
         )
-        child.add_argument(
-            "tournament_id", metavar="<tournament-id>", help="chess-results tournament id, e.g. 1452107"
-        )
+        if name == "search":
+            child.add_argument("query", nargs="?", metavar="<name>", help="part of the tournament's name")
+        else:
+            child.add_argument(
+                "tournament_id", metavar="<tournament-id>", help="chess-results tournament id, e.g. 1452107"
+            )
         if name == "dump":
             child.add_argument("-o", "--output", metavar="FILE", help="write JSON here instead of stdout")
+        elif name in ("search", "sections"):
+            child.add_argument("--json", action="store_true", help="print JSON rather than a table")
+            if name == "sections":
+                child.add_argument(
+                    "--summary", action="store_true", help='one line: "Open 30; Major 25; Minor 19 (2023)"'
+                )
+            else:
+                child.add_argument("--organizer", metavar="TEXT", help="part of the organiser's name")
+                child.add_argument(
+                    "--director", metavar="TEXT", help="part of the tournament director's name"
+                )
+                child.add_argument("--location", metavar="TEXT", help="part of the venue")
+                child.add_argument(
+                    "--ends-from", metavar="YYYY-MM-DD", help="only tournaments ending on or after this day"
+                )
+                child.add_argument(
+                    "--ends-to", metavar="YYYY-MM-DD", help="only tournaments ending on or before this day"
+                )
+                child.add_argument("--finished", action="store_true", help="only finished tournaments")
+                child.add_argument(
+                    "--limit",
+                    type=int,
+                    metavar="ROWS",
+                    help="at most this many matches (default 100; the total is always reported)",
+                )
         else:
             if name not in ("pairing-sheet", "history"):
                 # Off dump because truncated JSON is not JSON, off the sheet

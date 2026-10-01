@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -108,6 +110,108 @@ class Entrants:
     time_control: str | None
     dates: str | None
     players: list[StartingRankEntry]
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    """One row of chess-results' tournament search.
+
+    ``players`` is the site's own entrant count, so a search answers "how big is
+    it" without a request per tournament. It is as fresh as the search index,
+    which a live event updates as it goes.
+
+    The search page cuts a tournament's name at 50 characters, and cuts it
+    silently -- the section label of a long congress title is exactly the part
+    lost. ``name_truncated`` is set when ``name`` may have been cut; the full
+    name is on the tournament's own page.
+    """
+
+    id: str
+    name: str
+    name_truncated: bool = False
+    federation: str | None = None
+    start_date: datetime.date | None = None
+    end_date: datetime.date | None = None
+    director: str | None = None
+    organizer: str | None = None
+    chief_arbiter: str | None = None
+    location: str | None = None
+    time_control: str | None = None
+    rounds: int | None = None
+    players: int | None = None
+
+
+@dataclass(frozen=True)
+class SearchResults:
+    """The rows a search returned, and how many matched in all.
+
+    The two differ when the page size cut the list short, and a short list reads
+    as a small answer -- so ``total`` is carried rather than discarded, and
+    ``truncated`` says so.
+    """
+
+    results: list[SearchResult]
+    total: int
+
+    @property
+    def truncated(self) -> bool:
+        return self.total > len(self.results)
+
+    def __iter__(self) -> Iterator[SearchResult]:
+        return iter(self.results)
+
+    def __len__(self) -> int:
+        return len(self.results)
+
+    def __getitem__(self, index: int) -> SearchResult:
+        return self.results[index]
+
+
+@dataclass(frozen=True)
+class Section:
+    """One section of an event: the tournament and what tells it from its siblings."""
+
+    label: str
+    result: SearchResult
+
+    @property
+    def id(self) -> str:
+        return self.result.id
+
+    @property
+    def players(self) -> int | None:
+        return self.result.players
+
+
+@dataclass(frozen=True)
+class EventSections:
+    """The sections of one event, and the headcount of each.
+
+    Grouped by inference, not by anything the site publishes -- see
+    :mod:`chess_results.sections`.
+    """
+
+    name: str
+    sections: list[Section]
+
+    @property
+    def start_date(self) -> datetime.date | None:
+        return self.sections[0].result.start_date
+
+    @property
+    def end_date(self) -> datetime.date | None:
+        return self.sections[0].result.end_date
+
+    @property
+    def total(self) -> int:
+        """Entries across every section; a player in two sections counts twice."""
+        return sum(s.players or 0 for s in self.sections)
+
+    def summary(self) -> str:
+        """``Open 45; Major 27; Intermediate 44 (2023)``"""
+        counts = "; ".join(f"{s.label} {'?' if s.players is None else s.players}" for s in self.sections)
+        year = self.start_date.year if self.start_date else None
+        return f"{counts} ({year})" if year else counts
 
 
 @dataclass(frozen=True)

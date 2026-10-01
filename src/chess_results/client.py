@@ -9,6 +9,8 @@ default is a truncated page that says nothing about being truncated.
 
 from __future__ import annotations
 
+import dataclasses
+import datetime
 import time
 from collections.abc import Callable, Mapping
 from typing import Any
@@ -26,7 +28,17 @@ from .cache import (
     cached_session,
 )
 from .congress import Congress
-from .models import CrosstableEntry, Entrants, NotPairedEntry, Pairing, PlayKind, StartingRankEntry
+from .models import (
+    CrosstableEntry,
+    Entrants,
+    EventSections,
+    NotPairedEntry,
+    Pairing,
+    PlayKind,
+    SearchResult,
+    SearchResults,
+    StartingRankEntry,
+)
 from .parse import (
     has_pairings,
     is_combined_pairings,
@@ -35,10 +47,13 @@ from .parse import (
     parse_not_paired,
     parse_pairings,
     parse_published_totals,
+    parse_search_form,
+    parse_search_results,
     parse_starting_rank,
     parse_tournament_details,
     parse_tournament_name,
 )
+from .sections import group_sections, is_sibling, sibling_query
 from .tournament import Tournament
 
 BASE_URL = "https://chess-results.com"
@@ -59,6 +74,11 @@ ART_NOT_PAIRED = 40
 #: rather than one we chose; no chess tournament comes near it.
 ALL_ROWS = 99999
 
+#: The tournament search form, and the page sizes it offers (its "Maximum number
+#: of lines" select, in the order of its option values).
+SEARCH_PAGE = "TurnierSuche.aspx"
+SEARCH_PAGE_SIZES = (100, 250, 500, 1000, 1500, 2000)
+
 #: Safety net for round auto-detection.
 MAX_ROUNDS = 30
 
@@ -73,6 +93,10 @@ class TournamentError(ValueError):
     wrong. Naming the reason is the difference between a tool that is honest
     about its limits and one that quietly answers the wrong question.
     """
+
+
+class TournamentNotFoundError(TournamentError):
+    """The search has no tournament by that number."""
 
 
 class TeamTournamentError(TournamentError):
@@ -131,6 +155,10 @@ def retrying_adapter(retries: int = RETRIES, backoff_factor: float = BACKOFF_FAC
             respect_retry_after_header=True,
         )
     )
+
+
+def _iso(day: datetime.date | str | None) -> str:
+    return day.isoformat() if isinstance(day, datetime.date) else (day or "")
 
 
 def settled_rounds(event: Tournament) -> set[int]:
@@ -307,6 +335,129 @@ class ChessResults:
             return bool(cache.contains(request=request))
         except Exception:  # cache introspection is a nicety, never a blocker
             return False
+
+    def _pace(self) -> None:
+        wait = self.delay - (time.monotonic() - self._last_request)
+        if wait > 0:
+            time.sleep(wait)
+
+    def search(
+        self,
+        name: str | None = None,
+        *,
+        tournament_id: str | int | None = None,
+        organizer: str | None = None,
+        director: str | None = None,
+        arbiter: str | None = None,
+        location: str | None = None,
+        ends_from: datetime.date | str | None = None,
+        ends_to: datetime.date | str | None = None,
+        finished_only: bool = False,
+        limit: int = SEARCH_PAGE_SIZES[0],
+    ) -> SearchResults:
+        """Search chess-results' tournament database.
+
+        Every text criterion is a case-insensitive substring match on the site's
+        side, and they combine with AND. ``ends_from`` and ``ends_to`` bound the
+        date a tournament *ended* (a ``date`` or ``"YYYY-MM-DD"``).
+
+        At least one criterion is required: the alternative is the whole
+        database, newest first, which is never what was meant. Rows come back
+        newest first, and ``limit`` caps them -- the result's ``total`` is how
+        many matched, so a cut-off list says so rather than reading as a small
+        answer. Names are cut at 50 characters by the site; see
+        :attr:`SearchResult.name_truncated`.
+
+        Never cached. The search is a form post, which a cache does not store,
+        and its entrant counts move while an event is live.
+        """
+        fields = {
+            "ctl00$P1$txt_tnr": "" if tournament_id is None else str(tournament_id),
+            "ctl00$P1$txt_bez": name or "",
+            "ctl00$P1$txt_veranstalter": organizer or "",
+            "ctl00$P1$txt_leiter": director or "",
+            "ctl00$P1$txt_Hauptschiedsrichter": arbiter or "",
+            "ctl00$P1$txt_ort": location or "",
+            "ctl00$P1$txt_von_tag": _iso(ends_from),
+            "ctl00$P1$txt_bis_tag": _iso(ends_to),
+        }
+        if not any(fields.values()) and not finished_only:
+            raise ValueError("search needs at least one criterion")
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        page_size = next((i for i, size in enumerate(SEARCH_PAGE_SIZES) if size >= limit), None)
+        if page_size is None:
+            page_size = len(SEARCH_PAGE_SIZES) - 1
+        fields["ctl00$P1$combo_anzahl_zeilen"] = str(page_size)
+        if finished_only:
+            fields["ctl00$P1$cbox_zuEnde"] = "on"
+
+        # The form has to be fetched first: ASP.NET refuses a postback that does
+        # not carry the view state it issued. Not from the cache, for the same reason.
+        options: dict[str, Any] = {"expire_after": 0} if self.caching else {}
+        self._pace()
+        form = self.session.get(
+            f"{self.base_url}/{SEARCH_PAGE}",
+            params={"lan": 1},
+            timeout=self.timeout,
+            allow_redirects=True,
+            **options,
+        )
+        self._last_request = time.monotonic()
+        form.raise_for_status()
+        self._pace()
+        response = self.session.post(
+            form.url,
+            data={
+                **parse_search_form(form.text),
+                # The selects the form posts back as they stand: everything, newest first.
+                "ctl00$P1$combo_art": "5",
+                "ctl00$P1$combo_sort": "1",
+                "ctl00$P1$combo_land": "-",
+                "ctl00$P1$combo_bedenkzeit": "0",
+                "ctl00$P1$cb_suchen": "Search",
+                **fields,
+            },
+            timeout=self.timeout,
+        )
+        self._last_request = time.monotonic()
+        response.raise_for_status()
+        found = parse_search_results(response.text)
+        return SearchResults(results=found.results[:limit], total=found.total)
+
+    def sections(self, tournament_id: str | int) -> EventSections:
+        """Every section of the event ``tournament_id`` belongs to, with entrant counts.
+
+        Two searches and no tournament pages: the first finds the tournament, the
+        second finds what shares its organiser and dates -- see
+        :mod:`chess_results.sections` for why that is an inference. The one
+        exception is a name the search cut short, which is read in full off its
+        own page so that its section label survives.
+        """
+        found = self.search(tournament_id=tournament_id, limit=1)
+        if not found:
+            raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
+        target = found[0]
+        candidates = [target]
+        if target.end_date is not None:
+            nearby = self.search(
+                **sibling_query(target),
+                ends_from=target.end_date,
+                ends_to=target.end_date,
+                limit=SEARCH_PAGE_SIZES[-1],
+            )
+            candidates += [c for c in nearby if is_sibling(target, c)]
+        full = {c.id: self._full_name(c) for c in {c.id: c for c in candidates}.values()}
+        return group_sections(
+            dataclasses.replace(target, name=full[target.id]),
+            (dataclasses.replace(c, name=full[c.id]) for c in candidates),
+        )
+
+    def _full_name(self, result: SearchResult) -> str:
+        """The tournament's name, in full: the search's own may have been cut."""
+        if not result.name_truncated:
+            return result.name
+        return self.entrants(result.id).name or result.name
 
     def starting_rank(self, tournament_id: str | int) -> list[StartingRankEntry]:
         return self.entrants(tournament_id).players
