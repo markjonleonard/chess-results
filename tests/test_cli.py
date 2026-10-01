@@ -37,6 +37,7 @@ from chess_results.cli import (
     cmd_unfinished,
     main,
 )
+from chess_results.client import SearchError
 from chess_results.models import (
     Disagreement,
     Entrants,
@@ -947,3 +948,16 @@ class TestSearch:
         assert code == 2
         assert "needs a name" in out.err
         assert client.asked is None
+
+
+class TestSearchFailure:
+    def test_a_search_the_site_could_not_answer_is_one_line_and_exit_1(self, monkeypatch, capsys):
+        class Broken:
+            def search(self, *args, **kwargs):
+                raise SearchError("chess-results returned no search results (got: 'Server busy')")
+
+        monkeypatch.setattr("chess_results.cli._client", lambda args: Broken())
+        assert main(["search", "Hull"]) == 1
+        err = capsys.readouterr().err
+        assert err.startswith("chess-results: ") and "Server busy" in err
+        assert "Traceback" not in err

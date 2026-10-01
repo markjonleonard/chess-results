@@ -482,7 +482,8 @@ found[0].name, found[0].id, found[0].players
 
 `search` takes `name`, `tournament_id`, `organizer`, `director`, `arbiter`,
 `location`, `ends_from`, `ends_to` (a `date` or `"YYYY-MM-DD"`), `finished_only` and
-`limit`, and needs at least one criterion. `SearchResult.name_inexact` is set
+`limit`, and needs at least one criterion. A response that is not a list of
+tournaments is retried once and then raised as `SearchError`. `SearchResult.name_inexact` is set
 for a name the site may have cut at 50 characters or run two words together in.
 
 ### A congress of several sections

@@ -143,6 +143,9 @@ into one or two `Play` objects.
 - **The result table sits inside layout tables** whose rows would repeat it, so the parser
   takes only a table with no table nested in it.
 - **The entrant count (`n`) comes with the row**, so `sections()` needs no tournament page.
+- **A bad page is retried once, then `SearchError`.** The site has returned a non-result page
+  with a success status that went away on the next try; urllib3's retry does not see it and does
+  not cover POST. The CLI exits 1 for it, against 2 for a tournament it cannot read.
 
 `sections()` groups by inference: same organiser (director, then the first two words of the
 name, when it is empty) and the same start date or the same end date. Either, because Hull

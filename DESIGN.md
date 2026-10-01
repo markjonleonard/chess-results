@@ -263,6 +263,12 @@ ChessResults(session=mine)  # your session, your transport policy
 A session you pass in is never mounted over — `client.retrying_adapter()` is
 exported so you can mount it yourself.
 
+The search is a form post, which that policy does not cover, and it has a failure the
+policy cannot see: an error page sent with a success status. `ChessResults.search`
+therefore tries a page that is not a result list once more, since a search changes
+nothing, and then raises `SearchError` with the start of what came back. The command line
+prints that as one line and exits 1, where an unreadable tournament exits 2.
+
 ## Predicting the next round
 
 `chess_results.trf` writes FIDE
