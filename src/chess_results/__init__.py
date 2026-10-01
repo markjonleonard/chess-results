@@ -9,6 +9,7 @@
 from .client import (
     ChessResults,
     RoundRobinError,
+    SearchError,
     TeamTournamentError,
     TournamentError,
     TournamentNotFoundError,
@@ -63,6 +64,7 @@ __all__ = [
     "PlayerRef",
     "Preference",
     "RoundRobinError",
+    "SearchError",
     "SearchResult",
     "SearchResults",
     "Section",

@@ -16,6 +16,7 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 import requests
+from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -53,7 +54,7 @@ from .parse import (
     parse_tournament_details,
     parse_tournament_name,
 )
-from .sections import group_sections, is_sibling, sibling_query
+from .sections import group_sections, is_sibling, sibling_query, sibling_window
 from .tournament import Tournament
 
 BASE_URL = "https://chess-results.com"
@@ -92,6 +93,15 @@ class TournamentError(ValueError):
     gets a confident report of zero rounds and no warning that anything is
     wrong. Naming the reason is the difference between a tool that is honest
     about its limits and one that quietly answers the wrong question.
+    """
+
+
+class SearchError(RuntimeError):
+    """The search answered with something that is not a list of tournaments.
+
+    A fault in the service rather than an answer, so it is not a
+    `TournamentError`: an error page sent with a success status, which
+    chess-results does now and then and which went away on a second try.
     """
 
 
@@ -405,25 +415,32 @@ class ChessResults:
         )
         self._last_request = time.monotonic()
         form.raise_for_status()
-        self._pace()
-        response = self.session.post(
-            form.url,
-            data={
-                **parse_search_form(form.text),
-                # The selects the form posts back as they stand: everything, newest first.
-                "ctl00$P1$combo_art": "5",
-                "ctl00$P1$combo_sort": "1",
-                "ctl00$P1$combo_land": "-",
-                "ctl00$P1$combo_bedenkzeit": "0",
-                "ctl00$P1$cb_suchen": "Search",
-                **fields,
-            },
-            timeout=self.timeout,
-        )
-        self._last_request = time.monotonic()
-        response.raise_for_status()
-        found = parse_search_results(response.text)
-        return SearchResults(results=found.results[:limit], total=found.total)
+        data = {
+            **parse_search_form(form.text),
+            # The selects the form posts back as they stand: everything, newest first.
+            "ctl00$P1$combo_art": "5",
+            "ctl00$P1$combo_sort": "1",
+            "ctl00$P1$combo_land": "-",
+            "ctl00$P1$combo_bedenkzeit": "0",
+            "ctl00$P1$cb_suchen": "Search",
+            **fields,
+        }
+        # A search changes nothing, so a page that is not a result page is worth
+        # exactly one more try before it is reported.
+        for attempt in (1, 2):
+            self._pace()
+            response = self.session.post(form.url, data=data, timeout=self.timeout)
+            self._last_request = time.monotonic()
+            response.raise_for_status()
+            try:
+                found = parse_search_results(response.text)
+            except ValueError:
+                if attempt == 2:
+                    seen = " ".join(BeautifulSoup(response.text, "html.parser").get_text().split())[:100]
+                    raise SearchError(f"chess-results returned no search results (got: {seen!r})") from None
+                continue
+            return SearchResults(results=found.results[:limit], total=found.total)
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def sections(self, tournament_id: str | int) -> EventSections:
         """Every section of the event ``tournament_id`` belongs to, with entrant counts.
@@ -439,11 +456,12 @@ class ChessResults:
             raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
         target = found[0]
         candidates = [target]
-        if target.end_date is not None:
+        window = sibling_window(target)
+        if window is not None:
             nearby = self.search(
                 **sibling_query(target),
-                ends_from=target.end_date,
-                ends_to=target.end_date,
+                ends_from=window[0],
+                ends_to=window[1],
                 limit=SEARCH_PAGE_SIZES[-1],
             )
             candidates += [c for c in nearby if is_sibling(target, c)]

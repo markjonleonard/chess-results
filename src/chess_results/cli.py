@@ -13,7 +13,7 @@ from typing import TypeVar
 
 from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
-from .client import ChessResults, TournamentError
+from .client import ChessResults, SearchError, TournamentError
 from .models import (
     Entrants,
     EventSections,
@@ -791,8 +791,8 @@ COMMANDS = (
         "Every section of the congress a tournament belongs to, and how many "
         "entered each, with the total. chess-results links sections together "
         "nowhere, so they are found by what they share -- the same organiser, "
-        "starting and ending on the same dates -- which is an inference, not a "
-        "fact. A congress whose sections run different dates is not found whole. "
+        "and the same start date or the same end date -- which is an inference, "
+        "not a fact. A section sharing neither date is not found. "
         "Counts are the site's own and need no tournament page read.",
     ),
     (
@@ -1085,6 +1085,10 @@ def main(argv: list[str] | None = None) -> int:
         # argument to fix, not a bug to show a traceback for.
         print(f"chess-results: {exc}", file=sys.stderr)
         return 2
+    except SearchError as exc:
+        # The site's fault and not the user's, and worth trying again in a moment.
+        print(f"chess-results: {exc}", file=sys.stderr)
+        return 1
     except TournamentError as exc:
         # A tournament this cannot read, or one with nothing to read yet.
         # Neither is a crash, so say so in one line rather than showing a

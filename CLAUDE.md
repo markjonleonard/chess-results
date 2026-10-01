@@ -145,7 +145,8 @@ into one or two `Play` objects.
 - **The entrant count (`n`) comes with the row**, so `sections()` needs no tournament page.
 
 `sections()` groups by inference: same organiser (director, then the first two words of the
-name, when it is empty) and the same start and end dates. `sections.py` holds that and the
+name, when it is empty) and the same start date or the same end date. Either, because Hull
+4NCL 2026's lower sections start a day after its Open and all end together. `sections.py` holds that and the
 label rule, is pure, and its limits are written at the top of that module and in the README.
 
 ## The non-obvious things

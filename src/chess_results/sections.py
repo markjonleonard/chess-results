@@ -7,10 +7,13 @@ come from the caller. What the search *does* publish for every tournament is who
 organised it and when, and sections of one congress agree on both. That is all
 this goes on, so it is an inference and a good one, not a fact:
 
-- **Same organiser, same start and end date.** A congress whose Open runs a day
-  longer than its weekend sections is therefore missed, and an organiser who
-  runs two unrelated events over the same dates would be merged. Neither has
-  turned up in the congresses this was written against; both are possible.
+- **Same organiser, and the same start date or the same end date.** Either one,
+  because a congress's lower sections often start a day after the Open (Hull
+  4NCL 2026: Friday for three sections, Saturday for two, all ending Sunday), or
+  its Open runs on after the rest. A section that shares neither date is missed,
+  and an organiser who runs two unrelated events starting or ending the same day
+  would be merged. Neither has turned up in the congresses this was written
+  against; both are possible.
 - **No organiser is not a wildcard.** An empty organiser would match every
   tournament of the day, so the director stands in, and failing that the first
   two words of the name -- the least reliable of the three, used last.
@@ -20,6 +23,7 @@ Everything here is pure: the search itself is the client's business.
 
 from __future__ import annotations
 
+import datetime
 import re
 from collections.abc import Iterable
 from typing import TypedDict
@@ -31,6 +35,10 @@ _EDGE = re.compile(r"^\W+|\W+$")
 
 #: Words of a name to compare when nothing but the name is left to go on.
 _NAME_PREFIX_WORDS = 2
+
+#: How far past the target's own end date to look for a section that runs on
+#: after it. Generous, since the organiser filter keeps the answer small.
+END_SLACK = datetime.timedelta(days=7)
 
 
 def _words(name: str) -> list[tuple[str, str]]:
@@ -53,16 +61,27 @@ def _clean(text: str | None) -> str:
 
 def is_sibling(target: SearchResult, other: SearchResult) -> bool:
     """Whether ``other`` looks like a section of the same event as ``target``."""
-    if (target.start_date, target.end_date) != (other.start_date, other.end_date):
-        return False
-    if target.start_date is None:
+    if target.start_date is None or target.end_date is None:
         return False  # no dates, so nothing to say the two overlap at all
+    if target.start_date != other.start_date and target.end_date != other.end_date:
+        return False
     for field in ("organizer", "director"):
         mine = _clean(getattr(target, field))
         if mine:
             return mine == _clean(getattr(other, field))
     mine_words = [k for k, _ in _words(target.name)[:_NAME_PREFIX_WORDS]]
     return bool(mine_words) and mine_words == [k for k, _ in _words(other.name)[:_NAME_PREFIX_WORDS]]
+
+
+def sibling_window(target: SearchResult) -> tuple[datetime.date, datetime.date] | None:
+    """The end dates to search between for ``target``'s siblings, or None if it is undated.
+
+    From its own start, since a section that ends before then cannot share its
+    start or its end, to a week past its end for a section that runs on.
+    """
+    if target.start_date is None or target.end_date is None:
+        return None
+    return target.start_date, target.end_date + END_SLACK
 
 
 class SiblingQuery(TypedDict, total=False):

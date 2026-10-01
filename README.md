@@ -184,9 +184,10 @@ the search, so no tournament page is read. Sections are listed in tournament
 number order.
 
 chess-results does not link the sections of a congress, so they are found by what
-they share: the same organiser, starting and ending on the same dates. That is an
-inference. A congress whose sections run different dates is not found whole, and
-two unrelated events from one organiser over the same dates would be merged. If
+they share: the same organiser, and the same start date or the same end date.
+That is an inference. A section that shares neither date is not found, and two
+unrelated events from one organiser starting or ending the same day would be
+merged. If
 it matters, check the list against the congress's own page. Section labels are
 the words in each name that the others lack, so they are only as clean as the
 organiser's naming: "FIDE Open" rather than "Open" when only some titles say

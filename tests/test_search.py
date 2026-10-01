@@ -5,7 +5,7 @@ import datetime
 
 import pytest
 
-from chess_results import ChessResults, TournamentNotFoundError
+from chess_results import ChessResults, SearchError, TournamentNotFoundError
 from chess_results.models import Entrants, SearchResult, SearchResults
 from chess_results.parse import parse_search_form, parse_search_results
 from chess_results.sections import (
@@ -14,6 +14,7 @@ from chess_results.sections import (
     is_sibling,
     section_labels,
     sibling_query,
+    sibling_window,
 )
 from conftest import fixture
 
@@ -137,6 +138,19 @@ class TestIsSibling:
     def test_the_same_organiser_on_the_same_dates(self):
         assert is_sibling(_result("1"), _result("2", "Congress Major"))
 
+    def test_a_section_starting_a_day_later_is_still_one(self):
+        """Hull 4NCL 2026: three sections start Friday, two Saturday, all end Sunday."""
+        later = _result("2", start_date=datetime.date(2024, 11, 24))
+        assert is_sibling(_result("1"), later)
+
+    def test_a_section_that_runs_on_is_still_one(self):
+        longer = _result("2", end_date=datetime.date(2024, 11, 25))
+        assert is_sibling(_result("1"), longer)
+
+    def test_sharing_neither_date_is_another_event(self):
+        apart = _result("2", start_date=datetime.date(2024, 11, 24), end_date=datetime.date(2024, 11, 25))
+        assert not is_sibling(_result("1"), apart)
+
     def test_other_dates_are_another_event(self):
         later = _result("2", start_date=datetime.date(2025, 11, 22), end_date=datetime.date(2025, 11, 23))
         assert not is_sibling(_result("1"), later)
@@ -171,6 +185,11 @@ def test_the_siblings_are_searched_for_by_organiser_first():
     }
 
 
+def test_the_search_window_runs_from_the_start_to_a_week_past_the_end():
+    assert sibling_window(_result()) == (datetime.date(2024, 11, 23), datetime.date(2024, 12, 1))
+    assert sibling_window(_result(start_date=None)) is None
+
+
 def test_group_sections_orders_by_number_and_includes_the_target():
     target = _result("5", "Congress Minor")
     event = group_sections(target, [_result("9", "Congress Open"), _result("3", "Congress Major")])
@@ -199,7 +218,8 @@ class _Session:
 
     def post(self, url, data=None, **kwargs):
         self.sent.append(data)
-        return _Page(fixture(self.posts.pop(0)))
+        page = self.posts.pop(0)
+        return _Page(page if page.startswith("<") else fixture(page))
 
     @property
     def headers(self):
@@ -247,6 +267,17 @@ class TestSearch:
         found = client.search("Derbyshire", limit=4)
         assert (len(found), found.total, found.truncated) == (4, 15, True)
 
+    def test_a_page_that_is_not_results_is_tried_once_more(self):
+        client, session = _client("<html><body>Server busy</body></html>", "search_derbyshire_congress.html")
+        assert client.search("Derbyshire").total == 15
+        assert len(session.sent) == 2
+
+    def test_a_second_bad_page_is_an_error_that_says_what_came_back(self):
+        busy = "<html><body>Server busy</body></html>"
+        client, _ = _client(busy, busy)
+        with pytest.raises(SearchError, match="Server busy"):
+            client.search("Derbyshire")
+
     def test_finished_only_ticks_the_box(self):
         client, session = _client("search_derbyshire_congress.html", "search_derbyshire_congress.html")
         client.search("x")
@@ -271,11 +302,10 @@ class TestSections:
         )
         client.sections(1063614)
         assert len(session.sent) == 2
-        # The second narrows to the one organiser on the day the event ended.
+        # The second narrows to the one organiser, from the event's start to a week past its end.
         assert session.sent[1]["ctl00$P1$txt_veranstalter"] == "David Woodhouse"
-        assert (
-            session.sent[1]["ctl00$P1$txt_von_tag"] == session.sent[1]["ctl00$P1$txt_bis_tag"] == "2024-11-24"
-        )
+        assert session.sent[1]["ctl00$P1$txt_von_tag"] == "2024-11-23"
+        assert session.sent[1]["ctl00$P1$txt_bis_tag"] == "2024-12-01"
 
     def test_other_years_by_the_same_organiser_are_not_sections(self):
         """The whole name search finds three congresses; only the target's own dates count."""
