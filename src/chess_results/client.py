@@ -365,8 +365,8 @@ class ChessResults:
         database, newest first, which is never what was meant. Rows come back
         newest first, and ``limit`` caps them -- the result's ``total`` is how
         many matched, so a cut-off list says so rather than reading as a small
-        answer. Names are cut at 50 characters by the site; see
-        :attr:`SearchResult.name_truncated`.
+        answer. Names can be cut or have spaces
+        dropped by the site; see :attr:`SearchResult.name_inexact`.
 
         Never cached. The search is a form post, which a cache does not store,
         and its entrant counts move while an event is live.
@@ -454,8 +454,8 @@ class ChessResults:
         )
 
     def _full_name(self, result: SearchResult) -> str:
-        """The tournament's name, in full: the search's own may have been cut."""
-        if not result.name_truncated:
+        """The tournament's own name: the search's may have been cut or lost its spaces."""
+        if not result.name_inexact:
             return result.name
         return self.entrants(result.id).name or result.name
 

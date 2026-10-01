@@ -652,6 +652,16 @@ def parse_not_paired(html: str) -> list[NotPairedEntry]:
 #: cut: 49 is "possibly", and the full name costs one cached request to check.
 SEARCH_NAME_LIMIT = 50
 
+#: Two words run together where the name had a line break: a digit or a lower-case
+#: letter straight into a capitalised word, as in "2024Under" or "OpenUnder". It
+#: also matches honest names such as "McShane", which costs one request to rule out.
+_RUN_TOGETHER = re.compile(r"\d[A-Z][a-z]|[a-z][A-Z][a-z]")
+
+
+def _name_is_inexact(name: str) -> bool:
+    return len(name) >= SEARCH_NAME_LIMIT - 1 or bool(_RUN_TOGETHER.search(name))
+
+
 #: How many tournaments the search says matched, whatever it printed.
 _SEARCH_TOTAL = re.compile(r"With this selection (\d+) tournaments? w(?:as|ere) found")
 
@@ -715,8 +725,7 @@ def parse_search_results(html: str) -> SearchResults:
                 SearchResult(
                     id=tid,
                     name=columns.value(cells, columns.index("Tournament")),
-                    name_truncated=len(columns.value(cells, columns.index("Tournament")))
-                    >= SEARCH_NAME_LIMIT - 1,
+                    name_inexact=_name_is_inexact(columns.value(cells, columns.index("Tournament"))),
                     federation=column("FED"),
                     start_date=_search_date(columns.value(cells, columns.index("from"))),
                     end_date=_search_date(columns.value(cells, columns.index("to"))),

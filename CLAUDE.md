@@ -132,10 +132,14 @@ into one or two `Play` objects.
 - **It is a form post.** The page must be fetched first for its view state and posted back
   with it, so a search is two requests, and neither is cached: a cache does not store a
   post, and the form is fetched with `expire_after=0` so stale view state is never replayed.
-- **The site cuts names at 50 characters, silently.** A congress title loses its section
-  label off the end, so `parse_search_results` sets `SearchResult.name_truncated` for 49 or
-  more, and `sections()` reads the full name from the starting-rank page for those alone.
-  Without that, all of Milton Keynes 2026's sections look the same.
+- **The site's names are not the tournament's names.** It cuts them at 50 characters,
+  silently, so a congress title loses its section label off the end (without a fix all of
+  Milton Keynes 2026's sections look the same); and it drops the space where a name had a line
+  break, so Hull 4NCL 2024's rows read `2024Under 1500` and every label came out glued to the
+  year. `parse_search_results` sets `SearchResult.name_inexact` for a name of 49 or more
+  characters or one with a run-together word (which also fires on `McShane`, costing one
+  request), and `sections()` reads the real name from the starting-rank page for those alone.
+  An all-capitals run-together such as `2024OPEN` is not detected.
 - **The result table sits inside layout tables** whose rows would repeat it, so the parser
   takes only a table with no table nested in it.
 - **The entrant count (`n`) comes with the row**, so `sections()` needs no tournament page.

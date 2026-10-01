@@ -120,15 +120,16 @@ class SearchResult:
     it" without a request per tournament. It is as fresh as the search index,
     which a live event updates as it goes.
 
-    The search page cuts a tournament's name at 50 characters, and cuts it
-    silently -- the section label of a long congress title is exactly the part
-    lost. ``name_truncated`` is set when ``name`` may have been cut; the full
-    name is on the tournament's own page.
+    The search page's names are not always the tournament's own. It cuts them at
+    50 characters, silently -- the section label of a long congress title is
+    exactly the part lost -- and it can drop the space where the name had a line
+    break, so "2024 Under 1500" arrives as "2024Under 1500". ``name_inexact`` is
+    set when ``name`` may be either; the real name is on the tournament's own page.
     """
 
     id: str
     name: str
-    name_truncated: bool = False
+    name_inexact: bool = False
     federation: str | None = None
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None

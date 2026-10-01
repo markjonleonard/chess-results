@@ -157,9 +157,10 @@ name. `--organizer`, `--director`, `--location`, `--ends-from`, `--ends-to` and
 `--finished` narrow it further, and `--limit` caps the list (default 100). The
 heading always gives the full count, so a cut-off list says so.
 
-The site cuts names at 50 characters in these results, and a name that long is
-marked with `…`. `sections` and `players` show names in full. Searches are never
-cached.
+The site cuts names at 50 characters in these results, and can drop the space
+where a name had a line break ("2024Under 1500"). A name that may be affected is
+marked with `*`. `players` shows a tournament's own name in full, and `sections`
+reads it for you. Searches are never cached.
 
 ### sections
 
@@ -480,8 +481,8 @@ found[0].name, found[0].id, found[0].players
 
 `search` takes `name`, `tournament_id`, `organizer`, `director`, `arbiter`,
 `location`, `ends_from`, `ends_to` (a `date` or `"YYYY-MM-DD"`), `finished_only` and
-`limit`, and needs at least one criterion. A name of 49 or more characters may have
-been cut by the site; `SearchResult.name_truncated` says so.
+`limit`, and needs at least one criterion. `SearchResult.name_inexact` is set
+for a name the site may have cut at 50 characters or run two words together in.
 
 ### A congress of several sections
 

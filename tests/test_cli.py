@@ -927,10 +927,10 @@ class TestSearch:
         assert out.out.splitlines()[0] == "3 tournament(s) found, showing 2"
 
     def test_a_name_the_site_cut_is_marked_and_explained(self, monkeypatch, capsys):
-        rows = [_row("1", "x" * 50, 5, name_truncated=True)]
+        rows = [_row("1", "x" * 50, 5, name_inexact=True)]
         _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "x"], rows)
-        assert ("x" * 50 + "…") in out.out
-        assert "cuts names at 50 characters" in out.out
+        assert ("x" * 50 + " *") in out.out
+        assert "drop spaces" in out.out
 
     def test_nothing_found_is_said(self, monkeypatch, capsys):
         _, out, _ = _run_search_command(monkeypatch, capsys, ["search", "zzz"], [])

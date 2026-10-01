@@ -68,12 +68,26 @@ class TestParseSearchResults:
     def test_a_name_the_site_cut_is_flagged(self):
         """The search cuts names at 50 characters, and loses the section label with them."""
         found = parse_search_results(fixture("search_milton_keynes2026.html"))
-        assert all(r.name_truncated for r in found)
+        assert all(r.name_inexact for r in found)
         assert found[1].name == "Milton Keynes FIDE Chess Congress 28th-29th Mar 20"
 
     def test_a_short_name_is_not(self):
         found = parse_search_results(fixture("search_derbyshire_congress.html"))
-        assert not any(r.name_truncated for r in found)
+        assert not any(r.name_inexact for r in found)
+
+    def test_a_name_whose_space_the_site_dropped_is_flagged(self):
+        """Hull 4NCL's search rows read "2024Under 1500" where the tournament says "2024 Under 1500"."""
+        html = fixture("search_derbyshire_congress.html").replace(
+            "3rd Derbyshire Congress MAJOR", "3rd Derbyshire Congress 2025Major"
+        )
+        found = parse_search_results(html)
+        assert [r.name for r in found if r.name_inexact] == ["3rd Derbyshire Congress 2025Major"]
+
+    @pytest.mark.parametrize("name", ["Hull Rapid 2024 - U1900", "Hull 4NCL Congress 2024 Open"])
+    def test_ordinary_names_are_not(self, name):
+        from chess_results.parse import _name_is_inexact
+
+        assert not _name_is_inexact(name)
 
 
 def test_the_form_is_posted_back_with_its_view_state():

@@ -326,10 +326,10 @@ def cmd_search(args: argparse.Namespace) -> int:
     print(f"{found.total} tournament(s) found" + (f", showing {len(found)}" if found.truncated else ""))
     for r in found:
         count = "" if r.players is None else str(r.players)
-        cut = "…" if r.name_truncated else ""
-        print(f"{r.id:>8}  {_dates(r.start_date, r.end_date):<23} {count:>5}  {r.name}{cut}")
-    if any(r.name_truncated for r in found):
-        print("… the site cuts names at 50 characters; `sections` and `players` show them in full")
+        mark = " *" if r.name_inexact else ""
+        print(f"{r.id:>8}  {_dates(r.start_date, r.end_date):<23} {count:>5}  {r.name}{mark}")
+    if any(r.name_inexact for r in found):
+        print("* the site cuts names at 50 characters and can drop spaces; `players` shows one in full")
     return 0
 
 
@@ -803,7 +803,7 @@ COMMANDS = (
         "Searches chess-results' tournament database, newest first, and prints "
         "each match's tournament number, dates and entrant count. Every filter is "
         "a case-insensitive substring match on the site's side, and they combine. "
-        "The site cuts names at 50 characters in these results.",
+        "The site can cut names at 50 characters or drop spaces from them in these results.",
     ),
     (
         "dump",
