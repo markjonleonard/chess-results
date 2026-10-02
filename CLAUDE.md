@@ -57,7 +57,10 @@ chess-results colours 1452107 --after 6
 chess-results pairing-sheet 1452107 --after 8 # the printable sheet
 ```
 
-The full command set is `players`, `standings`, `pairings`, `pairing-sheet`, `colours`
+`--json` is a common option (in `_shared`, so it parses either side of the subcommand) and
+every command honours it; each builds its JSON from the same assembled objects as its table.
+The JSON never clips a name, and a list report carries `total` and `truncated` so `--limit`
+cannot pass for the whole. The full command set is `players`, `standings`, `pairings`, `pairing-sheet`, `colours`
 (`colors` accepted as a synonym), `history`, `unfinished`, `dump` (JSON export), `sections`
 and `search`. All but `search` take a tournament number, and all but `dump`, `players`,
 `sections` and `search` an `--after N` round selector; see

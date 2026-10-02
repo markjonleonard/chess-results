@@ -55,6 +55,7 @@ examples:
   chess-results pairing-sheet 1452107 6       round 6, with its results filled in
   chess-results pairing-sheet 1452107 --pairs next.txt | lpr   pin up the next round
   chess-results dump 1452107 -o event.json    the whole tournament as JSON
+  chess-results standings 1452107 --json      any command, as JSON instead of a table
   chess-results sections 823027               every section of that event, and how many entered each
   chess-results sections 823027 --summary     the same on one line: Open 30; Major 25; ... (2023)
   chess-results search "Derbyshire Congress"  find tournament numbers by name, newest first
@@ -113,6 +114,21 @@ def _client(args: argparse.Namespace) -> ChessResults:
 def _print_json(payload: object) -> None:
     """Dates as ISO strings, which is what the rest of the world expects of a date."""
     print(json.dumps(payload, indent=2, ensure_ascii=False, default=str))
+
+
+def _event_header(event: Tournament) -> dict[str, object]:
+    return {"id": event.id, "name": event.name}
+
+
+def _round_progress(event: Tournament, rnd: int) -> dict[str, object]:
+    """How far a round has got, as data: the JSON twin of `_how_far`."""
+    done, total = _progress(event, rnd)
+    return {"results_in": done, "games": total, "settled": done == total}
+
+
+def _list_payload(rows: list[object], total: int) -> dict[str, object]:
+    """The part of a JSON list report that says whether ``--limit`` cut it short."""
+    return {"total": total, "truncated": total > len(rows)}
 
 
 def _warn_disagreements(event: Tournament) -> None:
@@ -272,6 +288,19 @@ def cmd_players(args: argparse.Namespace) -> int:
     """
     entrants = _entrants(args)
     entries = entrants.players
+    if args.json:
+        shown, _ = _limited(entries, args.limit)
+        _print_json(
+            {
+                "id": entrants.id,
+                "name": entrants.name,
+                "dates": entrants.dates,
+                "time_control": entrants.time_control,
+                **_list_payload(list(shown), len(entries)),
+                "players": [dataclasses.asdict(e) for e in shown],
+            }
+        )
+        return 0
     heading = entrants.name or entrants.id
     if entrants.dates:
         heading += f" — {entrants.dates}"
@@ -384,6 +413,33 @@ def cmd_standings(args: argparse.Namespace) -> int:
         )
         return 2
     after = _round(args.after, event)
+    if args.json:
+        ranked = event.ranking_order(after)
+        if args.women:
+            ranked = [p for p in ranked if _is_woman(p)]
+        shown, _ = _limited(ranked, args.limit)
+        live = bool(event.unfinished(after))
+        _print_json(
+            {
+                **_event_header(event),
+                "after": after,
+                **_round_progress(event, after),
+                "live": live,
+                **_list_payload(list(shown), len(ranked)),
+                "players": [
+                    {
+                        "rank": rank,
+                        "score": player.score(after),
+                        "start_no": player.start_no,
+                        "title": player.title,
+                        "name": player.name,
+                        "state": _state(player.play(after)) if live else None,
+                    }
+                    for rank, player in enumerate(shown, start=1)
+                ],
+            }
+        )
+        return 0
     print(f"{event.name or event.id} — {_how_far(event, after)}")
     # Mid-round the scores are not comparable -- some include this round, some do
     # not -- so say outright what each player is doing. A settled round needs no
@@ -497,6 +553,19 @@ def cmd_pairings(args: argparse.Namespace) -> int:
     event = _fetch(args)
     asked = _requested_round(args)
     rnd = _round(asked if asked is not None else args.after, event)
+    if args.json:
+        boards = event.rounds.get(rnd, [])
+        shown, _ = _limited(boards, args.limit)
+        _print_json(
+            {
+                **_event_header(event),
+                "round": rnd,
+                **_round_progress(event, rnd),
+                **_list_payload(list(shown), len(boards)),
+                "boards": [dataclasses.asdict(b) for b in shown],
+            }
+        )
+        return 0
     done, total = _progress(event, rnd)
     state = "" if done == total else (f", {done} of {total} results in" if done else ", no results yet")
     print(f"{event.name or event.id} — round {rnd} pairings{state}")
@@ -610,6 +679,22 @@ def cmd_history(args: argparse.Namespace) -> int:
         return 2
     player = matches[0]
     after = _round(args.after, event)
+    if args.json:
+        _print_json(
+            {
+                **_event_header(event),
+                "player": {"name": player.name, "start_no": player.start_no, "title": player.title},
+                "after": after,
+                **_round_progress(event, after),
+                "rounds": [
+                    dataclasses.asdict(play) if (play := player.play(rnd)) else {"round": rnd, "kind": None}
+                    for rnd in range(1, after + 1)
+                ],
+                "score": player.score(after),
+                "performance": event.performance_rating(player.name, after),
+            }
+        )
+        return 0
     print(f"{player.name} — round-by-round history, {_how_far(event, after)}")
     width = _name_width(args.name_width, _HISTORY_FIXED)
     total = _HISTORY_PREFIX + width
@@ -628,6 +713,32 @@ def cmd_colours(args: argparse.Namespace) -> int:
     """Print the colour and float history that drives the next round's pairings."""
     event = _fetch(args)
     after = _round(args.after, event)
+    if args.json:
+        ranked = event.ranking_order(after)
+        shown, _ = _limited(ranked, args.limit)
+        rows = []
+        for player in shown:
+            due, strength = player.colour_preference(after)
+            rows.append(
+                {
+                    "name": player.name,
+                    "start_no": player.start_no,
+                    "score": player.score(after),
+                    "colours": [c.value for c in player.colours(after)],
+                    "floats": [p.float_direction for p in player.plays if p.round <= after],
+                    "due": due.value if due else None,
+                    "strength": strength.value,
+                }
+            )
+        _print_json(
+            {
+                **_event_header(event),
+                "after": after,
+                **_list_payload(list(shown), len(ranked)),
+                "players": rows,
+            }
+        )
+        return 0
     print(f"{event.name or event.id} — colour and float history after round {after}")
     width = _name_width(args.name_width, _COLOURS_FIXED)
     print(f"{'Pts':>4} {'No':>4}  {_fit('Name', width)} {'Colours':<10} {'Floats':<10} Due")
@@ -648,6 +759,17 @@ def cmd_colours(args: argparse.Namespace) -> int:
 def cmd_unfinished(args: argparse.Namespace) -> int:
     event = _fetch(args)
     games = event.unfinished()
+    if args.json:
+        shown, _ = _limited(games, args.limit)
+        _print_json(
+            {
+                **_event_header(event),
+                "round": event.last_round,
+                **_list_payload(list(shown), len(games)),
+                "games": [dataclasses.asdict(g) for g in shown],
+            }
+        )
+        return 0
     if not games:
         print(f"round {event.last_round}: all results in")
         return 0
@@ -660,6 +782,35 @@ def cmd_unfinished(args: argparse.Namespace) -> int:
         )
     _and_the_rest(dropped)
     return 0
+
+
+def _sheet_payload(made: sheet.PairingSheet, after: int) -> dict[str, object]:
+    """A pairing sheet as data: the same rows the printed page would have."""
+
+    def who(player: Player | None) -> dict[str, object] | None:
+        if player is None:
+            return None
+        return {"name": player.name, "start_no": player.start_no, "title": player.title}
+
+    return {
+        "event": made.event,
+        "round": made.round,
+        "after": after,
+        "boards": made.boards,
+        "warnings": made.warnings,
+        "rows": [
+            {
+                "board": row.board,
+                "white": who(row.white),
+                "black": who(row.black),
+                "pinned": row.pinned,
+                "bye": row.is_bye,
+                "note": row.note if row.is_bye else None,
+                "result": row.result or None,
+            }
+            for row in made.rows
+        ],
+    }
 
 
 def cmd_pairing_sheet(args: argparse.Namespace) -> int:
@@ -689,6 +840,17 @@ def cmd_pairing_sheet(args: argparse.Namespace) -> int:
         rnd = _round(asked if asked is not None else args.after, event)
         made = sheet.sheet_from_round(event, rnd)
         after = rnd - 1
+
+    if args.json:
+        text = json.dumps(_sheet_payload(made, after), indent=2, ensure_ascii=False)
+        if args.output:
+            Path(args.output).write_text(text, encoding="utf-8")
+            print(f"wrote {args.output}: {made.boards} boards over round {made.round}", file=sys.stderr)
+        else:
+            print(text)
+        for warning in made.warnings:
+            print(f"warning: {warning}", file=sys.stderr)
+        return 0
 
     text = sheet.render(
         made,
@@ -752,6 +914,13 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
         default=default(False),
         help="skip the crosstable request; scores will be wrong for "
         "anyone whose bye has been dropped from its round page",
+    )
+    group.add_argument(
+        "--json",
+        action="store_true",
+        default=default(False),
+        help="print JSON instead of a table. Names are never clipped and --name-width is "
+        "ignored; a list report honours --limit and says so in its total and truncated fields",
     )
     group.add_argument(
         "--no-cache", action="store_true", default=default(False), help="always refetch, ignoring the cache"
@@ -876,7 +1045,7 @@ COMMANDS = (
 USAGE_ARGS = {
     "dump": "[-o FILE] <tournament-id>",
     "search": "[filters] [<name>]",
-    "sections": "[--summary | --json] <tournament-id>",
+    "sections": "[--summary] <tournament-id>",
     "pairings": "<tournament-id> [<round>]",
     "pairing-sheet": "[--pairs FILE] [-o FILE] <tournament-id> [<round>]",
     "history": "<tournament-id> <player>",
@@ -917,7 +1086,6 @@ def build_parser() -> argparse.ArgumentParser:
         if name == "dump":
             child.add_argument("-o", "--output", metavar="FILE", help="write JSON here instead of stdout")
         elif name in ("search", "sections"):
-            child.add_argument("--json", action="store_true", help="print JSON rather than a table")
             if name == "sections":
                 child.add_argument(
                     "--summary", action="store_true", help='one line: "Open 30; Major 25; Minor 19 (2023)"'

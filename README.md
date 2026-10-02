@@ -115,6 +115,7 @@ what is fetched, and every command accepts them:
 | `--rounds N` | Stop after N rounds instead of discovering them all |
 | `--bye-value P` | What a pairing-allocated bye is worth (default 1.0) |
 | `--delay S` | Seconds between requests (default 1.0) |
+| `--json` | Print JSON instead of a table; see [JSON output](#json-output) |
 | `--no-cache` | Always refetch, ignoring the cache |
 | `--cache-ttl S` | How long to reuse a live round's page (default 300) |
 | `--cache-dir D` | Where to keep cached pages |
@@ -423,6 +424,58 @@ round 6: 6 game(s) still unfinished
   bd44   Terler, Bohdan (1½) vs Elgar, Tim (1½)
   bd50   Varnam, Liam D (1) vs Vaddhireddy, Sai (1)
 ```
+
+### JSON output
+
+Every command takes `--json`, before or after the command name, and prints one JSON
+document on standard output in place of the table. Warnings and errors still go to stderr, so
+`chess-results standings 1452107 --json | jq` is safe.
+
+```bash
+chess-results standings 1452107 --limit 3 --json
+```
+
+```json
+{
+  "id": "1452107",
+  "name": "2026 British Chess Championships: Championship",
+  "after": 9,
+  "results_in": 50,
+  "games": 50,
+  "settled": true,
+  "live": false,
+  "total": 108,
+  "truncated": true,
+  "players": [
+    {"rank": 1, "score": 7.5, "start_no": 3, "title": "GM", "name": "Royal, Shreyas", "state": null}
+  ]
+}
+```
+
+What each command's document holds:
+
+| Command | Top-level keys |
+| --- | --- |
+| `players` | `id`, `name`, `dates`, `time_control`, `total`, `truncated`, `players` |
+| `standings` | `id`, `name`, `after`, progress, `live`, `total`, `truncated`, `players` (`rank`, `score`, `start_no`, `title`, `name`, `state`) |
+| `pairings` | `id`, `name`, `round`, progress, `total`, `truncated`, `boards` |
+| `colours` | `id`, `name`, `after`, `total`, `truncated`, `players` (`colours`, `floats`, `due`, `strength`) |
+| `history` | `id`, `name`, `player`, `after`, progress, `rounds`, `score`, `performance` |
+| `unfinished` | `id`, `name`, `round`, `total`, `truncated`, `games` |
+| `pairing-sheet` | `event`, `round`, `after`, `boards`, `warnings`, `rows` |
+| `sections` | `name`, `start_date`, `end_date`, `total`, `sections` |
+| `search` | `total`, `truncated`, `results` |
+| `dump` | `id`, `name`, `rounds`, `players` |
+
+*Progress* is three keys, `results_in`, `games` and `settled`, which say how far the
+round has got. Dates are ISO strings, colours are `"w"` and `"b"`, and a missing value
+is `null`.
+
+JSON never clips a name, so `--name-width` has no effect on it. `--limit` still applies
+to a list, and `total` and `truncated` say what it left out, so a cut list is never
+mistaken for the whole. `dump` is always JSON, and takes `--json` only so a script can
+pass it to every command alike. A command that fails still prints its one-line error on
+stderr and prints nothing on standard output.
 
 ## From Python
 

@@ -57,7 +57,9 @@ def _args(**kwargs):
     option to the parser does not mean editing every construction in this file
     — which is exactly what --name-width would otherwise have cost.
     """
-    return argparse.Namespace(**{"after": None, "limit": None, "name_width": None, "women": False, **kwargs})
+    return argparse.Namespace(
+        **{"after": None, "limit": None, "name_width": None, "women": False, "json": False, **kwargs}
+    )
 
 
 def test_shared_options_parse_before_the_subcommand():
@@ -602,7 +604,7 @@ class TestUnfinished:
 
     def _run(self, event, monkeypatch, capsys, limit=None):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
-        assert cmd_unfinished(argparse.Namespace(limit=limit)) == 0
+        assert cmd_unfinished(argparse.Namespace(limit=limit, json=False)) == 0
         return capsys.readouterr().out.splitlines()
 
     def test_a_paired_round_with_no_results_lists_every_board(self, british, monkeypatch, capsys):
@@ -961,3 +963,148 @@ class TestSearchFailure:
         err = capsys.readouterr().err
         assert err.startswith("chess-results: ") and "Server busy" in err
         assert "Traceback" not in err
+
+
+class TestJsonEverywhere:
+    """`--json` is a common option: every command takes it, before or after the subcommand."""
+
+    @staticmethod
+    def _run(fn, event, monkeypatch, capsys, **kwargs):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
+        defaults = {"round": None, "round_flag": None, "pairs": None, "output": None, "player": "McShane"}
+        assert fn(_args(json=True, **{**defaults, **kwargs})) == 0
+        out = capsys.readouterr().out
+        return json.loads(out)  # the whole of stdout must be one JSON document
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["players", "1"],
+            ["standings", "1"],
+            ["pairings", "1"],
+            ["pairing-sheet", "1"],
+            ["colours", "1"],
+            ["history", "1", "x"],
+            ["unfinished", "1"],
+            ["dump", "1"],
+            ["sections", "1"],
+            ["search", "x"],
+        ],
+    )
+    def test_every_command_accepts_it_either_side_of_the_subcommand(self, argv):
+        before = build_parser().parse_args(["--json", *argv])
+        after = build_parser().parse_args([*argv, "--json"])
+        assert before.json is True
+        assert after.json is True
+        assert build_parser().parse_args(argv).json is False
+
+    def test_standings(self, british, monkeypatch, capsys):
+        data = self._run(cmd_standings, british, monkeypatch, capsys, limit=3)
+        assert data["id"] == british.id
+        assert (data["total"], data["truncated"], len(data["players"])) == (len(british.players), True, 3)
+        top = data["players"][0]
+        assert top["rank"] == 1
+        assert top["name"] == british.ranking_order()[0].name
+        assert isinstance(top["score"], float)
+
+    def test_standings_say_what_each_player_is_doing_only_while_the_round_is_live(
+        self, british, british_played_out, monkeypatch, capsys
+    ):
+        live = self._run(cmd_standings, british, monkeypatch, capsys, limit=1)
+        assert live["live"] is True
+        assert live["players"][0]["state"] is not None
+        settled = self._run(cmd_standings, british_played_out, monkeypatch, capsys, limit=1)
+        assert settled["live"] is False
+        assert settled["players"][0]["state"] is None
+
+    def test_women_are_ranked_among_themselves(self, british, monkeypatch, capsys):
+        data = self._run(cmd_standings, british, monkeypatch, capsys, women=True)
+        assert [p["rank"] for p in data["players"]] == list(range(1, len(data["players"]) + 1))
+        assert 0 < data["total"] < len(british.players)
+
+    def test_pairings(self, british, monkeypatch, capsys):
+        data = self._run(cmd_pairings, british, monkeypatch, capsys, round=3, limit=2)
+        assert data["round"] == 3
+        assert len(data["boards"]) == 2
+        board = data["boards"][0]
+        assert board["white"]["name"] and board["black"]["name"]
+        assert board["kind"] == "game"
+
+    def test_pairings_are_not_clipped(self, british, monkeypatch, capsys):
+        """JSON has no columns, so --name-width must not shorten what it carries."""
+        names = {p.name for p in british.players.values()}
+        data = self._run(cmd_pairings, british, monkeypatch, capsys, round=3, name_width=8)
+        assert {b["white"]["name"] for b in data["boards"]} <= names
+
+    def test_colours(self, british, monkeypatch, capsys):
+        data = self._run(cmd_colours, british, monkeypatch, capsys, limit=2)
+        row = data["players"][0]
+        assert set(row["colours"]) <= {"w", "b"}
+        assert len(row["floats"]) >= len(row["colours"])
+        assert row["due"] in ("w", "b", None)
+
+    def test_history(self, british, monkeypatch, capsys):
+        data = self._run(cmd_history, british, monkeypatch, capsys, after=3)
+        assert data["player"]["name"] == "Mcshane, Luke J"
+        assert [r["round"] for r in data["rounds"]] == [1, 2, 3]
+        assert data["rounds"][0]["kind"] == "game"
+        assert isinstance(data["score"], float)
+        assert "performance" in data
+
+    def test_history_with_no_unique_player_still_fails_on_stderr(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        assert cmd_history(_args(json=True, player="zzzz")) == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "no player matching" in captured.err
+
+    def test_unfinished(self, british, monkeypatch, capsys):
+        data = self._run(cmd_unfinished, british, monkeypatch, capsys)
+        assert data["round"] == british.last_round
+        assert data["total"] == len(british.unfinished())
+        assert len(data["games"]) == data["total"]
+
+    def test_unfinished_with_nothing_to_report_is_an_empty_list_not_a_sentence(
+        self, british_played_out, monkeypatch, capsys
+    ):
+        data = self._run(cmd_unfinished, british_played_out, monkeypatch, capsys)
+        assert (data["total"], data["games"]) == (0, [])
+
+    def test_players(self, monkeypatch, capsys):
+        entrants = Entrants(
+            id="1",
+            name="Event",
+            time_control="90+30",
+            dates="1 Jan",
+            players=[
+                StartingRankEntry(start_no=1, name="A", rating=1500),
+                StartingRankEntry(start_no=2, name="B"),
+            ],
+        )
+        monkeypatch.setattr("chess_results.cli._entrants", lambda args: entrants)
+        assert cmd_players(_args(json=True, limit=1)) == 0
+        data = json.loads(capsys.readouterr().out)
+        assert (data["total"], data["truncated"], len(data["players"])) == (2, True, 1)
+        assert data["players"][0]["rating"] == 1500
+        assert data["time_control"] == "90+30"
+
+    def test_pairing_sheet(self, british, monkeypatch, capsys):
+        data = self._run(cmd_pairing_sheet, british, monkeypatch, capsys, round=5)
+        assert data["round"] == 5
+        assert data["boards"] == sum(1 for r in data["rows"] if not r["bye"])
+        row = next(r for r in data["rows"] if not r["bye"])
+        assert row["white"]["name"] and row["black"]["name"]
+
+    def test_pairing_sheet_json_goes_to_a_file_with_output(self, british, monkeypatch, capsys, tmp_path):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        target = tmp_path / "sheet.json"
+        assert (
+            cmd_pairing_sheet(_args(json=True, round=5, round_flag=None, pairs=None, output=str(target))) == 0
+        )
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert json.loads(target.read_text(encoding="utf-8"))["round"] == 5
+        assert "wrote" in captured.err
+
+    def test_dump_is_json_whether_or_not_it_is_asked_to_be(self):
+        assert build_parser().parse_args(["dump", "1", "--json"]).func is cmd_dump
