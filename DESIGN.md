@@ -494,7 +494,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-630 tests, none touching the network. Fixtures are real saved pages from seven
+None of the tests touch the network. Fixtures are real saved pages from seven
 tournaments, chosen for the ways they differ:
 
 | Event | What it covers |
