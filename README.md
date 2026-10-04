@@ -147,8 +147,8 @@ the next round's pairings ought to be. **The engine is not included**: you build
 download it separately, and the example script is in the repository, not the pip
 package.
 
-Given the right list of players, bbpPairings reproduced rounds 7 to 9 of the 2026
-British Championship exactly, and most boards without it. A live prediction cannot
+Given the players each round was paired from, bbpPairings reproduced every round of
+the 2026 British Championship exactly, and most boards without that list. A live prediction cannot
 know for sure who has withdrawn, so treat it as a good guess, not an announcement.
 The [guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
 covers how to run it, games still in progress, withdrawals and the figures.

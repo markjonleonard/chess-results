@@ -916,9 +916,11 @@ included. Given the correct list of players instead, bbpPairings reproduced all 
 rounds exactly: every board, every colour and the right player on the bye. Nearly all
 the error is in who has withdrawn, which a live prediction cannot know for sure.
 
-Round 2 is the exception. Even with the right players it does not reproduce, because a
-large group on the same score admits many legal pairings, and bbpPairings and the
-arbiter's software choose differently among them. Expect it on any round 2.
+Round 2 reproduces too, once the field is the one it was paired from. The arbiter
+paired it with one player who then withdrew, and seated a player who had missed
+round 1 in his place; bbpPairings, given the field as paired, matches all 53 boards
+with that one name changed. Nothing published records a substitution, so a round that
+will not reproduce is worth checking for one.
 [DESIGN.md](DESIGN.md#predicting-the-next-round)
 has the full table and the method. Treat a prediction as a good guess, not an
 announcement.
@@ -952,8 +954,10 @@ python examples/validate_prediction.py 1452107 --round 8 \
 
 It scores the round three ways: with no withdrawal information, with withdrawals
 inferred, and with the players who were absent from the published round supplied. The
-last uses hindsight, so it is an upper bound, not something a live prediction can
-reach. `--consecutive N` sets how many unpaired rounds in a row count as a withdrawal
+last uses hindsight, so a live prediction cannot count on reaching it. It is usually
+the best of the three but not always: it supplies the players who sat down, and after
+a substitution that is not the field the round was paired from, which the script
+points out when the inferred run beats it. `--consecutive N` sets how many unpaired rounds in a row count as a withdrawal
 (default 1), and `--bye-value` works as above.
 
 ### Several rounds ahead

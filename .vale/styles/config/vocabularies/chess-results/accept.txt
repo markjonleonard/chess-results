@@ -18,6 +18,8 @@ Buchholz
 Arad
 Jeddah
 Nevska
+Mannion
+Bhatia
 dataclass
 dataclasses
 dict

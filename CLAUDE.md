@@ -558,30 +558,30 @@ Two more things that have already caused wrong conclusions:
   longest unbroken run of one board number — and note the pin need not start at round 1:
   Hebden played 23, 18 and 1 before settling on 14 from round 4.
 
-- **Withdrawals are the whole error term, from round 3 on.** Given the correct field,
-  bbpPairings reproduces the 2026 British Championship exactly: rounds 7 and 8 at 51 of 51,
-  round 9 at 50 of 50, colours and bye included, and the checker replays rounds 1 and 3-8
-  from the finished file without a single difference. **Round 2 is the one exception**, and
-  it is not our data: with the correct field it still differs on six boards, all inside the
-  42-player group on zero after round 1, and the encoding of a late entrant's missing round
-  makes no difference to it (`Z`, blank and `-` all give the same pairing). A group that
-  large and that flat admits many legal pairings, and Swiss-Manager and bbpPairings choose
-  differently. Expect it on any round 2. Four explanations were tested and all are dead:
-  not the field (supplying exactly the two who missed round 2 gives the *best* result, 47
-  of 53, against 37 for neither and 33 for either alone); not the encoding of a late
-  entrant's missing round, as above; not colours (all 47 agreed boards agree on colour
-  too); and not same-federation avoidance (24 of the published 53 boards are between
-  players of one federation). What it is, is a six-board cyclic shift confined to that
-  scoregroup, the published pairing behaving as though the split fell one place earlier
-  than bbpPairings puts it. The checker lists the difference without calling the
-  published pairing illegal, and exits 0, so both are presumably legal.
+- **Withdrawals are the whole error term.** Given the field the arbiter paired,
+  bbpPairings reproduces every round of the 2026 British Championship exactly, colours and
+  bye included: rounds 2 to 9 at 53, 53, 53, 52, 52, 51, 51 and 50 of as many boards (round
+  2 needing the field described next), and the checker replays rounds 1 and 3-8 from the
+  finished file without a single difference.
+- **The field that was paired is not always the field that played.** Round 2 of the British
+  was paired with Mannion (No. 59, lost round 1, never played again) still in and Brown
+  (No. 108, missed round 1, played only round 2) out; Brown then took Mannion's place, with
+  his white, against Bhatia. `validate_prediction.py`'s "true withdrawals" run removes the
+  players who did not *play*, so it puts Brown in, and the 42-player group on zero splits
+  one place differently: six boards in a cyclic shift, 47 of 53. That shift was once put
+  down to Swiss-Manager and bbpPairings choosing differently among legal pairings, and it is
+  not; drop Brown, keep Mannion, swap the name on Bhatia's board, and all 53 boards match.
+  `likely_withdrawn` happens to flag Brown (no round occupied yet) and miss Mannion, which is
+  why its "inferred" run scores 52 of 53, beating the hindsight run. The checker reports the
+  same six boards for round 2 and always will, because a TRF records who played, not who
+  was paired. So before blaming either engine for a mismatch, look for a substitution: a
+  player whose only game is the round in question, on the board of one whose last game was
+  the round before.
   Blind — with no withdrawal information, which is what a live
-  prediction actually has — the same rounds give 37/51, 44/51 and 42/50. Every single miss
+  prediction actually has — rounds 7-9 give 37/51, 44/51 and 42/50. Every single miss
   is a player who had stopped playing, which nothing published says: a withdrawn player
   shows only as `not paired` in the rounds already missed. Do not reach for a rules-version
-  or engine-disagreement explanation for a mismatch until the field has been checked; that
-  hypothesis was
-  entertained once, on a since-retracted "47 of 52" figure that does not reproduce.
+  or engine-disagreement explanation for a mismatch until the field has been checked.
   `Tournament.likely_withdrawn` guesses the field from trailing `UNPAIRED` rounds and takes
   those three to 39/51, 49/51 and 44/50. It reads the `not paired` rows the round pages list,
   so round pages alone give the same answer as a reconciled history. For a history missing

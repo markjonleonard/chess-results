@@ -11,9 +11,15 @@ ordering, so comparing board by board understates the match badly.
 Each round is scored three times: with no withdrawal information; with
 withdrawals inferred by ``Tournament.likely_withdrawn``, which is what a live
 prediction can achieve; and with the absent players read back out of the
-published round. The last uses hindsight and is an upper bound, not a live
-result. The gap between it and the others is the cost of not knowing who has
-withdrawn.
+published round. The last uses hindsight, and the gap between it and the others
+is the cost of not knowing who has withdrawn.
+
+It is not quite an upper bound. It supplies the players who sat down, and when an
+arbiter seats one player in another's place after pairing, that is not the field
+the round was paired from. Round 2 of the 2026 British is the case: paired with
+Mannion in and Brown out, played with Brown on Mannion's board, so the hindsight
+run scores 47 of 53 and the inferred run, which happens to drop Brown and keep
+Mannion, 52. The script names the players who fit that shape.
 
 Two traps this script exists to avoid, both of which produce plausible but wrong
 numbers:
@@ -71,6 +77,23 @@ def field(event: Tournament, rnd: int) -> set[str]:
         for name, player in event.players.items()
         if any(p.round == rnd and p.kind is not PlayKind.UNPAIRED for p in player.plays)
     }
+
+
+def substitution_suspects(event: Tournament, rnd: int) -> tuple[set[str], set[str]]:
+    """Players who fit an after-pairing substitution in round ``rnd``.
+
+    A stand-in's only game in the event is this round; the player they replaced
+    played the round before and never again. Neither is proof, since a late
+    entrant who leaves at once looks the same, but both together are worth a look
+    before blaming the engine.
+    """
+
+    def games(name: str) -> set[int]:
+        return {p.round for p in event.players[name].plays if p.kind is PlayKind.GAME}
+
+    stand_ins = {name for name in event.players if games(name) == {rnd}}
+    replaced = {name for name in event.players if games(name) and max(games(name)) == rnd - 1}
+    return stand_ins, replaced
 
 
 def published(event: Tournament, rnd: int) -> tuple[set[tuple[str, str]], str | None]:
@@ -210,6 +233,15 @@ def main(argv: list[str] | None = None) -> int:
         f"{informed}/{len(actual)} once withdrawals are known. Only the last uses hindsight; "
         "the inferred figure is what a live prediction can actually achieve."
     )
+    stand_ins, replaced = substitution_suspects(event, rnd)
+    if inferred > informed or (informed < len(actual) and stand_ins and replaced):
+        print(
+            f"\nThe hindsight run supplies who played round {rnd}, which is not the field it was "
+            "paired from if someone was seated in another's place after pairing."
+        )
+        if stand_ins and replaced:
+            print(f"  only game is round {rnd}: {', '.join(sorted(stand_ins))}")
+            print(f"  last game was round {rnd - 1}: {', '.join(sorted(replaced))}")
     return 0
 
 

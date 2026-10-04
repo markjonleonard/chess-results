@@ -302,8 +302,9 @@ before it:
 | Right pair, wrong colour | 0 | 0 | 0 |
 | Bye recipient | correct | correct | correct |
 
-Given an accurate field the engine reproduces all three exactly — every board,
-every colour, the right player on the bye. **The accuracy of the field is the
+Given an accurate field the engine reproduces all three exactly: every board,
+every colour, the right player on the bye. Rounds 3 to 6 reproduce the same way, and
+round 2 does too, from the field it was paired from; see the limits below. **The accuracy of the field is the
 whole error term.** Nothing here suggests the engines disagree with
 Swiss-Manager, or that the rule version matters.
 
@@ -323,12 +324,17 @@ and takes `--withdrawn` if you know more.
 
 Two limits on what prediction can be expected to do:
 
-- **Round 2 does not reproduce**, even with the correct field: six boards differ,
-  all inside the 42-player group on zero after round 1. Not the field, colours,
-  the encoding of a late entrant's missing round, or same-federation avoidance —
-  each was tested. A group that large and that flat admits many legal pairings,
-  and the checker exits 0 without calling the published one illegal. Expect this
-  on any round 2.
+- **The field a round was paired from is not always the field that played it.**
+  Round 2 of the British was paired with Mannion, who then withdrew, still in, and
+  Brown, who had missed round 1, out; Brown then took Mannion's board and colour.
+  Supplying the players who actually played gives 47 of 53, because the 42-player
+  group on zero splits one place differently. Supplying the field as paired and
+  changing the name on that one board gives all 53. Nothing published records a
+  substitution, and a TRF records who played rather than who was paired, so
+  bbpPairings' checker reports those six boards for round 2 however it is run. A
+  round that will not reproduce is worth checking for one before suspecting the
+  engine: a player whose only game is that round, on the board of one whose last
+  game was the round before.
 - **A mid-round prediction is dominated by its assumptions.** Round 9 predicted
   from a live round 8 with ten unfinished games filled in as draws got the top 12
   boards exactly right in the arbiter's own order, and 29 of 50 overall — five
