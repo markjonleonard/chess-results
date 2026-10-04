@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.27"]
+requires = ["hatchling>=1.27", "hatch-fancy-pypi-readme>=25.1"]
 build-backend = "hatchling.build"
 
 [project]
@@ -8,7 +8,6 @@ build-backend = "hatchling.build"
 # there is no such family here, so it would claim one that does not exist.
 name = "chess-results"
 description = "Scrape tournament pairings, results and colour histories from chess-results.com"
-readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -25,7 +24,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = ["requests>=2.28", "beautifulsoup4>=4.11", "requests-cache>=1.0"]
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 
 [project.optional-dependencies]
 dev = [
@@ -46,6 +45,25 @@ Issues = "https://github.com/markjonleonard/chess-results/issues"
 
 [tool.hatch.version]
 path = "src/chess_results/__init__.py"
+
+# The README is PyPI's long description, and its links point at main so they stay
+# current on GitHub. On PyPI they must describe the version installed instead, so
+# the build rewrites them to that release's tag: $HFPR_VERSION is the version being
+# built, and the release workflow tags v<version>. GitHub's README is untouched.
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = 'https://github\.com/markjonleonard/chess-results/(blob|tree)/main/'
+replacement = 'https://github.com/markjonleonard/chess-results/\1/v$HFPR_VERSION/'
+
+# A link to the repository's front page with an anchor is a link into the README.
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = 'https://github\.com/markjonleonard/chess-results#'
+replacement = 'https://github.com/markjonleonard/chess-results/blob/v$HFPR_VERSION/README.md#'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chess_results"]

@@ -31,6 +31,11 @@ Repository, distribution and import name all agree: `chess-results` / `chess-res
 `chess_results`. `__init__.py` is the single source of the version — hatch reads
 `__version__` from it, so do not add a `version` key to `pyproject.toml`.
 
+The README is also PyPI's long description, so its links are absolute and point at
+`main`; at build time `hatch-fancy-pypi-readme` rewrites them to the release's
+`blob/vX.Y.Z/` tag, so PyPI describes the version it installs. `USAGE.md` never reaches
+PyPI, so its links are relative and stay within whichever version is being read.
+
 The local checkout directory name is incidental: nothing reads it, so it may or may
 not match.
 

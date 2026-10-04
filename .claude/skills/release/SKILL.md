@@ -17,6 +17,14 @@ rather than as a user. Never add a token; there is nowhere to put one.
 
 To release: set `__version__`, commit, then `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
+**The PyPI page links to the release's tag, not to `main`.** The README's links point at
+`main` so GitHub stays current; `hatch-fancy-pypi-readme` (see `pyproject.toml`) rewrites
+them to `blob/vX.Y.Z/` when the package is built, so PyPI shows docs for the version it
+installs. Nothing to do by hand, but two consequences: the tag must be pushed for those
+links to resolve, which the release workflow guarantees by running on the tag; and a
+TestPyPI rehearsal of `0.1.0.devN` links to a tag that never exists, which is expected.
+Check a release's PyPI page links to its own tag.
+
 Each index needs its own trusted publisher, and the two differ in **two** of five fields —
 copying one across is the easy mistake:
 

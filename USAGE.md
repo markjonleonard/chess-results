@@ -1,37 +1,37 @@
 # chess-results usage guide
 
 Every command, every option, JSON output and the Python API. The
-[README](https://github.com/markjonleonard/chess-results) has the overview, how to
-install, and [Terms](https://github.com/markjonleonard/chess-results#terms) for words
+[README](README.md) has the overview, how to
+install, and [Terms](README.md#terms) for words
 such as *float* and *pairing-allocated bye*.
 
 **Contents:**
-[players](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#players)
+[players](#players)
 ·
-[standings](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#standings)
+[standings](#standings)
 ·
-[pairings](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#pairings)
+[pairings](#pairings)
 ·
-[pairing-sheet](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#pairing-sheet)
+[pairing-sheet](#pairing-sheet)
 ·
-[colours](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#colours)
+[colours](#colours)
 ·
-[history](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#history)
+[history](#history)
 ·
-[unfinished](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#unfinished)
-· [dump](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#dump) ·
-[sections](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#sections)
-· [search](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#search)
+[unfinished](#unfinished)
+· [dump](#dump) ·
+[sections](#sections)
+· [search](#search)
 ·
-[JSON output](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#json-output)
+[JSON output](#json-output)
 ·
-[Options](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#options)
+[Options](#options)
 
 **Also:**
-[From Python](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#from-python)
+[From Python](#from-python)
 ·
-[Predicting the next round](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
-· [Terms](https://github.com/markjonleonard/chess-results#terms)
+[Predicting the next round](#predicting-the-next-round)
+· [Terms](README.md#terms)
 
 ## Command line
 
@@ -62,7 +62,7 @@ Most outputs below come from the 2026 British Championship, captured at differen
 moments while it was being played; the rest name their own event. Running them now, on
 a finished event, will not reproduce the live ones. Options such as `--after`,
 `--limit` and `--json` are described under
-[Options](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#options)
+[Options](#options)
 once you have seen what the commands print.
 
 ### players
@@ -180,10 +180,10 @@ leave the `No.` columns off their pairing pages.
 shows the page as published. Round 6 above has 52 rows for a field of 108: the byes
 and absences are gone. `standings`, `colours` and `history` still count them, because
 they read the crosstable too. See
-[A note on byes](https://github.com/markjonleonard/chess-results#a-note-on-byes). A
+[A note on byes](README.md#a-note-on-byes). A
 round that is still the current one keeps those rows, shown as `bye` or `not paired`
 in the black column.
-[`pairing-sheet`](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#pairing-sheet)
+[`pairing-sheet`](#pairing-sheet)
 does rebuild them from the crosstable, because a sheet on a wall has to account for
 every player, whereas `pairings` prints the page as published.
 
@@ -214,7 +214,7 @@ page 1 of 1
 
 Name the round positionally, with `--round N`, or with `--after N`; all three mean the
 same thing here. Do not reach for `--rounds`, which is unrelated (see
-[Options](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#options)).
+[Options](#options)).
 The other options are `--subtitle TEXT` for a line under the heading, `--no-results`,
 `--lines-per-page N`, `--no-pages`, `--name-width N` (default 28, sized for paper, so
 never narrowed to your terminal), `-o FILE` to write the sheet to a file, and
@@ -230,7 +230,7 @@ Everyone who is not playing keeps a row, with the reason: `bye`, `half-point bye
 are rebuilt from the crosstable, because chess-results.com deletes them from a round's
 page once the next round is paired (unlike `pairings`, which prints the page as
 published). See
-[A note on byes](https://github.com/markjonleonard/chess-results#a-note-on-byes).
+[A note on byes](README.md#a-note-on-byes).
 
 `--lines-per-page N` sets how many lines a page holds. The default of 66 is a full US
 Letter page at six lines per inch, and fits A4 with room to spare. `--no-pages` gives one
@@ -244,7 +244,7 @@ the wall still needs a sheet.
 
 The first command below needs the example script, which is in the repository and not
 in the pip package, and bbpPairings, which is installed separately. See
-[Predicting the next round](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round).
+[Predicting the next round](#predicting-the-next-round).
 
 ```bash
 # pair the next round and print it, in one go
@@ -280,7 +280,7 @@ footnote nobody transcribes is no use on a wall:
 
 **Board numbers chosen this way are a convention, not a ruling**, and the pairings are
 only as good as the results they were computed from. Read
-[Predicting the next round](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
+[Predicting the next round](#predicting-the-next-round)
 before putting one on the wall.
 
 Anything that cannot be honoured, such as two fixed boards wanting one table or a
@@ -425,7 +425,7 @@ Derbyshire Congress — 2024-11-23 to 2024-11-24
 `Total: 149`, and `--json` prints it all as data. Counts come from the search, so no
 tournament page is read, except to fetch the full name of a section whose name the
 search cut short (see
-[search](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#search)).
+[search](#search)).
 Sections are listed in tournament number order.
 
 chess-results.com does not link the sections of a congress, so they are found by
@@ -521,7 +521,7 @@ JSON never clips a name, so `--name-width` has no effect on it. `--limit` still
 applies to a list, and `total` and `truncated` say what it left out, so a cut list is
 never mistaken for the whole. A command that fails still prints its one-line error on
 stderr and nothing on standard output; see
-[Errors and exit codes](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#errors-and-exit-codes).
+[Errors and exit codes](#errors-and-exit-codes).
 
 ### Options
 
@@ -535,7 +535,7 @@ one command alone, such as `--pairs` or `--women`, is described under that comma
 | `--after N` | Report the tournament as it stood after round N. A round it has not reached gives the latest. | `standings`, `colours`, `history`, `pairings`, `pairing-sheet` |
 | `--limit N` | Print the first N rows, then say how many were left out. | `players`, `standings`, `colours`, `pairings`, `unfinished`, `search` |
 | `--name-width N` | Room for a player's name before it is clipped and ends in `…`. Default 28, narrowed to fit a small terminal; anything under 8 counts as 8. On `pairing-sheet` it sizes names for paper and is never narrowed. | `players`, `standings`, `colours`, `pairings`, `history`, `pairing-sheet` |
-| `--json` | Print JSON instead of a table. See [JSON output](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#json-output). | every command |
+| `--json` | Print JSON instead of a table. See [JSON output](#json-output). | every command |
 | `--rounds N` | Stop reading after round N. | the round-reading commands; ignored by `players` |
 | `--bye-value P` | What a pairing-allocated bye is worth, in points (default 1.0). | the round-reading commands; ignored by `players` |
 | `--no-crosstable` | Skip the crosstable request. **Scores will be wrong** for anyone whose bye has been deleted from the round's own page. | the round-reading commands; ignored by `players` |
@@ -641,7 +641,7 @@ trf = to_trf(event, after=8)    # FIDE TRF(x) through round 8; raises TrfError i
 
 No separate API reference exists. The classes and their fields are documented in the
 source, and
-[DESIGN.md](https://github.com/markjonleonard/chess-results/blob/main/DESIGN.md)
+[DESIGN.md](DESIGN.md)
 explains the model.
 
 ### A pairing sheet
@@ -714,7 +714,7 @@ frome.player_count                  # entries across the whole congress
 
 The section names are yours, since nothing on the site groups a congress. To have them
 suggested, `sections` finds them from any one section's number (see
-[Finding sections and tournaments](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#finding-sections-and-tournaments)):
+[Finding sections and tournaments](#finding-sections-and-tournaments)):
 
 ```python
 client = ChessResults()
@@ -795,7 +795,7 @@ fields are documented in the source as well.
   `fide_id`, `sex` and a few more).
 - `search(...)` returns `SearchResults`, and `sections(id)` returns `EventSections`;
   see
-  [Finding sections and tournaments](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#finding-sections-and-tournaments).
+  [Finding sections and tournaments](#finding-sections-and-tournaments).
 - `congress(sections, *, name=None, rounds=None, bye_value=1.0, crosstable=True,
   skip_unreadable=False)` returns a `Congress`.
 
@@ -857,7 +857,7 @@ pairings.
   `--engine`. **The engine is not included.** The script checks the path before it
   fetches anything, so a wrong one costs you a message rather than a dozen requests.
 - **The script**, which is in the
-  [repository](https://github.com/markjonleonard/chess-results/tree/main/examples)
+  [repository](examples)
   rather than in the pip package. Clone the repository, or download the file, and run
   it with a Python that has `chess-results` installed.
 
@@ -872,7 +872,7 @@ It prints the predicted pairings for the round after the last one chess-results.
 has published, with each player's score. The board numbers in that list are the
 script's own, because an engine emits a set of pairs and no ordering. Add `--sheet`
 for a printable sheet with boards numbered the way arbiter software numbers them (see
-[pairing-sheet](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#pairing-sheet)).
+[pairing-sheet](#pairing-sheet)).
 
 **Always pass `--total-rounds`.** Without it, the file tells the engine that the round
 being predicted is the last, and bbpPairings applies the final-round colour rules for
@@ -920,7 +920,7 @@ the error is in who has withdrawn, which a live prediction cannot know for sure.
 Round 2 is the exception. Even with the right players it does not reproduce, because a
 large group on the same score admits many legal pairings, and bbpPairings and the
 arbiter's software choose differently among them. Expect it on any round 2.
-[DESIGN.md](https://github.com/markjonleonard/chess-results/blob/main/DESIGN.md#predicting-the-next-round)
+[DESIGN.md](DESIGN.md#predicting-the-next-round)
 has the full table and the method. Treat a prediction as a good guess, not an
 announcement.
 
