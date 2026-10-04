@@ -104,7 +104,7 @@ Starts 14:15 — Great Hall
 
  Bd  White                    Pts  Result  Black                    Pts
 -----------------------------------------------------------------------
-  1  GM Royal, Shreyas          5          GM Mcshane, Luke J         4
+  1  GM Royal, Shreyas          5          GM Mcshane, Luke J         5
   2  GM Adams, Michael          5          IM Grieve, Harry           5
  ...
   -  WCM Nevska, Gerda          ½          bye
@@ -113,8 +113,8 @@ Starts 14:15 — Great Hall
 page 1 of 1
 ```
 
-The result column stays empty for the arbiter to fill in as games finish. Everyone
-who is not playing keeps a row with the reason, `bye`, `half-point bye` or
+A game's result box stays empty until the game finishes, so the arbiter can write it
+in. Everyone who is not playing keeps a row with the reason, `bye`, `half-point bye` or
 `not paired`, because each is worth a different score.
 
 **Each command's output and options, the JSON format, the Python API, tie-breaks and
@@ -148,8 +148,10 @@ download it separately, and the example script is in the repository, not the pip
 package.
 
 Given the players each round was paired from, bbpPairings reproduced every round of
-the 2026 British Championship exactly, and most boards without that list. A live prediction cannot
-know for sure who has withdrawn, so treat it as a good guess, not an announcement.
+the 2026 British Championship exactly, allowing for one player the arbiter seated in
+another's place after round 2 was paired. With no word on who had withdrawn, it still
+got most boards right. A live prediction cannot know for sure who has withdrawn, so
+treat it as a good guess, not an announcement.
 The [guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
 covers how to run it, games still in progress, withdrawals and the figures.
 
@@ -193,7 +195,8 @@ crosstable states the same facts again, one row per player, and publishes each
 player's total. This tool reads both, compares them round by round, and checks every
 crosstable row against its own total. Anything that does not agree is printed as a
 warning on stderr, so a misread page shows up rather than passing as a wrong score.
-Where a round page says nothing about a player, the crosstable fills that round in.
+If a round page ever leaves a player out, the crosstable supplies that player's round;
+none of the round pages checked so far has.
 
 While a round is being played, the crosstable can lag behind the round page on that
 round's byes. A warning about the newest round's byes is usually that, and clears as

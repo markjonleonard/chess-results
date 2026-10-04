@@ -24,9 +24,10 @@ def fixture(name: str) -> str:
 BRITISH_PLAYED_ROUNDS = 8
 
 #: Rounds 6 and 7 were each saved twice, and which capture you want is the whole
-#: point of the pair: `_midround` still shows its bye and "not paired" rows,
-#: `_finished` is the same round after a later one was paired and those rows were
-#: deleted. Neither is "the" round 6 fixture, so neither carries the plain name.
+#: point of the pair: `_midround` has games without results and no PGN column,
+#: `_finished` is the same round played out, with a PGN column whose cell its bye
+#: and "not paired" rows lack. Neither is "the" round 6 fixture, so neither
+#: carries the plain name.
 _CAPTURE = {6: "midround", 7: "midround"}
 _PLAYED_CAPTURE = {6: "finished", 7: "finished"}
 

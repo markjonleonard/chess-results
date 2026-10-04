@@ -115,9 +115,8 @@ class TestUnfinished:
 class TestLikelyWithdrawn:
     """Guessing who has left, since chess-results never says.
 
-    The evidence only survives in the crosstable: a round page deletes its "not
-    paired" rows as soon as a later round is paired, so the signal these read is
-    exactly what ``add_crosstable`` restores.
+    The evidence is the "not paired" rows each round page lists, which the
+    crosstable states again.
     """
 
     def test_players_unpaired_in_the_latest_round_are_flagged(self, british):
