@@ -18,13 +18,14 @@ withdrawn.
 Two traps this script exists to avoid, both of which produce plausible but wrong
 numbers:
 
-- The field must come from the crosstable-reconciled player histories, never from
-  the round's own pairing page. Once a later round is paired, a round page loses
-  its bye and "not paired" rows, so deriving the field from it silently
-  reclassifies that round's bye recipient as a withdrawal.
-- A ``Play`` recovered from the crosstable exists even for a round the player took
-  no part in (``PlayKind.UNPAIRED``), so "has a play in round N" is not the same
-  as "was paired in round N".
+- The field must come from the reconciled player histories, not straight from the
+  round's pairing page. The page's bye and "not paired" rows are the ones a reader
+  is likeliest to lose, since they lack the cell of a published round's PGN
+  column, and losing them silently reclassifies that round's bye recipient as a
+  withdrawal.
+- A ``Play`` exists even for a round the player took no part in
+  (``PlayKind.UNPAIRED``), so "has a play in round N" is not the same as "was
+  paired in round N".
 """
 
 from __future__ import annotations

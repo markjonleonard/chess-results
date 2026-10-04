@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 # to multi-language client families (redis-py alongside redis-rb, node-redis);
 # there is no such family here, so it would claim one that does not exist.
 name = "chess-results"
-description = "Scrape tournament pairings, results and colour histories from chess-results.com"
+description = "Standings, pairings, colour histories and printable pairing sheets from chess-results.com, as text or JSON, with tournament search and TRF(x) export"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]

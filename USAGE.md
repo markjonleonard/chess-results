@@ -175,17 +175,18 @@ chess-results pairings 1452107 6
 The starting numbers are joined in from the starting-rank list, because most events
 leave the `No.` columns off their pairing pages.
 
-**`pairings` does not recover byes.** chess-results.com deletes the `bye` and
-`not paired` rows from a round's page once the next round is paired, and this command
-shows the page as published. Round 6 above has 52 rows for a field of 108: the byes
-and absences are gone. `standings`, `colours` and `history` still count them, because
-they read the crosstable too. See
-[A note on byes](README.md#a-note-on-byes). A
-round that is still the current one keeps those rows, shown as `bye` or `not paired`
-in the black column.
-[`pairing-sheet`](#pairing-sheet)
-does rebuild them from the crosstable, because a sheet on a wall has to account for
-every player, whereas `pairings` prints the page as published.
+Below the games come the players with no game that round, as the page lists them,
+with `bye` or `not paired` in the black column:
+
+```
+  53    ½  106      Chapman, Luke                1                    bye
+  54   1½   47  FM  Badacsonyi, Frankie                               not paired
+```
+
+`pairings` prints the page as published.
+[`pairing-sheet`](#pairing-sheet) builds those rows from each player's history
+instead, so that a sheet on a wall accounts for every player even where a page leaves
+one out.
 
 ### pairing-sheet
 
@@ -227,10 +228,8 @@ column and gives its four characters back to names.
 
 Everyone who is not playing keeps a row, with the reason: `bye`, `half-point bye` or
 `not paired`. They score differently, so the sheet does not run them together. They
-are rebuilt from the crosstable, because chess-results.com deletes them from a round's
-page once the next round is paired (unlike `pairings`, which prints the page as
-published). See
-[A note on byes](README.md#a-note-on-byes).
+come from each player's history rather than from the round's page, so a page that
+leaves one out still yields the whole round.
 
 `--lines-per-page N` sets how many lines a page holds. The default of 66 is a full US
 Letter page at six lines per inch, and fits A4 with room to spare. `--no-pages` gives one
@@ -538,7 +537,7 @@ one command alone, such as `--pairs` or `--women`, is described under that comma
 | `--json` | Print JSON instead of a table. See [JSON output](#json-output). | every command |
 | `--rounds N` | Stop reading after round N. | the round-reading commands; ignored by `players` |
 | `--bye-value P` | What a pairing-allocated bye is worth, in points (default 1.0). | the round-reading commands; ignored by `players` |
-| `--no-crosstable` | Skip the crosstable request. **Scores will be wrong** for anyone whose bye has been deleted from the round's own page. | the round-reading commands; ignored by `players` |
+| `--no-crosstable` | Skip the crosstable request. The round pages are then not cross-checked, and a player a page leaves out of a round is not filled in. | the round-reading commands; ignored by `players` |
 | `--delay S` | Seconds to wait between requests (default 1.0). | every command |
 | `--no-cache` | Always refetch, ignoring the cache. | every command |
 | `--cache-ttl S` | Seconds to reuse a live round's page (default 300). Finished rounds are cached far longer. | the round-reading commands; ignored by `players` |
@@ -786,8 +785,8 @@ fields are documented in the source as well.
 
 - `tournament(id, *, rounds=None, bye_value=1.0, crosstable=True)` returns a
   `Tournament`. `rounds` is a count or a `range`, as `--rounds`; `bye_value` is as
-  `--bye-value`; `crosstable=False` is `--no-crosstable`, and leaves wrong scores for
-  anyone whose bye has been deleted from its round page.
+  `--bye-value`; `crosstable=False` is `--no-crosstable`, and skips the cross-check
+  and the filling in of any round a page leaves a player out of.
 - `entrants(id)` returns `Entrants`, the starting-rank list alone, as `players` reads
   it. It works before round 1. Its fields are `id`, `name`, `dates` and
   `time_control` (the last two only when the event published them) and `players`, a

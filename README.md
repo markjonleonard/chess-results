@@ -5,6 +5,11 @@
 Look up a chess tournament on [chess-results.com](https://chess-results.com) and
 get the results back as text you can read, or as data you can work with.
 
+> **Early days.** It works and is tested on real tournaments, but it has only
+> been tried on a handful of events. Expect rough edges, and expect commands and
+> options to change before 1.0. If you rely on it for something that matters,
+> check its answers against the tournament's own pages.
+
 For each player it collects who they played, which colour they had, whether they
 floated up or down, and whether they took a bye: the things you need to follow a
 Swiss tournament, or to work out what the next round's pairings should be.
@@ -16,16 +21,10 @@ counts, and write a tournament as FIDE
 engine. Every command can print JSON.
 
 What sets it apart from reading the site's tables is what happens after parsing. It
-assembles the round pages into a per-player history and corrects it, recovering the
-byes that chess-results.com deletes from earlier rounds' pages. Terms such as *float*
-and *pairing-allocated bye* are explained under
+assembles the round pages into a per-player history, byes and absences included, and
+checks every round against the tournament's crosstable. Terms such as *float* and
+*pairing-allocated bye* are explained under
 [Terms](https://github.com/markjonleonard/chess-results#terms).
-
-> **Early days.** Version 0.1.0 is a first release. It works and is tested
-> on real tournaments, but it has only been tried on a handful of events.
-> Expect rough edges, and expect commands and options to change before 1.0.
-> If you rely on it for something that matters, check its answers against the
-> tournament's own pages.
 
 ## Install
 
@@ -84,34 +83,39 @@ chess-results sections 823027                # every section of a congress, with
 chess-results search "Derbyshire Congress"   # find a tournament number by name
 ```
 
-Add `--json` to any of them for JSON instead of a table. Here is round 8 of the 2026
-British Championship as a pairing sheet, ready for the noticeboard:
+`players` is the one command that reads a tournament before it has started; the others
+that read a tournament need at least one round to have been paired. `sections` and
+`search` work from the site's search, so they can be used at any time.
 
+Add `--json` to any command for JSON instead of a table.
 
+Here is round 7 of the 2026 British Championship as a pairing sheet, ready for the
+noticeboard. It is shown as it printed once the round was paired and before any game
+had started; run now, the same command fills in the results.
 
 ```bash
-chess-results pairing-sheet 1452107 --after 8 --subtitle "Starts 14:15 — Great Hall" | lpr
+chess-results pairing-sheet 1452107 7 --subtitle "Starts 14:15 — Great Hall" | lpr
 ```
 
 ```
 2026 British Chess Championships: Championship
-Round 8 pairings
+Round 7 pairings
 Starts 14:15 — Great Hall
 
  Bd  White                    Pts  Result  Black                    Pts
 -----------------------------------------------------------------------
-  1  GM Adams, Michael         5½   ½-½    GM Royal, Shreyas          6
-  2  IM Grieve, Harry          5½   1-0    IM Roberson, Peter T      5½
+  1  GM Royal, Shreyas          5          GM Mcshane, Luke J         4
+  2  GM Adams, Michael          5          IM Grieve, Harry           5
  ...
-  -  WFM Cooke, Suzy G          1          bye
+  -  WCM Nevska, Gerda          ½          bye
+  -  IM Golding, Alex           3          not paired
+ ...
 page 1 of 1
 ```
 
-
-
-`players` is the one command that reads a tournament before it has started; the others
-that read a tournament need at least one round to have been paired. `sections` and
-`search` work from the site's search, so they work at any time.
+The result column stays empty for the arbiter to fill in as games finish. Everyone
+who is not playing keeps a row with the reason, `bye`, `half-point bye` or
+`not paired`, because each is worth a different score.
 
 **Each command's output and options, the JSON format, the Python API, tie-breaks and
 the pairing-engine example are in the
@@ -141,81 +145,86 @@ format FIDE pairing engines read, so that a program such as
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) can work out what
 the next round's pairings ought to be. **The engine is not included**: you build or
 download it separately, and the example script is in the repository, not the pip
-package. Given the right list of players it reproduced three rounds of the 2026
-British Championship exactly; a live prediction cannot know for sure who has
-withdrawn, so treat it as a good guess, not an announcement. The
-[guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
+package.
+
+Given the right list of players, bbpPairings reproduced rounds 7 to 9 of the 2026
+British Championship exactly, and most boards without it. A live prediction cannot
+know for sure who has withdrawn, so treat it as a good guess, not an announcement.
+The [guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
 covers how to run it, games still in progress, withdrawals and the figures.
 
 ## Terms
 
-- **Starting number** (`No`). The number each entrant gets before round 1, usually
-  by rating. This tool joins the round pages to the crosstable through it.
-- **Scoregroup.** The players on the same score.
-- **Float.** A player paired against someone from a different scoregroup is said to
-  float: *up* if the opponent is higher, *down* if lower. `U` and `D` in the output.
-- **Fixed board.** A board a player keeps for the whole event, usually for access
-  reasons. chess-results.com marks the player but does not say which board.
-- **Pairing-allocated bye.** The bye the pairing program gives the odd player out
-  in a round with an odd number of players. Usually a full point.
-- **Requested bye.** A bye a player asks for in advance, commonly worth half a
-  point. Shown by chess-results.com as `not paired` with a score.
-- **Forfeit.** A game decided without being played, usually because a player did
-  not turn up. Marked with an `F` after the result: `1-0F`, or `0F` for the loser.
-- **Crosstable.** The page that lists every player's every round. It is the one view
-  that keeps byes after their round is superseded.
-- **Live and settled rounds.** A round is live while its results are coming in. It
-  is settled once every game has a result and the next round has been paired; only then is
-  every result in it final.
 - **Colour preference.** Which colour a player is due. Absolute, strong or mild, as
   defined by FIDE's Dutch system ([C.04.3](https://handbook.fide.com/chapter/C0403),
   article 1.7).
-- **Top scorer.** In the Dutch system, a player with more than half the possible
-  points when the final round is paired (article 1.8). Some colour rules do not
-  apply to them.
+- **Crosstable.** The page that lists every player's every round in one grid, byes
+  and absences included. This tool checks the round pages against it.
+- **Fixed board.** A board a player is kept on from round to round, usually for
+  access reasons. chess-results.com marks the player but does not say which board,
+  so this tool takes it to be the board they held longest in an unbroken run, which
+  is a guess.
+- **Float.** A player paired against someone from a different scoregroup is said to
+  float: *up* if the opponent is higher, *down* if lower. `U` and `D` in the output.
+- **Forfeit.** A game decided without being played, usually because a player did
+  not turn up. Marked with an `F` after the result: `1-0F`, or `0F` for the loser.
+- **Live and settled rounds.** A round is live while its results are coming in. It
+  is settled once every game has a result and the next round has been paired; only
+  then are its results treated as final.
+- **Pairing-allocated bye.** The bye the pairing program gives the odd player out
+  in a round with an odd number of players. Usually a full point.
 - **Performance rating.** What a player's results were worth: their opponents'
   average rating plus a figure from FIDE's table for the percentage they scored
   (FIDE B.01, 1.4.8). An unrated opponent counts as 1400.
+- **Requested bye.** A bye a player asks for in advance, commonly worth half a
+  point. Shown by chess-results.com as `not paired` with a score.
+- **Scoregroup.** The players on the same score.
+- **Starting number** (`No`). The number each entrant gets before round 1, usually
+  by rating. This tool joins the round pages to the crosstable through it.
+- **Top scorer.** In the Dutch system, a player with more than half the possible
+  points when the final round is paired (article 1.8). Some colour rules do not
+  apply to them.
 - **TRF(x).** The file format for a tournament report that FIDE pairing engines read.
 
-## A note on byes
+## Checked against the crosstable
 
-chess-results.com removes the bye and "not paired" rows from a round's page as soon
-as the next round is published. Anything reading only those pages will miss the byes
-taken in earlier rounds, and score those players short of the points they were
-awarded. This tool reads the crosstable as well and puts the missing byes and
-absences back, so the scores it reports agree with the tournament's published
-totals.
+Each round's page lists its games, its byes and the players who were not paired. The
+crosstable states the same facts again, one row per player, and publishes each
+player's total. This tool reads both, compares them round by round, and checks every
+crosstable row against its own total. Anything that does not agree is printed as a
+warning on stderr, so a misread page shows up rather than passing as a wrong score.
+Where a round page says nothing about a player, the crosstable fills that round in.
+
+While a round is being played, the crosstable can lag behind the round page on that
+round's byes. A warning about the newest round's byes is usually that, and clears as
+the event moves on.
 
 ## What it does not do
 
 **Team tournaments and round robins.** chess-results.com publishes both in formats
 this tool does not read. A team round pairs teams rather than players, and a round
 robin puts every round on one page with a crosstable of opponents rather than of
-rounds. Point it at either and it says so and stops, rather than reporting an empty
-tournament.
+rounds. Point a command that reads rounds at either and it says so and stops, rather
+than reporting an empty tournament. `players`, `sections` and `search` read no rounds,
+so they work on both.
 
-**Tournaments that have not started.** They get the same treatment. An entry list
-often appears months ahead of the first game, and "this has not started yet" is more
-use than a table of zeroes.
+**Tournaments that have not started.** The commands that read rounds treat these the
+same way. An entry list often appears months ahead of the first game, and "this has
+not started yet" is more use than a table of zeroes.
 
-**Most of the tournament's own metadata.** The commands that read a tournament take
-its name from its pages, and `players` also prints the dates and time control, but
-only when the organiser published them and only before the event has been paired.
-`search` reports what the site's search index holds for each tournament: dates and
-entrants in its table, and the organiser, director, chief arbiter, venue and time
-control as well in JSON and from Python. Nothing here reads the playing schedule or
-the tie-break columns of the final ranking. Everything is built around who played
-whom, so that is what it collects.
+**The playing schedule and the published tie-break columns.** Neither is read.
+Everything is built around who played whom, so that is what it collects. From Python,
+it computes the usual Swiss tie-breaks itself instead.
 
 ## Related projects
 
 [**chessResults**](https://codeberg.org/SirfHaru/chessresults) is an R package that
 also scrapes chess-results.com, returning a tidy tibble of tournament information,
 starting rank, playing schedule, round results and closing rank. If you work in R, or
-you want the site's tables as published, including the fuller tournament metadata and
-the tie-breaks this tool skips, it is the better fit. This tool does a narrower and
-different job: it corrects the per-player history and can write it as TRF(x).
+you want the site's tables as published, including the tournament information and
+published tie-break columns this tool skips, it is the better fit. This tool does a
+narrower and different job: it assembles and cross-checks the per-player history and
+can write it as TRF(x).
 
 [`trf`](https://pypi.org/project/trf/) reads and writes the FIDE tournament report
 format. This tool only ever *writes* TRF, and writes it directly, so it takes no
@@ -226,17 +235,18 @@ is where to look.
 
 chess-results.com is a free service run for the chess community. This tool pauses
 between requests, identifies itself, and on the command line keeps the pages it has
-fetched so it does not ask twice; from Python, pass `ChessResults(cache=True)` for
-the same. Please leave those defaults alone unless you have a reason,
-and do not point it at large numbers of tournaments at once. `search` is never cached,
-so each call goes to the site: go easy with it, and prefer `sections` over looping
-through searches.
+fetched so it does not ask twice. From Python, turn that on with
+`ChessResults(cache=True)`. Please do not shorten the pause or turn the cache off
+without a reason, and do not point it at large numbers of tournaments at once.
+`search` is never cached, so each call goes to the site: go easy with it, and prefer
+`sections` over looping through searches.
 
 ## How it works
 
 [DESIGN.md](https://github.com/markjonleonard/chess-results/blob/main/DESIGN.md)
 covers the internals: how the pages are parsed, how caching decides what to keep,
-how byes are recovered, and how the pairing predictions were tested.
+how the round pages are checked against the crosstable, and how the pairing
+predictions were tested.
 
 ## Getting help
 

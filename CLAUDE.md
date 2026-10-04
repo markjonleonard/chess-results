@@ -100,12 +100,11 @@ like over-engineering and are not:
   board. What cannot be honoured becomes a `PairingSheet.warnings` entry printed on the
   sheet — never an exception, because a sheet an arbiter corrects by hand beats no sheet
   five minutes before a round.
-- **A round's page is not the round.** `sheet_from_round` must rebuild the bye and "not
-  paired" rows from `Player.plays`, because `Tournament.rounds` holds what the page said
-  and chess-results deletes those rows once a later round is paired — round 6 of the
-  British has 52 rows for a field of 108. This was shipped wrong once, and the test that
-  should have caught it compared the sheet against `Tournament.rounds`, so it asserted the
-  bug against itself. Assert against the field instead.
+- **The players not playing come from the field, not the page.** `sheet_from_round`
+  builds the bye and "not paired" rows from `Player.plays`, not from `Tournament.rounds`,
+  so a page that leaves a player out still yields the whole round. A test that compares
+  the sheet against `Tournament.rounds` asserts whatever the page said against itself;
+  assert against the field instead.
 - **The three kinds of non-game are a point apart** and must not print alike; see
   `NOT_PLAYING_TEXT`. Frome's Standard section has a full-point bye among half-point ones,
   which is the fixture that shows it.
@@ -165,15 +164,25 @@ label rule, is pure, and its limits are written at the top of that module and in
 
 These cost real debugging to find. Do not "simplify" them away.
 
-**Byes vanish from superseded rounds.** A round's pairing page lists `bye` and `not paired`
-rows only while that round is the current one; once a later round is paired those rows are
-*deleted*. A player who took a full-point bye in round 6 then has no round 6 anywhere on the
-round pages and scores a point light. The starting-rank crosstable (`art=5`) keeps the whole
-record, so `tournament()` fetches it and `add_crosstable` fills any round a player is
-missing. This is not a display option — it happens with and without `turdet`. Verifying score
-changes against the crosstable's published totals is no longer a manual step:
-`check_published_totals` requires the cells we read from a row to sum to the total that row
-publishes, and `tournament()` runs it. All 108 agree, and always have.
+**A published round's bye rows are one cell short.** A round's pairing page lists its games,
+then a row for each player with no game: `bye`, or `not paired` with any points a requested
+bye earned. Once the round's games are published the table gains a trailing `PGN` column,
+and those rows are not given its cell, so `parse_pairings` pads a row exactly one cell short
+when `PGN` is what it lacks. Without that, the alignment guard drops every bye and absence
+from every published round. That looks exactly like chess-results deleting them once a
+later round is paired, and it is not: the rows stay. Checked against the tool's own HTTP
+cache (`~/.cache/chess-results/http.sqlite`, latest fetch per URL), 68 round pages from 14
+tournaments, 37 of them fetched after the next round had been paired, list all 242 players
+their crosstables have off the board, and the only pages that ever read short were the 18
+with a `PGN` column (the British and both Swindon sections). If a page ever does look short,
+check its column count before blaming the site.
+
+The starting-rank crosstable (`art=5`) states the same record, so `tournament()` fetches it
+and `add_crosstable` cross-checks every round and fills any round a player still has no row
+for. On real pages it fills nothing (zero plays across those 14 tournaments), so its tests
+run against `british_with_gaps` and its siblings in `conftest.py`, which drop the rows to
+make a gap. `check_published_totals` requires the cells we read from a crosstable row to sum
+to the total that row publishes, and `tournament()` runs it. All 108 agree.
 
 **Which column holds that total is not fixed, and `TB1` is not a safe answer.** Where an
 event prints a `Pts.` column, that is the score and `TB1` is a real tiebreak — Arad 2026's
@@ -197,14 +206,12 @@ from the round page against `unpaired` from the crosstable, for the one player f
 to the bye that round. A `--no-cache` re-fetch reproduced it identically, and the raw pages
 confirm it is not our parsers disagreeing with each other: `art=2&rd=6` lists the player's row
 as `bye`, while `art=5`'s crosstable prints `-0` (not paired, no round-6 opponent) in the same
-player's round-6 cell. That is the same trigger already documented above and below, for byes
-vanishing from a superseded round's page and for `check_published_totals`, now surfacing
-through a third comparison: the crosstable has not yet caught up with the *current* round's
-bye.
+player's round-6 cell. The crosstable has not yet caught up with the *current* round's bye.
 Sibling section tnr1484241 hit the `check_published_totals` shape of it two days earlier, so
 this looks like a property of the congress's live rounds generally rather than one section's
-fluke. Narrow the "nothing has tripped this" claim to *every finished round* of every event
-in the suite, which remains true — this is a live-round-only failure mode. It does not
+fluke. Nothing trips this on a finished round: the 14 tournaments in the HTTP cache,
+assembled offline with their bye and "not paired" rows compared too, disagree only on
+Torquay's then-newest round 2 (below). This is a live-round-only failure mode. It does not
 corrupt anything downstream: `add_crosstable` only compares where the round page already has
 a play, never overwrites it, so `Jones, Michael R` still shows the correct `bye` in
 `standings` while the warning fires.
@@ -231,20 +238,20 @@ first catch was mid-round (29 of 30 results in); a second, fresh, uncached fetch
 round-3 result was in showed the identical stale `0,5` — so finishing the round is not what
 fixes this, and the theory that it would was wrong. Every other requested bye in the same
 tournament, all from rounds 1 and 2, sums correctly; only the two in the round chess-results
-still treats as current are wrong, which points at the same trigger already documented above
-for byes vanishing from a superseded round's page (the pairing of the *next* round) rather
-than at anything about halves or byes generally. Unconfirmed, since round 4 had not been
-paired at either check: re-check once it is. This does not corrupt anything downstream
-either way: `Tournament`'s assembled score comes from the round page, not from this total,
+still treats as current are wrong, which points at the round still being current rather than
+at anything about halves or byes generally. A round stops being current when the next one is
+paired, and pairing later rounds does clear it: the cached crosstable fetched on
+2026-09-03, covering rounds 1-6, has both players' cells and totals agreeing (2.5 and 2.0).
+Whether round 4's pairing alone was enough is not pinned down, since nothing was fetched
+between it and round 6. This does not corrupt anything downstream either way: `Tournament`'s assembled score comes from the round page, not from this total,
 so `standings` and `pairings` were both already correct while the warning fired.
 
 Searched for upstream attribution and found none: [chess-results.com](https://chess-results.com) has no public
-issue tracker or changelog, and the [Swiss-Manager](https://swiss-manager.at) manuals do not mention it. So this is observed,
-undocumented behaviour — do not go looking for a citation, there isn't one. It is not
-Swiss-Manager losing the data, though: the crosstable and the round pages come from the same
-upload, and the crosstable still has the byes.
+issue tracker or changelog, and the [Swiss-Manager](https://swiss-manager.at) manuals do not mention it. So the crosstable
+lagging a live round is observed, undocumented behaviour — do not go looking for a citation,
+there isn't one.
 
-The crosstable is not the only survivor. **`art=40`, linked in the nav bar as "not paired",
+The crosstable is not the only second view. **`art=40`, linked in the nav bar as "not paired",
 lists every player who has missed a round** as a grid of one column per round, marking `*`
 not paired, `bye` a bye, `0F` a forfeit. `parse_not_paired` reads it. It is the most direct
 statement of the same facts and is a page rather than a whole crosstable to mine, but it
@@ -332,11 +339,11 @@ A `Play` recovered from the crosstable therefore has no float: the crosstable pr
 pre-round score, so `points_before` is `None` and `_floats` cannot run. **This costs
 nothing, and the reason is worth keeping so nobody "fixes" it.** `add_crosstable` fills
 only rounds already fetched (`if entry.round not in self.rounds`), so it never introduces a
-whole round — it fills one player's gap inside a round we have. The only rows chess-results
-deletes from a round page are byes and "not paired"; a game row is never removed. So a
-recovered play is always one of those two, and both are already right: a pairing bye takes
-`"D"`, and an unpaired player takes nothing, having floated nowhere. Measured across every
-fixture, the number of recovered *games* is zero.
+whole round — it fills one player's gap inside a round we have. A round page lists every
+game it pairs, so the only rows it can be missing are byes and "not paired". A recovered play
+is always one of those two, and both are already right: a pairing bye takes `"D"`, and an
+unpaired player takes nothing, having floated nowhere. Measured across every fixture,
+the gapped ones included, the number of recovered *games* is zero.
 
 The one way to reach a recovered game is a player whose name differs between the starting
 rank and the round pages — the join is by `start_no`, so the crosstable still matches them.
@@ -387,7 +394,8 @@ JSON sidecar next to the cache so the knowledge survives between runs.
 **The crosstable is cached hard too, and replaced rather than expired.** It used to take
 the live 5-minute lifetime, flat, on the reasoning that it holds live results — but we never
 read results from it; the round page is the authority. What we read is the byes and
-absences that round pages delete once a later round is paired, and those never change again.
+absences of rounds already played, to check and back up the round pages, and those never
+change again.
 So it is fetched with `SETTLED_TTL` and `refresh=True` is passed when
 `crosstable_is_stale()` says the cached copy will not do, which is the only way round
 [requests-cache](https://requests-cache.readthedocs.io) fixing expiry at write time. Two things make it stale:
@@ -471,8 +479,8 @@ Several rounds have two fixtures on purpose, because the same round looks differ
 depending on when it was caught. `_r6_midround.html` and `_r7_midround.html` are the earlier
 captures: six games still in progress in one, a paired-but-unplayed round in the other.
 Their `_r6_finished.html` / `_r7_finished.html` counterparts are the same rounds played
-out. The r6 pair is what demonstrates the bye problem: the mid-round page still has its bye
-rows, the finished one has had them deleted.
+out. The r6 pair also shows the `PGN` column: the finished page has one, with its bye and
+"not paired" rows a cell short, and the mid-round page has none.
 
 **Neither capture holds the plain `_r6.html` name, deliberately.** Which one a test wants is
 the whole point of the pair, so there is no default to fall into: ask `conftest._round_fixture(rnd,
@@ -482,15 +490,15 @@ and `_r8.html` is round 8 played.
 
 `_r9.html` and `_crosstable_final.html` were captured on 2026-08-09 for the two defaulted
 games (see `test_forfeit.py`); round 9 was still being played, so **there is no
-complete-tournament fixture** — rounds 1-8 are as far as a fully-decided event goes.
-Round 9's page keeps its "not paired" rows because it was the current round at capture and
-the last round of the event, which makes it the only round page in the set that still
-lists the absent players.
+complete-tournament fixture** — rounds 1-8 are as far as a fully-decided event goes. For
+the same reason round 9's page has no `PGN` column.
 
 `conftest.py` offers `british` (full pipeline, crosstable reconciled, mid-event; what most
-tests want), `british_rounds_only` (round pages alone, so a test can show what
-reconciliation adds), `british_played_out` (rounds 1-8 with every game decided, needed by
-anything asserting on real `to_trf` output, which refuses unfinished games) and
+tests want), `british_rounds_only` (round pages alone, which already hold every bye and
+absence, so it agrees with `british`), `british_played_out` (rounds 1-8 with every game
+decided, needed by anything asserting on real `to_trf` output, which refuses unfinished
+games), the three `_with_gaps` variants of those (the bye and "not paired" rows dropped
+from every `PGN` page, the only way to give `add_crosstable` something to fill) and
 `frome_round_one` (a congress section with a different column layout and twelve half-point
 byes; built from its round page alone, because feeding the Frome crosstable to
 `parse_starting_rank` yields comma-less names that will not join).
@@ -569,16 +577,17 @@ Two more things that have already caused wrong conclusions:
   published pairing illegal, and exits 0, so both are presumably legal.
   Blind — with no withdrawal information, which is what a live
   prediction actually has — the same rounds give 37/51, 44/51 and 42/50. Every single miss
-  is a player who had stopped playing and whom the scraper could not see, because the round
-  pages delete the evidence. Do not reach for a rules-version or engine-disagreement
-  explanation for a mismatch until the field has been checked; that hypothesis was
+  is a player who had stopped playing, which nothing published says: a withdrawn player
+  shows only as `not paired` in the rounds already missed. Do not reach for a rules-version
+  or engine-disagreement explanation for a mismatch until the field has been checked; that
+  hypothesis was
   entertained once, on a since-retracted "47 of 52" figure that does not reproduce.
   `Tournament.likely_withdrawn` guesses the field from trailing `UNPAIRED` rounds and takes
-  those three to 39/51, 49/51 and 44/50. It only works on crosstable-reconciled histories:
-  run it against round pages alone and it finds *nobody* for any superseded round, because
-  those are exactly the rows chess-results has deleted — **or** pass it `not_paired=`, the
-  parsed `art=40` page, which restores exactly the crosstable's answer at every round of the
-  2026 British for one request. It buys nothing on top of a crosstable, by construction.
+  those three to 39/51, 49/51 and 44/50. It reads the `not paired` rows the round pages list,
+  so round pages alone give the same answer as a reconciled history. For a history missing
+  those rows, `not_paired=` (the parsed `art=40` page) restores exactly the crosstable's
+  answer at every round of the 2026 British for one request, as the gapped fixtures show. It
+  buys nothing on top of either, by construction.
 
 Predictions made mid-round need a result for every unfinished game, and those assumptions
 dominate the outcome below the top boards. On 2026-08-08, round 9 predicted from a live
