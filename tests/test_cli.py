@@ -904,6 +904,16 @@ class TestSearch:
         args = build_parser().parse_args(["search", "Derbyshire", "--organizer", "Woodhouse"])
         assert (args.func, args.query, args.organizer) == (cmd_search, "Derbyshire", "Woodhouse")
 
+    def test_the_british_and_the_sites_spelling_both_work(self):
+        parse = build_parser().parse_args
+        assert parse(["search", "--organiser", "x"]).organizer == "x"
+        assert parse(["search", "--organizer", "x"]).organizer == "x"
+
+    def test_the_arbiter_and_finished_only_are_filters_too(self, monkeypatch, capsys):
+        argv = ["search", "--arbiter", "Shaw", "--finished-only"]
+        _, _, client = _run_search_command(monkeypatch, capsys, argv)
+        assert (client.asked["arbiter"], client.asked["finished_only"]) == ("Shaw", True)
+
     def test_the_name_is_optional_given_a_filter(self):
         assert build_parser().parse_args(["search", "--organizer", "x"]).query is None
 
@@ -1091,6 +1101,9 @@ class TestJsonEverywhere:
     def test_pairing_sheet(self, british, monkeypatch, capsys):
         data = self._run(cmd_pairing_sheet, british, monkeypatch, capsys, round=5)
         assert data["round"] == 5
+        assert (data["id"], data["name"]) == (british.id, british.name)
+        assert "event" not in data
+        assert all("fixed_board" in r for r in data["rows"])
         assert data["boards"] == sum(1 for r in data["rows"] if not r["bye"])
         row = next(r for r in data["rows"] if not r["bye"])
         assert row["white"]["name"] and row["black"]["name"]

@@ -326,7 +326,15 @@ def _dates(start: object, end: object) -> str:
 
 def cmd_search(args: argparse.Namespace) -> int:
     """Search chess-results' tournament database and list what matched."""
-    criteria = (args.query, args.organizer, args.director, args.location, args.ends_from, args.ends_to)
+    criteria = (
+        args.query,
+        args.organizer,
+        args.director,
+        args.arbiter,
+        args.location,
+        args.ends_from,
+        args.ends_to,
+    )
     if not any(criteria) and not args.finished:
         print("chess-results: search needs a name or at least one of the filters", file=sys.stderr)
         return 2
@@ -334,6 +342,7 @@ def cmd_search(args: argparse.Namespace) -> int:
         args.query,
         organizer=args.organizer,
         director=args.director,
+        arbiter=args.arbiter,
         location=args.location,
         ends_from=args.ends_from,
         ends_to=args.ends_to,
@@ -784,7 +793,7 @@ def cmd_unfinished(args: argparse.Namespace) -> int:
     return 0
 
 
-def _sheet_payload(made: sheet.PairingSheet, after: int) -> dict[str, object]:
+def _sheet_payload(event: Tournament, made: sheet.PairingSheet, after: int) -> dict[str, object]:
     """A pairing sheet as data: the same rows the printed page would have."""
 
     def who(player: Player | None) -> dict[str, object] | None:
@@ -793,7 +802,7 @@ def _sheet_payload(made: sheet.PairingSheet, after: int) -> dict[str, object]:
         return {"name": player.name, "start_no": player.start_no, "title": player.title}
 
     return {
-        "event": made.event,
+        **_event_header(event),
         "round": made.round,
         "after": after,
         "boards": made.boards,
@@ -803,7 +812,7 @@ def _sheet_payload(made: sheet.PairingSheet, after: int) -> dict[str, object]:
                 "board": row.board,
                 "white": who(row.white),
                 "black": who(row.black),
-                "pinned": row.pinned,
+                "fixed_board": row.pinned,
                 "bye": row.is_bye,
                 "note": row.note if row.is_bye else None,
                 "result": row.result or None,
@@ -842,7 +851,7 @@ def cmd_pairing_sheet(args: argparse.Namespace) -> int:
         after = rnd - 1
 
     if args.json:
-        text = json.dumps(_sheet_payload(made, after), indent=2, ensure_ascii=False)
+        text = json.dumps(_sheet_payload(event, made, after), indent=2, ensure_ascii=False)
         if args.output:
             Path(args.output).write_text(text, encoding="utf-8")
             print(f"wrote {args.output}: {made.boards} boards over round {made.round}", file=sys.stderr)
@@ -1091,10 +1100,17 @@ def build_parser() -> argparse.ArgumentParser:
                     "--summary", action="store_true", help='one line: "Open 30; Major 25; Minor 19 (2023)"'
                 )
             else:
-                child.add_argument("--organizer", metavar="TEXT", help="part of the organiser's name")
+                child.add_argument(
+                    "--organiser",
+                    "--organizer",
+                    dest="organizer",
+                    metavar="TEXT",
+                    help="part of the organiser's name",
+                )
                 child.add_argument(
                     "--director", metavar="TEXT", help="part of the tournament director's name"
                 )
+                child.add_argument("--arbiter", metavar="TEXT", help="part of the chief arbiter's name")
                 child.add_argument("--location", metavar="TEXT", help="part of the venue")
                 child.add_argument(
                     "--ends-from", metavar="YYYY-MM-DD", help="only tournaments ending on or after this day"
@@ -1102,7 +1118,9 @@ def build_parser() -> argparse.ArgumentParser:
                 child.add_argument(
                     "--ends-to", metavar="YYYY-MM-DD", help="only tournaments ending on or before this day"
                 )
-                child.add_argument("--finished", action="store_true", help="only finished tournaments")
+                child.add_argument(
+                    "--finished", "--finished-only", action="store_true", help="only finished tournaments"
+                )
                 child.add_argument(
                     "--limit",
                     type=int,

@@ -49,9 +49,9 @@ NAME_WIDTH = 28
 #: already full.
 RESULT_WIDTH = 6
 
-#: Lines on a printed page. 66 is the line-printer default at 6 lines per inch
-#: on both A4 and US Letter, which is what an office printer fed plain text
-#: will use.
+#: Lines on a printed page. 66 is the line-printer default: exactly a US Letter
+#: page at 6 lines per inch, and short of A4's 70 so it fits there with room to
+#: spare. It is what an office printer fed plain text will use.
 LINES_PER_PAGE = 66
 
 #: Separates pages. A printer treats it as "eject and start the next sheet";

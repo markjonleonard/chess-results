@@ -1,7 +1,7 @@
 # Design notes
 
 How [`chess-results`](https://pypi.org/project/chess-results/) is built and why.
-The [README](README.md) is the user-facing description; this is for anyone
+The [README](README.md) is the user-facing overview and [USAGE.md](USAGE.md) the full guide; this is for anyone
 changing the code. Throughout, `chess-results` is this library and
 [chess-results.com](https://chess-results.com) is the site it reads. Measurements
 here were taken against particular tournaments and will move as the code does.

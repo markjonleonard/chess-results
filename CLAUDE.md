@@ -8,7 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pytest, one file per module plus cross-cutting concerns (`test_forfeit.py`,
 `test_not_paired.py`, `test_unreadable_tournaments.py`); `examples/` holds
 `predict_next_round.py`, the bbpPairings integration point (see Pairing prediction below).
-`DESIGN.md` and `PERSONAL-NOTES.md` are working notes for the human maintainer, not
+`README.md` is the short overview and `USAGE.md` the full guide to every command, option and
+Python call. `DESIGN.md` and `PERSONAL-NOTES.md` are working notes for the human maintainer, not
 generated or read by any code.
 
 ## Commands
@@ -64,7 +65,7 @@ cannot pass for the whole. The full command set is `players`, `standings`, `pair
 (`colors` accepted as a synonym), `history`, `unfinished`, `dump` (JSON export), `sections`
 and `search`. All but `search` take a tournament number, and all but `dump`, `players`,
 `sections` and `search` an `--after N` round selector; see
-README.md for the complete option table (`--rounds`, `--bye-value`, `--delay`, `--no-cache`,
+USAGE.md for the complete option table (`--rounds`, `--bye-value`, `--delay`, `--no-cache`,
 `--limit`, `--name-width`).
 
 ## Architecture
@@ -153,7 +154,7 @@ into one or two `Play` objects.
 `sections()` groups by inference: same organiser (director, then the first two words of the
 name, when it is empty) and the same start date or the same end date. Either, because Hull
 4NCL 2026's lower sections start a day after its Open and all end together. `sections.py` holds that and the
-label rule, is pure, and its limits are written at the top of that module and in the README.
+label rule, is pure, and its limits are written at the top of that module and in USAGE.md.
 
 ## The non-obvious things
 
