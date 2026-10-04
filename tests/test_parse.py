@@ -127,6 +127,38 @@ class TestBritishPairings:
         assert (adams.white_score, adams.black_score) == (0.0, 1.0)
 
 
+class TestThePgnColumn:
+    """A round whose games are published grows a trailing PGN column, and its bye
+    and "not paired" rows are not given that cell. Reading them by the header
+    alone dropped every one, which looked like chess-results deleting them."""
+
+    @pytest.fixture(scope="class")
+    def round6(self):
+        return parse_pairings(fixture("british2026_champ_r6_finished.html"), 6)
+
+    def test_the_rows_without_a_game_are_read(self, round6):
+        off_the_board = {p.white.name: p.kind for p in round6 if p.kind is not PlayKind.GAME}
+        assert off_the_board == {
+            "Chapman, Luke": PlayKind.PAIRING_BYE,
+            "Badacsonyi, Frankie": PlayKind.UNPAIRED,
+            "Mannion, Steve R": PlayKind.UNPAIRED,
+            "Brown, Stephanie": PlayKind.UNPAIRED,
+        }
+
+    def test_the_whole_field_is_accounted_for(self, round6):
+        players = sum(1 if p.black is None else 2 for p in round6)
+        assert players == 108
+
+    def test_the_bye_row_keeps_its_columns_in_place(self, round6):
+        bye = next(p for p in round6 if p.kind is PlayKind.PAIRING_BYE)
+        assert (bye.board, bye.white.rating, bye.white_points_before, bye.white_score) == (53, 1856, 0.5, 1.0)
+
+    def test_a_row_short_of_any_other_column_is_still_refused(self):
+        """Only the trailing PGN cell may be missing; anything else is misaligned."""
+        html = fixture("british2026_champ_r6_finished.html").replace(">PGN<", ">Xx.<")
+        assert not [p for p in parse_pairings(html, 6) if p.kind is not PlayKind.GAME]
+
+
 class TestFromePairings:
     """A tournament that does publish starting-rank columns."""
 

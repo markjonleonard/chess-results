@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from chess_results.congress import Congress
+from chess_results.models import PlayKind
 from chess_results.parse import parse_crosstable, parse_pairings, parse_starting_rank
 from chess_results.tournament import Tournament
 
@@ -36,11 +37,17 @@ def _round_fixture(rnd: int, played_out: bool) -> str:
     return f"british2026_champ_r{rnd}" + (f"_{suffix}" if suffix else "")
 
 
-def _british(crosstable: bool, rounds: int = BRITISH_ROUNDS, played_out: bool = False) -> Tournament:
+def _british(
+    crosstable: bool, rounds: int = BRITISH_ROUNDS, played_out: bool = False, gaps: bool = False
+) -> Tournament:
     event = Tournament(id="1452107", name="2026 British Chess Championships: Championship")
     event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
     for rnd in range(1, rounds + 1):
-        event.add_round(parse_pairings(fixture(f"{_round_fixture(rnd, played_out)}.html"), rnd))
+        html = fixture(f"{_round_fixture(rnd, played_out)}.html")
+        pairings = parse_pairings(html, rnd)
+        if gaps and ">PGN<" in html:
+            pairings = [p for p in pairings if p.kind is PlayKind.GAME]
+        event.add_round(pairings)
     if crosstable:
         name = "british2026_champ_crosstable_final" if played_out else "british2026_champ_crosstable"
         event.add_crosstable(parse_crosstable(fixture(f"{name}.html")))
@@ -69,6 +76,32 @@ def british_played_out() -> Tournament:
     needs this. It includes the two games decided by default.
     """
     return _british(crosstable=True, rounds=BRITISH_PLAYED_ROUNDS, played_out=True)
+
+
+# Every British round page lists its byes and "not paired" rows, so on real pages
+# the crosstable has no gap to fill. These three are the same events with those
+# rows dropped from every page that carries a PGN column -- rounds 1-5 mid-event,
+# 1-8 played out -- which is how this parser read them before it padded the one
+# cell those rows lack. No captured page is missing a row; this is the shape
+# `add_crosstable` guards against, kept so that guard stays tested.
+
+
+@pytest.fixture(scope="session")
+def british_with_gaps() -> Tournament:
+    """`british` with the byes and absences of the PGN pages dropped, then reconciled."""
+    return _british(crosstable=True, gaps=True)
+
+
+@pytest.fixture(scope="session")
+def british_with_gaps_rounds_only() -> Tournament:
+    """`british_with_gaps` before the crosstable has filled anything in."""
+    return _british(crosstable=False, gaps=True)
+
+
+@pytest.fixture(scope="session")
+def british_played_out_with_gaps() -> Tournament:
+    """`british_played_out` with the same rows dropped, then reconciled."""
+    return _british(crosstable=True, rounds=BRITISH_PLAYED_ROUNDS, played_out=True, gaps=True)
 
 
 def _frome_section(name: str, fixture_stem: str) -> Tournament:

@@ -152,9 +152,9 @@ class TestTournamentRows:
         ]
         assert keys == sorted(keys)
 
-    def test_a_boardless_round_sorts_after_the_boards(self, british_played_out):
-        """Byes and rounds recovered from the crosstable have no board number."""
-        round_six = [r for r in british_played_out.rows() if r["round"] == 6]
+    def test_a_boardless_round_sorts_after_the_boards(self, british_played_out_with_gaps):
+        """A round recovered from the crosstable has no board number."""
+        round_six = [r for r in british_played_out_with_gaps.rows() if r["round"] == 6]
         boardless = [i for i, r in enumerate(round_six) if r["board"] is None]
         assert boardless, "the fixture does need to exercise this"
         assert min(boardless) == len(round_six) - len(boardless)
@@ -172,8 +172,8 @@ class TestTournamentRows:
         assert {r["score"] for r in unpaired} == {0.0}
         assert {r["opponent"] for r in unpaired} == {None}
 
-    def test_a_recovered_round_is_marked_as_such(self, british_played_out):
-        recovered = [r for r in british_played_out.rows() if r["from_crosstable"]]
+    def test_a_recovered_round_is_marked_as_such(self, british_played_out_with_gaps):
+        recovered = [r for r in british_played_out_with_gaps.rows() if r["from_crosstable"]]
         assert recovered
         assert all(r["board"] is None and r["points_before"] is None for r in recovered)
 

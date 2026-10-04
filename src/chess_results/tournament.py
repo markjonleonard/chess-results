@@ -243,14 +243,13 @@ class Tournament:
             )
 
     def add_crosstable(self, crosstable: dict[int, list[CrosstableEntry]]) -> list[Play]:
-        """Restore rounds the pairing pages have dropped, and return what was added.
+        """Fill any round a player is missing, and return what was added.
 
-        A round's pairing page lists byes and unpaired players only while that
-        round is the current one. Once a later round is paired those rows are
-        removed, so a player who took a full-point bye in round 6 simply has no
-        round 6 anywhere on the round pages, and their score comes out a point
-        light. The crosstable keeps the whole record, so it is the authority for
-        any round a player is missing.
+        A round page lists its byes and unpaired players along with its games,
+        superseded or not, so on every page the suite holds this adds nothing.
+        But a player with no row for a round would score short and look present,
+        and the crosstable keeps the whole record, so it is the authority for any
+        round a player is missing.
 
         Only rounds already fetched are filled, and only where the player has
         nothing for that round; results read from the pairing pages are left
@@ -480,9 +479,8 @@ class Tournament:
         Withdrawals are the entire error term in pairing prediction: given the
         right field bbpPairings reproduces a round exactly, and every miss without
         it is a player who had stopped playing. chess-results never says who has
-        withdrawn, and the round pages delete their "not paired" rows as soon as a
-        later round is paired -- so this reads the crosstable-reconciled histories
-        instead, where the record survives.
+        withdrawn, so this reads the "not paired" rounds in the histories, which
+        the round pages list and the crosstable confirms.
 
         A player is flagged when their last ``consecutive`` rounds are all
         ``UNPAIRED``, or when they never occupied a round at all (an entrant who
@@ -508,9 +506,9 @@ class Tournament:
         well as for a real absence. The marker is therefore consulted *only* for
         a round the player has no play for at all -- wherever a round page or the
         crosstable has said anything, that wins. So the hazard needs all three of
-        a half-point bye, a round page that has since dropped the row, and no
-        crosstable: Frome's twelve round 1 half-point byes produce no false alarm
-        at all, because their round page still lists them. Reconcile against the
+        a half-point bye, a round page without its row, and no crosstable:
+        Frome's twelve round 1 half-point byes produce no false alarm at all,
+        because their round page lists them. Reconcile against the
         crosstable for an event that awards half-point byes and the question does
         not arise, since it keeps ``-½`` apart from ``-0``.
         """
@@ -525,7 +523,7 @@ class Tournament:
 
             def absent(rnd: int, play: Play | None, missed: set[int] = missed) -> bool:
                 # A round with no play at all is only evidence when art=40 says so;
-                # on round pages alone it usually means the row has been deleted.
+                # otherwise it means a page without the row, not an absence.
                 return play.kind is PlayKind.UNPAIRED if play is not None else rnd in missed
 
             plays = [(rnd, player.play(rnd)) for rnd in window]

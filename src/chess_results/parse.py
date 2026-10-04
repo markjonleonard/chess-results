@@ -240,9 +240,16 @@ def parse_pairings(html: str, rnd: int, *, bye_value: float = 1.0) -> list[Pairi
         # The unlabelled column immediately before a name column holds the title.
         i_w_title = i_white - 1 if i_white and not header[i_white - 1] else None
         i_b_title = i_black - 1 if i_black and not header[i_black - 1] else None
+        # Once a round's games are published the table grows a trailing PGN
+        # column, and the rows with no game in them -- byes and "not paired" --
+        # are not given its cell. Every other column is still in place, so pad
+        # the row rather than lose it.
+        pgn_last = header[-1] == "PGN"
 
         for row in table.select("tr")[header_idx + 1 :]:
             cells = [_text(c) for c in _cells(row)]
+            if pgn_last and len(cells) == len(header) - 1:
+                cells.append("")
             if len(cells) != len(header):
                 continue
             board = _int(cols.value(cells, i_board))
@@ -372,10 +379,9 @@ def _crosstable_cell(text: str, rnd: int) -> CrosstableEntry | None:
 def parse_crosstable(html: str) -> dict[int, list[CrosstableEntry]]:
     """Parse the starting-rank crosstable (``art=5``), keyed by starting number.
 
-    This is the only view that records what a player did in a round they were
-    not paired in. chess-results prints "bye" and "not paired" rows on a round's
-    pairing page only while that round is the current one; once a later round is
-    paired they are dropped, and a full-point bye disappears with them.
+    Every round on one page, including the rounds a player was not paired in --
+    the same facts as the round pages' bye and "not paired" rows, which makes it
+    the cross-check for those rows and the fallback for a page without them.
 
     Rounds not yet played are simply absent from a player's list.
     """

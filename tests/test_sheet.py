@@ -82,12 +82,14 @@ class TestBoardAssignment:
 
     def test_a_bye_takes_no_board_and_sorts_last(self, british_played_out):
         # Cooke took the round 8 bye, so this is a real bye player rather than
-        # an invented one -- and one the round page itself has since dropped.
-        cooke = british_played_out.players["Cooke, Suzy G"]
-        pairs = [*_pairs(british_played_out, 8), (cooke.start_no, 0)]
-        made = sheet.sheet_from_pairs(british_played_out, pairs, round_number=9, after=8)
+        # an invented one, listed first-but-one in the pairs to show it moves.
+        pairs = _pairs(british_played_out, 8)
+        bye = next(p for p in pairs if p[1] == 0)
+        pairs = [pairs[0], bye, *(p for p in pairs[1:] if p != bye)]
+        made = sheet.sheet_from_pairs(british_played_out, pairs, round_number=8, after=7)
         assert made.rows[-1].board is None
         assert made.rows[-1].is_bye
+        assert made.rows[-1].white.name == "Cooke, Suzy G"
         assert made.boards == len(made.rows) - 1
 
     def test_an_unknown_starting_number_is_refused(self, british_played_out):
@@ -189,7 +191,7 @@ class TestHebdensRealPin:
         """
         pairs = _pairs(british_played_out, 8)
         by_no = {p.start_no: p for p in british_played_out.players.values()}
-        resolved = [(by_no[w], by_no[b]) for w, b in pairs]
+        resolved = [(by_no[w], by_no[b] if b else None) for w, b in pairs]
         rows, _ = sheet.assign_boards(british_played_out, resolved, after=7)
         placed = next(r for r in rows if "Hebden, Mark L" in (r.white.name, r.black.name))
 
@@ -211,8 +213,9 @@ class TestHebdensRealPin:
         pairs = _pairs(british_played_out, 8)
         made = sheet.sheet_from_pairs(british_played_out, pairs, round_number=8, after=7)
         assert len(made.rows) == len(pairs)
+        games = [p for p in pairs if p[1] != 0]
         boards = sorted(r.board for r in made.rows if r.board is not None)
-        assert boards == list(range(1, len(pairs) + 1))
+        assert boards == list(range(1, len(games) + 1))
 
 
 class TestPublishedRound:
@@ -221,22 +224,33 @@ class TestPublishedRound:
         published = [p.board for p in british_played_out.rounds[8] if p.kind is PlayKind.GAME]
         assert [row.board for row in made.rows if row.board is not None] == published
 
-    def test_a_bye_deleted_from_a_superseded_round_page_is_put_back(self, british_played_out):
-        """Round 6's page has lost its bye row, and the sheet must not.
+    def test_a_bye_missing_from_the_round_page_is_put_back(self, british_played_out_with_gaps):
+        """A round page without its bye row must not yield a sheet without it.
 
-        chess-results deletes bye and "not paired" rows once a later round is
-        paired, so round 6 lists 52 games for a field of 108. Chapman took the
-        full-point bye that round; a sheet without him tells the hall no bye was
-        given. The row is recovered from `Player.plays`, which the crosstable
-        filled in.
+        Chapman took the full-point bye in round 6; a sheet without him tells the
+        hall no bye was given. The rows come from `Player.plays`, not from the
+        page, so the crosstable's copy is enough.
         """
-        made = sheet.sheet_from_round(british_played_out, 6)
-        on_page = {p.white.name for p in british_played_out.rounds[6]}
-        assert "Chapman, Luke" not in on_page  # gone from the page itself
+        event = british_played_out_with_gaps
+        made = sheet.sheet_from_round(event, 6)
+        on_page = {p.white.name for p in event.rounds[6]}
+        assert "Chapman, Luke" not in on_page  # the gap the fixture made
 
         byes = {row.white.name: row.note for row in made.rows if row.is_bye}
         assert byes["Chapman, Luke"] == "bye"
         assert byes["Mannion, Steve R"] == "not paired"
+
+    def test_a_superseded_round_page_keeps_its_byes(self, british_played_out):
+        """Round 6's page, captured with round 9 paired, still lists all four."""
+        off_the_board = {
+            p.white.name: p.kind for p in british_played_out.rounds[6] if p.kind is not PlayKind.GAME
+        }
+        assert off_the_board == {
+            "Chapman, Luke": PlayKind.PAIRING_BYE,
+            "Badacsonyi, Frankie": PlayKind.UNPAIRED,
+            "Mannion, Steve R": PlayKind.UNPAIRED,
+            "Brown, Stephanie": PlayKind.UNPAIRED,
+        }
 
     def test_the_sheet_accounts_for_every_player_in_the_event(self, british_played_out):
         """No player may be missing: each one either plays, or is told why not."""

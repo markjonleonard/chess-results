@@ -64,7 +64,8 @@ USER_AGENT = "chess-results (+https://github.com/markjonleonard/chess-results)"
 ART_STARTING_RANK = 0
 ART_ROUND_PAIRINGS = 2
 #: Starting-rank crosstable: every player's every round, keyed by starting
-#: number. The only view that keeps byes after the round has been superseded.
+#: number. The cross-check on every round page, and the fallback for one without
+#: its bye and "not paired" rows.
 ART_CROSSTABLE = 5
 #: "not paired": one row per player who has missed a round. Linked in the nav
 #: bar, undocumented, and it ignores ``rd`` -- there is only ever the current one.
@@ -519,9 +520,9 @@ class ChessResults:
     def crosstable_is_stale(self, tournament_id: str | int, event: Tournament) -> bool:
         """Whether a cached crosstable must be replaced rather than reused.
 
-        The crosstable is cached hard, because the only thing we take from it --
-        byes and absences deleted from superseded round pages -- never changes
-        once written. Two things make a cached copy insufficient:
+        The crosstable is cached hard, because what we take from it -- the byes
+        and absences of rounds already played -- never changes once written. Two
+        things make a cached copy insufficient:
 
         - **It covers fewer rounds than we hold.** A crosstable fetched before
           round 8 existed cannot supply round 8's bye, and `add_crosstable`
@@ -578,10 +579,10 @@ class ChessResults:
         out. Rounds that have been paired but not yet played are included, with
         results left as None.
 
-        ``crosstable`` adds one request for the crosstable, which is the only
-        view that still records a bye once its round has been superseded. Leave
-        it on unless you are certain the tournament has none, or scores will be
-        wrong for anyone who took one.
+        ``crosstable`` adds one request for the crosstable, which cross-checks
+        the round pages and fills any round a player has no row for. Without it
+        nothing is checked, and a page missing a bye row would score that player
+        short.
         """
         html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
         name, players = parse_tournament_name(html), parse_starting_rank(html)

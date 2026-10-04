@@ -926,8 +926,8 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
         "--no-crosstable",
         action="store_true",
         default=default(False),
-        help="skip the crosstable request; scores will be wrong for "
-        "anyone whose bye has been dropped from its round page",
+        help="skip the crosstable request; the round pages are not "
+        "cross-checked, and a player missing from one is not filled in",
     )
     group.add_argument(
         "--json",
@@ -1018,8 +1018,7 @@ COMMANDS = (
         (),
         cmd_standings,
         "print the cross-round standings",
-        "Players in ranking order with their scores, reconciled against the "
-        "crosstable so that byes dropped from the round pages still count.",
+        "Players in ranking order with their scores, cross-checked against the crosstable.",
     ),
     (
         "pairings",

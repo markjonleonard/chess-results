@@ -1,9 +1,9 @@
-"""Recovering rounds the pairing pages have dropped.
+"""The crosstable as a second view of every round.
 
-A round's pairing page lists byes and unpaired players only while that round is
-the current one. Once a later round is paired those rows are deleted, so a
-full-point bye vanishes and the player's score comes out a point light. The
-crosstable keeps the whole record.
+Every round page the suite holds lists its byes and unpaired players, so on real
+pages the crosstable fills nothing in; it cross-checks them instead. The fill-in
+is tested against `british_with_gaps`, which drops those rows to make the gap a
+page could have.
 """
 
 import pytest
@@ -57,16 +57,27 @@ class TestParsing:
 
 
 class TestReconciliation:
-    def test_the_round_pages_alone_lose_a_bye(self, british_rounds_only):
-        """Ruddy's round 5 bye is gone: round 7 was current when this was scraped."""
-        ruddy = british_rounds_only.players["Ruddy, Rachel"]
-        assert ruddy.play(5) is None
-        assert ruddy.score() == 0.5
+    def test_the_round_pages_alone_keep_a_superseded_bye(self, british_rounds_only):
+        """Ruddy's round 5 bye is still on its page, three rounds after it was superseded.
 
-    def test_the_crosstable_puts_it_back(self, british):
-        ruddy = british.players["Ruddy, Rachel"]
+        The page has a PGN column by then and the bye row lacks its cell; that
+        row was once dropped as misaligned, and the bye read as deleted.
+        """
+        ruddy = british_rounds_only.players["Ruddy, Rachel"]
+        assert ruddy.play(5).kind is PlayKind.PAIRING_BYE
+        assert ruddy.play(5).from_crosstable is False
+        assert ruddy.score() == 1.5
+
+    def test_the_real_pages_leave_the_crosstable_nothing_to_fill(self, british, british_played_out):
+        for event in (british, british_played_out):
+            assert not [p for pl in event.players.values() for p in pl.plays if p.from_crosstable]
+
+    def test_the_crosstable_fills_a_gap(self, british_with_gaps_rounds_only, british_with_gaps):
+        assert british_with_gaps_rounds_only.players["Ruddy, Rachel"].play(5) is None
+        ruddy = british_with_gaps.players["Ruddy, Rachel"]
         assert ruddy.play(5).kind is PlayKind.PAIRING_BYE
         assert ruddy.play(5).score == 1.0
+        assert ruddy.play(5).from_crosstable
         assert ruddy.score() == 1.5
 
     def test_every_player_has_every_round(self, british):
@@ -74,21 +85,21 @@ class TestReconciliation:
             rounds = {p.round for p in player.plays}
             assert rounds == set(range(1, british.last_round + 1)), player.name
 
-    def test_recovered_plays_are_marked(self, british):
-        recovered = [p for pl in british.players.values() for p in pl.plays if p.from_crosstable]
-        assert recovered, "the fixtures do need reconciling"
+    def test_recovered_plays_are_marked(self, british_with_gaps):
+        recovered = [p for pl in british_with_gaps.players.values() for p in pl.plays if p.from_crosstable]
+        assert recovered, "the fixture does need reconciling"
         # The crosstable publishes no board numbers or pre-round scores.
         assert all(p.board is None and p.points_before is None for p in recovered)
 
-    def test_results_from_the_pairing_pages_are_left_alone(self, british):
-        """Round 6 was still current when captured, so its bye survived there."""
-        chapman = british.players["Chapman, Luke"]
+    def test_results_from_the_pairing_pages_are_left_alone(self, british_with_gaps):
+        """Round 6 has no PGN column, so even the gapped fixture keeps its bye."""
+        chapman = british_with_gaps.players["Chapman, Luke"]
         assert chapman.play(6).kind is PlayKind.PAIRING_BYE
         assert chapman.play(6).from_crosstable is False
         assert chapman.play(6).board == 53, "read from the pairing page"
 
-    def test_a_recovered_bye_still_counts_as_a_downfloat(self, british):
-        assert british.players["Ruddy, Rachel"].play(5).float_direction == "D"
+    def test_a_recovered_bye_still_counts_as_a_downfloat(self, british_with_gaps):
+        assert british_with_gaps.players["Ruddy, Rachel"].play(5).float_direction == "D"
 
     def test_rounds_not_fetched_are_not_invented(self, british):
         limited = british.rounds.keys()
@@ -315,9 +326,9 @@ class TestRecoveredPlaysAreNeverGames:
     A Play restored from the crosstable has no ``points_before`` -- the
     crosstable prints no pre-round score -- so ``_floats`` cannot run on it and
     only the bye-is-a-downfloat rule applies. That looks like a gap and is not
-    one: ``add_crosstable`` fills only rounds already fetched, and the only
-    rows chess-results deletes from a round page are byes and "not paired". A
-    game row is never removed, so a recovered game does not arise.
+    one: ``add_crosstable`` fills only rounds already fetched, and a round page
+    lists every game it pairs, so the only rows it can be missing are byes and
+    "not paired". A recovered game does not arise.
 
     These pin that, because the reasoning above is what makes the missing
     float safe to leave alone.
@@ -325,26 +336,26 @@ class TestRecoveredPlaysAreNeverGames:
 
     @pytest.mark.parametrize("played_out", [False, True])
     def test_every_recovered_play_is_a_bye_or_an_absence(self, played_out, request):
-        event = request.getfixturevalue("british_played_out" if played_out else "british")
+        event = request.getfixturevalue("british_played_out_with_gaps" if played_out else "british_with_gaps")
         recovered = [p for pl in event.players.values() for p in pl.plays if p.from_crosstable]
         assert recovered, "fixture no longer exercises recovery at all"
         assert all(p.kind is not PlayKind.GAME for p in recovered)
 
-    def test_a_recovered_bye_still_counts_as_a_downfloat(self, british_played_out):
+    def test_a_recovered_bye_still_counts_as_a_downfloat(self, british_played_out_with_gaps):
         byes = [
             p
-            for pl in british_played_out.players.values()
+            for pl in british_played_out_with_gaps.players.values()
             for p in pl.plays
             if p.from_crosstable and p.kind is PlayKind.PAIRING_BYE
         ]
         assert byes
         assert all(p.float_direction == "D" for p in byes)
 
-    def test_a_recovered_absence_floats_nowhere(self, british_played_out):
+    def test_a_recovered_absence_floats_nowhere(self, british_played_out_with_gaps):
         """Correct rather than missing: an unpaired player did not float."""
         absences = [
             p
-            for pl in british_played_out.players.values()
+            for pl in british_played_out_with_gaps.players.values()
             for p in pl.plays
             if p.from_crosstable and p.kind is PlayKind.UNPAIRED
         ]

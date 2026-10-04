@@ -6,6 +6,8 @@ the field contains byes and unpaired players, and the tournament publishes no
 starting-rank columns on its pairing pages.
 """
 
+import pytest
+
 from chess_results.models import Colour, Play, PlayKind, Preference, StartingRankEntry
 from chess_results.tournament import Tournament
 
@@ -144,19 +146,20 @@ class TestLikelyWithdrawn:
     def test_before_any_round_nobody_is_withdrawn(self, british):
         assert british.likely_withdrawn(after=0) == set()
 
-    def test_the_signal_is_lost_without_the_crosstable(self, british, british_rounds_only):
-        """Round pages alone find nobody once the round has been superseded.
+    @pytest.mark.parametrize("after", range(1, 8))
+    def test_the_round_pages_alone_find_the_same_players(self, british, british_rounds_only, after):
+        """A superseded round still lists its "not paired" rows, so no crosstable is needed."""
+        assert british_rounds_only.likely_withdrawn(after=after) == british.likely_withdrawn(after=after)
 
-        Round 5's "not paired" rows were deleted when round 6 was paired, so the
-        round pages carry no trace of three players who had already stopped. The
-        crosstable is the only reason this works at all.
-        """
-        assert british_rounds_only.likely_withdrawn(after=5) == set()
+    def test_three_had_stopped_by_round_five(self, british):
         assert len(british.likely_withdrawn(after=5)) == 3
 
-    def test_a_current_round_still_shows_its_own_unpaired_rows(self, british, british_rounds_only):
-        """The mid-round round-6 capture keeps them, so both views agree there."""
-        assert british_rounds_only.likely_withdrawn(after=6) == british.likely_withdrawn(after=6)
+    def test_a_page_missing_its_unpaired_rows_hides_them(
+        self, british_with_gaps_rounds_only, british_with_gaps
+    ):
+        """Without those rows the signal is gone, and the crosstable restores it."""
+        assert british_with_gaps_rounds_only.likely_withdrawn(after=5) == set()
+        assert len(british_with_gaps.likely_withdrawn(after=5)) == 3
 
     def test_a_requested_bye_is_not_a_withdrawal(self, frome_round_one):
         """A half-point bye is a player sitting out one round, not leaving."""

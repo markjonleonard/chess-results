@@ -139,23 +139,23 @@ class TestPagesWithNothingToParse:
 class TestFeedingItToWithdrawalInference:
     """What the page is actually worth, measured against the crosstable.
 
-    `likely_withdrawn` reads trailing UNPAIRED rounds. Run against round pages
-    alone it finds nobody for a superseded round, those being exactly the rows
-    chess-results deletes. art=40 is the one-page source of the same facts.
+    `likely_withdrawn` reads trailing UNPAIRED rounds. Real round pages list
+    them, so the page is a fallback for one that does not; these run against
+    `british_with_gaps_rounds_only`, which has had them dropped. art=40 is the
+    one-page source of the same facts.
     """
 
     @pytest.fixture(scope="class")
     def not_paired(self):
         return parse_not_paired(fixture("british2026_champ_notpaired_final.html"))
 
-    def test_round_pages_alone_find_nobody_for_a_superseded_round(self, british_rounds_only):
-        """Round 5 has been superseded, so its "not paired" rows are gone."""
-        assert british_rounds_only.likely_withdrawn(after=5) == set()
+    def test_round_pages_without_the_rows_find_nobody(self, british_with_gaps_rounds_only):
+        assert british_with_gaps_rounds_only.likely_withdrawn(after=5) == set()
 
     def test_the_page_recovers_exactly_what_the_crosstable_would_have(
-        self, british_rounds_only, british, not_paired
+        self, british_with_gaps_rounds_only, british, not_paired
     ):
-        recovered = british_rounds_only.likely_withdrawn(after=5, not_paired=not_paired)
+        recovered = british_with_gaps_rounds_only.likely_withdrawn(after=5, not_paired=not_paired)
         assert recovered == british.likely_withdrawn(after=5)
         assert len(recovered) == 3
 
@@ -168,33 +168,37 @@ class TestFeedingItToWithdrawalInference:
 
     @pytest.mark.parametrize("after", range(1, 8))
     def test_round_pages_plus_the_page_equal_the_crosstable_at_every_round(
-        self, british_rounds_only, british, not_paired, after
+        self, british_with_gaps_rounds_only, british, not_paired, after
     ):
         """The whole claim, in one assertion: one page buys what the crosstable does.
 
-        Round pages alone find 0, 0, 0, 0, 0, 3, 5 across rounds 1-7; with the
+        The gapped round pages alone find 0, 0, 0, 0, 0, 3, 5 across rounds 1-7; with the
         page they find 2, 2, 2, 2, 3, 3, 5, which is the crosstable's answer
         exactly.
         """
-        assert british_rounds_only.likely_withdrawn(after=after, not_paired=not_paired) == (
+        assert british_with_gaps_rounds_only.likely_withdrawn(after=after, not_paired=not_paired) == (
             british.likely_withdrawn(after=after)
         )
 
-    def test_the_future_is_not_read_back_into_an_earlier_round(self, british_rounds_only, not_paired):
+    def test_the_future_is_not_read_back_into_an_earlier_round(
+        self, british_with_gaps_rounds_only, not_paired
+    ):
         """The capture is post-event, so a marker for round 8 must not count at round 5.
 
         The page is always current and ignores &rd=, so a live prediction after
         round 5 could only ever have seen rounds 1-5 of it.
         """
-        after_five = british_rounds_only.likely_withdrawn(after=5, not_paired=not_paired)
+        after_five = british_with_gaps_rounds_only.likely_withdrawn(after=5, not_paired=not_paired)
         # Badacsonyi stopped after round 4 and is findable; Golding's first missed
         # round is 7, so nothing at round 5 may know about him.
         assert "Badacsonyi, Frankie" in after_five
         assert "Golding, Alex" not in after_five
 
-    def test_a_full_point_bye_is_not_mistaken_for_an_absence(self, british_rounds_only, not_paired):
+    def test_a_full_point_bye_is_not_mistaken_for_an_absence(self, british_with_gaps_rounds_only, not_paired):
         """Chapman took a round 6 bye; the page marks it "bye", not "*"."""
-        assert "Chapman, Luke" not in british_rounds_only.likely_withdrawn(after=6, not_paired=not_paired)
+        assert "Chapman, Luke" not in british_with_gaps_rounds_only.likely_withdrawn(
+            after=6, not_paired=not_paired
+        )
 
 
 class TestTheHalfPointByeHazard:

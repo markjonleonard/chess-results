@@ -133,23 +133,22 @@ class TestTrfEncoding:
         assert {_round_result(line, r) for r in range(1, 9)} <= {"1", "=", "0"}
 
 
-class TestTheCurrentRoundKeepsItsUnpairedRows:
-    """A round shows its "not paired" rows only until a later round is paired.
+class TestEveryRoundKeepsItsUnpairedRows:
+    """A round page lists its "not paired" rows whether or not it is current.
 
-    Round 9 was the current round when this fixture was captured -- and being
-    the last round of the event, nothing will ever supersede it, so these rows
-    are permanent. Round 8 had already lost its own by then. That contrast is
-    the vanishing-bye problem in a single test file, and the reason
-    `add_crosstable` exists at all.
+    Round 9 was the current round when this fixture was captured; round 8 had
+    been superseded by it, and has a PGN column whose cell those rows lack.
     """
 
-    def test_round_nine_still_lists_the_players_who_were_not_paired(self, round_nine):
+    def test_round_nine_lists_the_players_who_were_not_paired(self, round_nine):
         unpaired = [p for p in round_nine if p.kind is PlayKind.UNPAIRED]
         assert len(unpaired) == 8
         assert "Mannion, Steve R" in {p.white.name for p in unpaired}
 
-    def test_and_they_are_absent_from_the_superseded_round_eight(self, round_eight):
-        assert not [p for p in round_eight if p.kind is PlayKind.UNPAIRED]
+    def test_and_so_does_the_superseded_round_eight(self, round_eight):
+        unpaired = [p for p in round_eight if p.kind is PlayKind.UNPAIRED]
+        assert len(unpaired) == 5
+        assert "Mannion, Steve R" in {p.white.name for p in unpaired}
 
 
 BURTON = 9

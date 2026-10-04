@@ -11,8 +11,8 @@ cache, and the client uses it to ask for a long lifetime on those pages and a
 short one on everything else.
 
 The crosstable needs the same treatment for a different reason. Most of it is
-settled history -- the byes and absences that round pages delete once a later
-round is paired, which is the only thing we take from it. Its volatile part is
+settled history -- the byes and absences of rounds already played, which is
+what we take from it. Its volatile part is
 the current round's results, which we never read from it, the round page being
 the authority there. So caching it as though the whole page were live meant
 refetching a mostly-frozen page every five minutes forever. What actually

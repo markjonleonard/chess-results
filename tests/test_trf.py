@@ -7,6 +7,7 @@ format by column and misplaced fields fail silently or produce wrong pairings.
 import pytest
 from tests.conftest import fixture
 
+from chess_results.models import PlayKind
 from chess_results.parse import parse_pairings, parse_starting_rank
 from chess_results.tournament import Tournament
 from chess_results.trf import TrfError, to_trf
@@ -164,7 +165,9 @@ class TestNonStandardByeValues:
     """bbpPairings recomputes every score from the results and refuses a file
     whose totals disagree, so what a bye is worth has to be stated."""
 
-    def _event(self, bye_value):
+    def _event(self, bye_value, *, gaps=False):
+        """``gaps`` drops the byes and absences from the round pages, as in
+        `british_played_out_with_gaps`, so the crosstable has to supply them."""
         from tests.conftest import _round_fixture
 
         from chess_results.parse import parse_crosstable
@@ -173,19 +176,21 @@ class TestNonStandardByeValues:
         event.add_starting_rank(parse_starting_rank(fixture("british2026_champ_startingrank.html")))
         for rnd in range(1, 9):
             name = _round_fixture(rnd, played_out=True)
-            event.add_round(parse_pairings(fixture(f"{name}.html"), rnd, bye_value=bye_value))
+            pairings = parse_pairings(fixture(f"{name}.html"), rnd, bye_value=bye_value)
+            if gaps:
+                pairings = [p for p in pairings if p.kind is PlayKind.GAME]
+            event.add_round(pairings)
         event.add_crosstable(parse_crosstable(fixture("british2026_champ_crosstable_final.html")))
         return event
 
-    def test_a_bye_recovered_from_the_crosstable_takes_the_tournament_value(self):
-        """The crosstable prints every pairing-allocated bye as 1, whatever is awarded.
+    def test_a_bye_on_the_round_page_takes_the_tournament_value(self):
+        cooke = self._event(0.5).players["Cooke, Suzy G"]
+        assert cooke.play(8).score == 0.5
+        assert not cooke.play(8).from_crosstable
 
-        All four of the British byes reach the history this way -- their round
-        pages had been superseded -- so before this was honoured the bye value
-        had no effect on that event at all.
-        """
-        half = self._event(0.5)
-        cooke = half.players["Cooke, Suzy G"]
+    def test_a_bye_recovered_from_the_crosstable_takes_the_tournament_value(self):
+        """The crosstable prints every pairing-allocated bye as 1, whatever is awarded."""
+        cooke = self._event(0.5, gaps=True).players["Cooke, Suzy G"]
         assert cooke.play(8).score == 0.5
         assert cooke.play(8).from_crosstable
 

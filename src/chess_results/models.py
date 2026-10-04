@@ -219,8 +219,8 @@ class EventSections:
 class CrosstableEntry:
     """One player's round as shown in a crosstable (``art=5``).
 
-    The crosstable is the only view that keeps byes and skipped rounds after
-    the round has been superseded, so it is the authority for those.
+    The crosstable records byes and skipped rounds as well as games, so it is
+    the authority for any round a player's round pages say nothing about.
     """
 
     round: int

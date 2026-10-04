@@ -236,13 +236,11 @@ def sheet_from_round(event: Tournament, rnd: int) -> PairingSheet:
     for reprinting a sheet that came off the wall, or for the round that has
     just been paired and uploaded.
 
-    **The round page alone is not the round.** Once a later round is paired,
-    chess-results deletes that round's bye and "not paired" rows, so a superseded
-    round page lists only its games -- round 6 of the 2026 British has 52 rows
-    for a field of 108, missing a full-point bye and three absentees. Those
-    players are still in `Player.plays`, recovered from the crosstable, so they
-    are added back here. Leaving them off would print a sheet that silently drops
-    whoever is not playing, which on a wall reads as "no bye was given".
+    **The bye and "not paired" rows come from the field, not the page.** They
+    are built from `Player.plays`, so a round page without one of them -- which
+    the crosstable then fills in -- still yields the whole round. Leaving them
+    off would print a sheet that silently drops whoever is not playing, which on
+    a wall reads as "no bye was given".
     """
     pairings = event.rounds.get(rnd)
     if not pairings:

@@ -62,8 +62,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def field(event: Tournament, rnd: int) -> set[str]:
     """Who actually occupied round ``rnd``, byes included.
 
-    Taken from the reconciled histories rather than the round page, which may
-    have had its bye rows deleted by a later pairing.
+    Taken from the reconciled histories rather than the round page, so a page
+    without its bye rows still gives the whole field.
     """
     return {
         name
