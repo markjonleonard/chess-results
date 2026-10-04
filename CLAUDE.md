@@ -181,7 +181,10 @@ The starting-rank crosstable (`art=5`) states the same record, so `tournament()`
 and `add_crosstable` cross-checks every round and fills any round a player still has no row
 for. On real pages it fills nothing (zero plays across those 14 tournaments), so its tests
 run against `british_with_gaps` and its siblings in `conftest.py`, which drop the rows to
-make a gap. `check_published_totals` requires the cells we read from a crosstable row to sum
+make a gap. **Keep the request anyway; this was decided on 2026-10-04.** Its job is the
+cross-check: one request per run sets every round page against a second view, so a
+misread page surfaces as a warning instead of a quietly wrong score. Do not drop it or make
+it opt-in to save the request. `check_published_totals` requires the cells we read from a crosstable row to sum
 to the total that row publishes, and `tournament()` runs it. All 108 agree.
 
 **Which column holds that total is not fixed, and `TB1` is not a safe answer.** Where an
