@@ -33,6 +33,7 @@ pytest
 sdist
 stderr
 stdlib
+traceback
 tibble
 venv
 [Ll]int(ed|er|ers|ing)?

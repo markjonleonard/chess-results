@@ -87,7 +87,7 @@ __all__ = [
 ]
 
 # The release workflow requires its tag to match this exactly, so the two
-# cannot drift: tagging v0.1.0 with this saying anything else fails the build
+# cannot drift: tagging vX.Y.Z with this saying anything else fails the build
 # before it can upload. Rehearsals on TestPyPI use a throwaway .devN, since a
 # version uploads once and deleting it does not free the filename.
-__version__ = "0.1.0"
+__version__ = "0.2.0"
