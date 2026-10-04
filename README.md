@@ -148,10 +148,9 @@ download it separately, and the example script is in the repository, not the pip
 package.
 
 Given the players each round was paired from, bbpPairings reproduced every round of
-the 2026 British Championship exactly, allowing for one player the arbiter seated in
-another's place after round 2 was paired. With no word on who had withdrawn, it still
-got most boards right. A live prediction cannot know for sure who has withdrawn, so
-treat it as a good guess, not an announcement.
+the 2026 British Championship exactly, allowing for a substitution the arbiter made
+after pairing round 2. With no word on who had withdrawn, as in any live prediction, it
+still got most boards right, so treat a prediction as a good guess, not an announcement.
 The [guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
 covers how to run it, games still in progress, withdrawals and the figures.
 
@@ -195,8 +194,8 @@ crosstable states the same facts again, one row per player, and publishes each
 player's total. This tool reads both, compares them round by round, and checks every
 crosstable row against its own total. Anything that does not agree is printed as a
 warning on stderr, so a misread page shows up rather than passing as a wrong score.
-If a round page ever leaves a player out, the crosstable supplies that player's round;
-none of the round pages checked so far has.
+If a round page ever leaves a player out, the crosstable supplies that player's round.
+So far none of the round pages checked has done so.
 
 While a round is being played, the crosstable can lag behind the round page on that
 round's byes. A warning about the newest round's byes is usually that, and clears as
@@ -209,8 +208,9 @@ this tool does not read. A team round pairs teams rather than players, and a rou
 robin puts every round on one page with a crosstable of opponents rather than of
 rounds. Point a command that reads rounds at either and it says so and stops, rather
 than reporting an empty tournament. `sections` and `search` read the site's search, so
-they work on both. `players` works on both too, reading a team event's players from
-the page that lists them, since its entry list names teams.
+they work on both. `players` works on both too. On a round robin it reads the entry
+list as usual; on a team event, whose entry list names teams, it reads the page
+chess-results.com calls "Starting rank list of players".
 
 **Tournaments that have not started.** The commands that read rounds treat these the
 same way. An entry list often appears months ahead of the first game, and "this has

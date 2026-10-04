@@ -104,9 +104,10 @@ Time control: Standard: 90min +30sec increment per move starting from move 1
 
 This second event is a round robin, which the round-reading commands refuse. `players`
 only reads the field, so it works there too, and on a team event, whose entry list
-names teams: there it reads the players from the event's player list instead, which
-costs one more request, and adds a `Team` column. Names appear as each event publishes
-them: some organisers write "Surname, Forename" and some do not.
+names teams: there it reads the page chess-results.com calls "Starting rank list of
+players" instead, which costs one more request, and adds a `Team` column. Names
+appear as each event publishes them: some organisers write "Surname, Forename" and some
+do not.
 
 ### standings
 
