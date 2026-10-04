@@ -1,0 +1,10 @@
+extends: existence
+message: "Two dashes in one sentence. Make one a full stop, a colon or a pair of commas."
+level: error
+# One sentence at a time, so a dash in one sentence and a dash in the next are
+# not counted together. Code spans and blocks are skipped, so `--json` is safe.
+scope: sentence
+nonword: true
+tokens:
+  # An em dash, or an en dash or double hyphen standing alone as a dash.
+  - '(?:—|\s–\s|\s--\s)[^—]*?(?:—|\s–\s|\s--\s)'

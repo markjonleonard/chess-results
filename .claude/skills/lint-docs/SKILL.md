@@ -1,6 +1,6 @@
 ---
 name: lint-docs
-description: Lint chess-results' markdown documentation with Vale (a style/spelling checker), matching CI's docs job -- one-time setup (vale sync, dictionaries) and the run command. Use when editing README.md, DESIGN.md, CLAUDE.md, or other tracked markdown, especially before committing doc changes.
+description: Lint chess-results' markdown documentation with Vale (a style/spelling checker), matching CI's docs job -- one-time setup (vale sync, dictionaries) and the run command. Use when editing README.md, USAGE.md, DESIGN.md, CLAUDE.md, or other tracked markdown, especially before committing doc changes.
 ---
 
 The documentation is linted too, by [Vale](https://vale.sh), in CI's `docs` job.
@@ -30,3 +30,9 @@ expressions, rather than weakening the rule. `write-good.E-Prime` is off because
 it bans the verb "to be"; `Passive` is off because this prose describes what a
 website does to us. Errors fail CI, warnings do not — a hedge is sometimes the
 honest word.
+
+`House.DoubleDash` is the project's own rule, in `.vale/styles/House/`: it flags a
+sentence with two or more dashes (em dash, or a spaced en dash or double hyphen),
+which reads as one thought interrupting another. It is an error in every tracked page, so CI fails on one. Split the
+sentence, or make one dash a colon or a pair of commas. Code spans are skipped, so
+`--json` never trips it.

@@ -66,8 +66,8 @@ so merging would drop one of two players sharing a name with no error and no
 trace. `find()` returns every match with its section, and `section_of()` answers
 `None` rather than guessing when there are two.
 
-This guards a rare case, not a common one. On Frome 2026 — 191 players, five
-sections — no name appears twice. Ten surnames span sections, four of them
+This guards a rare case, not a common one. On Frome 2026, with 191 players in five
+sections, no name appears twice. Ten surnames span sections, four of them
 looking like families, and every one has a distinct first name: names are
 `"Surname, Firstname"`, so relatives are precisely the case that does *not*
 collide. The real risk is two unrelated people with the same full name, and the
@@ -152,7 +152,7 @@ August 2026 rather than a guarantee.
 
 Tournaments differ in which columns they publish, so nothing is read by position.
 Each table's header row drives the parse. chess-results.com emits one header mixing
-`<th>` with `<td>` — the two player-name columns are `td` — so both are read
+`<th>` with `<td>` (the two player-name columns are `td`), so both are read
 together to get a header that aligns with the data rows.
 
 Column *names* vary as well as their presence:
@@ -185,10 +185,10 @@ below, tied to the *newest* round rather than to whether a parser is right.
 
   **The newest round's byes can trip it, and finishing the round does not fix
   it.** Caught on tnr1484241 (2nd Swindon Congress, Minor section, 2026-08-29):
-  two players who took a requested bye in round 3 — then the newest round —
-  showed a crosstable row whose cells already included that bye, `1b½ 8w0 -½`
-  summing to 1.0, while the row's own `Pts.` column still read `0,5` and its
-  `Rk.` matched the stale figure. Re-checked with a fresh, uncached fetch once
+  two players who took a requested bye in round 3, then the newest round,
+  showed a crosstable row whose cells already included that bye. The cells
+  `1b½ 8w0 -½` sum to 1.0, but the row's own `Pts.` column still read `0,5`, and
+  its `Rk.` matched the stale figure. Re-checked with a fresh, uncached fetch once
   round 3 had every result in: identical stale `0,5`. So this is not a live
   round settling in front of the check — every other requested bye in the same
   tournament, all from rounds 1 and 2, is unaffected. The one thing distinguishing
@@ -197,8 +197,8 @@ below, tied to the *newest* round rather than to whether a parser is right.
   once the *next* round is paired (see byes vanishing from a superseded round's
   page, above) — so the aggregate may simply wait for the same trigger. Not confirmed,
   since round 4 was not yet paired at either check. `Tournament`'s own assembled score
-  is unaffected regardless — it is built from the round page, not this total —
-  so the warning is real but does not corrupt `standings` or `pairings` output.
+  is unaffected regardless, because it is built from the round page, not this
+  total. The warning is real but does not corrupt `standings` or `pairings` output.
 - **`Tournament.disagreements`** records any field where a round page and the
   crosstable contradict each other. A value one view holds and the other lacks is
   not a contradiction: the crosstable is often the fresher capture, and a round
@@ -237,8 +237,8 @@ content really has gone out of date.
 
 In practice a cold run on a finished 9-round event is about twelve logical
 fetches: the starting rank, nine rounds, an empty probe past the last, and the
-crosstable. A repeat run costs two — the newest round and the probe — or none
-within the five-minute window.
+crosstable. A repeat run costs two (the newest round and the probe),
+or none within the five-minute window.
 
 The CLI caches by default in `~/.cache/chess-results`; `--no-cache` bypasses it,
 `--cache-dir` moves it. The library does not, so a caller keeps control:
@@ -276,9 +276,9 @@ prints that as one line and exits 1, where an unreadable tournament exits 2.
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) and
 [JaVaFo](https://www.rrweb.org/javafo/JaVaFo.htm) read.
 `examples/predict_next_round.py` scrapes a tournament, resolves any unfinished
-games from assumptions you supply, and shells out to bbpPairings — passing
-`--sheet` hands the result to [`sheet.py`](#printing-a-sheet) — which is a
-separate program, not a dependency: the engine is checked for before anything is
+games from assumptions you supply, and shells out to bbpPairings, which is a
+separate program, not a dependency. Passing `--sheet` hands the result to
+[`sheet.py`](#printing-a-sheet). The engine is checked for before anything is
 fetched, since the alternative is a dozen requests against chess-results.com to
 reach an error that was knowable from a path.
 
@@ -387,7 +387,7 @@ the arbiter's and beating any convention this could apply.
 **Fixed boards are placed, not footnoted.** A pin is usually an access
 requirement, so the pair is moved to that board and marked; a note at the foot of
 a page nobody transcribes does not get a player to the right table. What cannot
-be honoured — two pins on one board, a pin outside the round — becomes a
+be honoured, such as two pins on one board or a pin outside the round, becomes a
 `PairingSheet.warnings` entry printed on the sheet, never an exception. A sheet
 the arbiter corrects by hand beats no sheet five minutes before a round.
 
@@ -513,5 +513,5 @@ played_out=...)`.
 The Jeddah set cannot be regenerated: `art=40` ignores `&rd=`, so that mid-event
 state existed only while the round was live.
 
-To add a fixture, save the page with `curl -sL` — the `-L` matters — plus `lan=1`
+To add a fixture, save the page with `curl -sL` (the `-L` matters), plus `lan=1`
 and `zeilen=99999`.

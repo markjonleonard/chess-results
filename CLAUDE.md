@@ -31,7 +31,7 @@ Repository, distribution and import name all agree: `chess-results` / `chess-res
 `chess_results`. `__init__.py` is the single source of the version — hatch reads
 `__version__` from it, so do not add a `version` key to `pyproject.toml`.
 
-The local checkout directory name is incidental — nothing reads it — so it may or may
+The local checkout directory name is incidental: nothing reads it, so it may or may
 not match.
 
 `pyproject.toml` sets `pythonpath = ["src", "."]`, so pytest resolves imports without an
@@ -115,11 +115,11 @@ deliberate: the module is a primitive and holds no view, the command holds the v
 `congress.py` holds several `Tournament`s as one event and is **the one type not read
 off a page**: chess-results publishes nothing that groups the sections of a congress, so
 the grouping and the section names come from the caller. It offers no merged `players`
-dict on purpose — merging name-keyed sections would drop one of two players sharing a
-name, silently — so `find()` returns every match with its section instead. Note this
+dict on purpose, because merging name-keyed sections would silently drop one of two
+players sharing a name. `find()` returns every match with its section instead. Note this
 guards a *rare* case: Frome 2026's 191 players across five sections contain no repeated
-name, and the ten surnames that span sections all differ in first name, "Surname,
-Forename" being what keeps families apart. Do not restate it as a likely one.
+name, and the ten surnames that span sections all differ in first name, because
+"Surname, Forename" is what keeps families apart. Do not restate it as a likely one.
 `Tournament.rows()` / `Congress.rows()` are the flat one-record-per-player-per-round
 export; note `score` scores an `UNPAIRED` round 0, which callers must read against
 `kind` rather than sum blindly.
@@ -192,9 +192,10 @@ from the round page against `unpaired` from the crosstable, for the one player f
 to the bye that round. A `--no-cache` re-fetch reproduced it identically, and the raw pages
 confirm it is not our parsers disagreeing with each other: `art=2&rd=6` lists the player's row
 as `bye`, while `art=5`'s crosstable prints `-0` (not paired, no round-6 opponent) in the same
-player's round-6 cell. That is the same trigger already documented above and below for byes
-vanishing from a superseded round's page and for `check_published_totals` — the crosstable
-not yet reflecting the *current* round's bye — surfacing through a third comparison now.
+player's round-6 cell. That is the same trigger already documented above and below, for byes
+vanishing from a superseded round's page and for `check_published_totals`, now surfacing
+through a third comparison: the crosstable has not yet caught up with the *current* round's
+bye.
 Sibling section tnr1484241 hit the `check_published_totals` shape of it two days earlier, so
 this looks like a property of the congress's live rounds generally rather than one section's
 fluke. Narrow the "nothing has tripped this" claim to *every finished round* of every event
@@ -215,9 +216,9 @@ one comparison's trigger for the other: this one settles on the round's own comp
 that one needs the next round paired.
 
 **`check_published_totals` is a different comparison, and the newest round's byes can trip
-it — durably, not just while live.** It checks the crosstable against itself —
-round-by-round cells summed against that row's own `Pts.`/`TB1` column — so unlike the
-round-page comparison above it needs no second view to disagree with. Caught on tnr1484241
+it — durably, not just while live.** It checks the crosstable against itself,
+summing a row's round-by-round cells against that row's own `Pts.`/`TB1` column, so unlike
+the round-page comparison above it needs no second view to disagree with. Caught on tnr1484241
 (2nd Swindon Congress, Minor section, 2026-08-29): two players who had just taken a
 round-3 requested bye showed cells summing higher than the row's own published total —
 `1b½ 8w0 -½` sums to 1.0, but `Pts.` read `0,5`, with `Rk.` matching the stale figure. The
@@ -226,7 +227,7 @@ round-3 result was in showed the identical stale `0,5` — so finishing the roun
 fixes this, and the theory that it would was wrong. Every other requested bye in the same
 tournament, all from rounds 1 and 2, sums correctly; only the two in the round chess-results
 still treats as current are wrong, which points at the same trigger already documented above
-for byes vanishing from a superseded round's page — the *next* round being paired — rather
+for byes vanishing from a superseded round's page (the pairing of the *next* round) rather
 than at anything about halves or byes generally. Unconfirmed, since round 4 had not been
 paired at either check: re-check once it is. This does not corrupt anything downstream
 either way: `Tournament`'s assembled score comes from the round page, not from this total,
@@ -257,9 +258,9 @@ does not replace the crosstable, for two reasons:
 
 It also does not warn you in advance: a marker appears only for a round that has already
 been paired, so it cannot help predict the round you are about to pair. **This was
-checked against a live event on 2026-08-10** — tournament 1473782, caught with round 2
-half-played and round 3 unpaired — and the page carried a column for all seven rounds
-with a marker in round 1 only. It is observation, not inference; the `jeddah2026_*`
+checked against a live event on 2026-08-10**, tournament 1473782, caught with round 2
+half-played and round 3 unpaired. The page carried a column for all seven rounds, with a
+marker in round 1 only. It is observation, not inference; the `jeddah2026_*`
 fixtures are that capture and cannot be regenerated, because the page ignores `&rd=`
 and there is only ever the current one.
 
@@ -268,7 +269,7 @@ ranking list, keeps a withdrawn player in place with their frozen score and carr
 marker of any kind (note it prints scores with a decimal comma). **`art=9`**, player
 info, needs `&snr=<starting number>` and renders an empty shell without one; it does
 show a missed round explicitly, as a `not paired` row with opponent SNo `-2`, but that
-is one request per player — 108 for a field — to learn what one crosstable already says.
+is one request per player (108 for a field) to learn what one crosstable already says.
 
 **Three shapes are refused rather than read**, all subclasses of `TournamentError`, all
 for the same reason: each produces a page nothing parses from, and an empty tournament is
@@ -294,11 +295,11 @@ is only there before the event starts.** `parse_tournament_details` reads it whe
 but "present" is not "whenever the organiser filled it in" — it is "whenever the organiser
 filled it in *and* the event has not yet been paired". Confirmed on tnr1449763 (MEGA BIG
 NORMS WARSAW SUMMER '26 IM ROUND-ROBIN - B): the pre-event fixture
-(`warsaw2026_notstarted_startingrank.html`) carries the whole block -- `Organizer`,
+(`warsaw2026_notstarted_startingrank.html`) carries the whole block (`Organizer`,
 `Federation`, `Chief Arbiter`, `Time control`, `Location`, `Number of rounds`,
-`Tournament type`, `Rating calculation`, `Date`, `Rating-Ø`, `Pairing program` -- and a
-live re-fetch of the same tournament after it had finished carries none of it, `Time
-control` and `Organizer` both absent from the raw response. The 2026 British and every
+`Tournament type`, `Rating calculation`, `Date`, `Rating-Ø`, `Pairing program`), and a
+live re-fetch of the same tournament after it had finished carries none of it: `Time
+control` and `Organizer` are both absent from the raw response. The 2026 British and every
 other mid-or-post-event fixture in the suite already carry none of it either, which used to
 read as "this organiser didn't fill the parameters in" -- Warsaw shows that is not the whole
 story. Not confirmed: whether it disappears the moment round 1 is paired, or only once the
@@ -398,8 +399,8 @@ Net effect: a finished tournament fetches the crosstable once and then never aga
 one behaves exactly as before. Do not "simplify" this back to a flat TTL.
 
 **The starting-rank list gets the same "while it is still live" refetch, for a reason found
-the hard way.** It was assumed fixed once an event began -- the "1 day" above -- because
-starting numbers are supposed to be assigned once and never move. **Caught wrong on
+the hard way.** It was assumed fixed once an event began (the "1 day" above),
+because starting numbers are supposed to be assigned once and never move. **Caught wrong on
 tnr1484241** (2nd Swindon Congress, Minor section, 2026-08-30): an arbiter moved one
 misplaced entry mid-event, and the sixteen players below it all shifted down one seat.
 `add_crosstable` joins entirely by starting number (`tournament.py`'s `by_number` map), so a
@@ -411,10 +412,11 @@ the TRF export all read `Player.start_no` too. `client.tournament()` now refetch
 starting rank with `refresh=True` whenever the real tournament might still be live: its own
 last fetched round is unfinished, *or* `rounds=` bounded the scrape, in which case
 `event.unfinished()` cannot see far enough to say either way and the honest assumption is
-that it might be. That is not `crosstable_is_stale()` itself -- its round-coverage branch has
-no equivalent here, since there is no round-by-round coverage to fall behind on -- but the same
-reasoning as its liveness branch: nothing here can drift once an event has settled, only
-while it has not, or while a caller has chosen not to look far enough to tell.
+that it might be. That is not `crosstable_is_stale()` itself, whose round-coverage branch has
+no equivalent here because there is no round-by-round coverage to fall behind on. It is
+the same reasoning as its liveness branch: nothing here can drift once an event has
+settled, only while it has not, or while a caller has chosen not to look far enough to
+tell.
 
 **requests-cache fixes expiry at write time**, which shapes both of the above. A round
 cached while live keeps the 5-minute lifetime even once `round_ttl` starts asking for 30
@@ -462,8 +464,8 @@ numbers and has half-point byes). Nothing in the suite touches the network.
 
 Several rounds have two fixtures on purpose, because the same round looks different
 depending on when it was caught. `_r6_midround.html` and `_r7_midround.html` are the earlier
-captures — six games still in progress in one, a paired-but-unplayed round in the other —
-and their `_r6_finished.html` / `_r7_finished.html` counterparts are the same rounds played
+captures: six games still in progress in one, a paired-but-unplayed round in the other.
+Their `_r6_finished.html` / `_r7_finished.html` counterparts are the same rounds played
 out. The r6 pair is what demonstrates the bye problem: the mid-round page still has its bye
 rows, the finished one has had them deleted.
 
@@ -480,13 +482,13 @@ Round 9's page keeps its "not paired" rows because it was the current round at c
 the last round of the event, which makes it the only round page in the set that still
 lists the absent players.
 
-`conftest.py` offers `british` (full pipeline, crosstable reconciled, mid-event — what most
+`conftest.py` offers `british` (full pipeline, crosstable reconciled, mid-event; what most
 tests want), `british_rounds_only` (round pages alone, so a test can show what
 reconciliation adds), `british_played_out` (rounds 1-8 with every game decided, needed by
 anything asserting on real `to_trf` output, which refuses unfinished games) and
 `frome_round_one` (a congress section with a different column layout and twelve half-point
-byes; built from its round page alone — feeding the Frome crosstable to `parse_starting_rank`
-yields comma-less names that will not join).
+byes; built from its round page alone, because feeding the Frome crosstable to
+`parse_starting_rank` yields comma-less names that will not join).
 
 `british2026_champ_notpaired_final.html` and `frome2026_open_notpaired.html` are `art=40`
 captures, both taken after their events finished. That page ignores `&rd=`, so a mid-event
