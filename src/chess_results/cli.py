@@ -1,4 +1,4 @@
-"""Command line interface: ``chess-results <command> <tournament-id>``."""
+"""Command line interface: ``chess-results <command> <tournament-number>``."""
 
 from __future__ import annotations
 
@@ -38,8 +38,9 @@ MAX_WARNINGS = 10
 DESCRIPTION = """\
 Scrape a tournament from chess-results.com and report on it.
 
-Every command takes a tournament id — the tnr number in a chess-results.com
-URL, so 1452107 in https://chess-results.com/tnr1452107.aspx. Rounds are
+Every command but search takes a tournament number — the tnr number in a
+chess-results.com URL, so 1452107 in https://chess-results.com/tnr1452107.aspx.
+search takes a name instead, and history a player's name as well. Rounds are
 discovered automatically; pages are cached, briefly for a live round and for
 much longer once a round has settled.
 """
@@ -69,7 +70,8 @@ Run "chess-results <command> --help" for a command's own options.
 predicting the next round's pairings:
   Not one of the commands above -- it needs a pairing engine of your own, and
   none of this CLI's output formats are meant to feed one. See
-  examples/predict_next_round.py in the source distribution, which writes FIDE
+  examples/predict_next_round.py in the repository (and the source distribution;
+  pip does not install it), which writes FIDE
   TRF(x) and hands it to bbpPairings (https://github.com/BieremaBoyzProgramming/bbpPairings):
 
     python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe --total-rounds 9
@@ -933,7 +935,7 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
         default=default(None),
         metavar="ROUND",
         help="report on this round rather than the latest; clamped to the "
-        "rounds played (standings, colours, history and pairings)",
+        "rounds played (standings, pairings, pairing-sheet, colours and history)",
     )
     group.add_argument(
         "--no-crosstable",
@@ -1085,14 +1087,14 @@ COMMANDS = (
 )
 
 
-#: Commands whose arguments are not simply a tournament id, for the usage line.
+#: Commands whose arguments are not simply a tournament number, for the usage line.
 USAGE_ARGS = {
-    "dump": "[-o FILE] <tournament-id>",
+    "dump": "[-o FILE] <tournament-number>",
     "search": "[filters] [<name>]",
-    "sections": "[--summary] <tournament-id>",
-    "pairings": "<tournament-id> [<round>]",
-    "pairing-sheet": "[--pairs FILE] [-o FILE] <tournament-id> [<round>]",
-    "history": "<tournament-id> <player>",
+    "sections": "[--summary] <tournament-number>",
+    "pairings": "<tournament-number> [<round>]",
+    "pairing-sheet": "[--pairs FILE] [-o FILE] <tournament-number> [<round>]",
+    "history": "<tournament-number> <player>",
 }
 
 
@@ -1137,7 +1139,7 @@ class _Parser(argparse.ArgumentParser):
 def build_parser() -> argparse.ArgumentParser:
     parser = _Parser(
         prog="chess-results",
-        usage="chess-results [options] <command> <tournament-id>",
+        usage="chess-results [options] <command> <tournament-number> [...]",
         description=DESCRIPTION,
         epilog=EPILOG,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1160,7 +1162,7 @@ def build_parser() -> argparse.ArgumentParser:
             name,
             aliases=list(aliases),
             help=help_text,
-            usage=f"chess-results [options] {name} {USAGE_ARGS.get(name, '<tournament-id>')}",
+            usage=f"chess-results [options] {name} {USAGE_ARGS.get(name, '<tournament-number>')}",
             description=description,
             parents=[_shared(defaults=False)],
         )
@@ -1168,7 +1170,9 @@ def build_parser() -> argparse.ArgumentParser:
             child.add_argument("query", nargs="?", metavar="<name>", help="part of the tournament's name")
         else:
             child.add_argument(
-                "tournament_id", metavar="<tournament-id>", help="chess-results tournament id, e.g. 1452107"
+                "tournament_id",
+                metavar="<tournament-number>",
+                help="chess-results tournament number, e.g. 1452107",
             )
         if name == "dump":
             child.add_argument("-o", "--output", metavar="FILE", help="write JSON here instead of stdout")

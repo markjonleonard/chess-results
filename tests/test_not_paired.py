@@ -66,7 +66,8 @@ class TestAgainstTheCrosstable:
     """The crosstable is the view we already trust, so agree with it or explain."""
 
     @pytest.fixture(scope="class")
-    def crosstable(self):
+    @staticmethod
+    def crosstable():
         return parse_crosstable(fixture("british2026_champ_crosstable_final.html"))
 
     def test_every_bye_marker_is_a_pairing_bye_in_the_crosstable(self, british_not_paired, crosstable):
@@ -93,7 +94,8 @@ class TestARequestedByeIsIndistinguishableFromAnAbsence:
     """
 
     @pytest.fixture(scope="class")
-    def crosstable(self):
+    @staticmethod
+    def crosstable():
         return parse_crosstable(fixture("frome2026_open_crosstable.html"))
 
     def test_the_half_point_byes_are_marked_unplayed(self, frome_not_paired, crosstable):
@@ -146,7 +148,8 @@ class TestFeedingItToWithdrawalInference:
     """
 
     @pytest.fixture(scope="class")
-    def not_paired(self):
+    @staticmethod
+    def not_paired():
         return parse_not_paired(fixture("british2026_champ_notpaired_final.html"))
 
     def test_round_pages_without_the_rows_find_nobody(self, british_with_gaps_rounds_only):
@@ -206,7 +209,8 @@ class TestTheHalfPointByeHazard:
     consulted for a round nothing else has spoken about."""
 
     @pytest.fixture(scope="class")
-    def frome(self):
+    @staticmethod
+    def frome():
         from chess_results.parse import parse_pairings
         from chess_results.tournament import Tournament
 
@@ -240,7 +244,8 @@ class TestItDoesNotWarnInAdvance:
     """
 
     @pytest.fixture(scope="class")
-    def jeddah(self):
+    @staticmethod
+    def jeddah():
         return parse_not_paired(fixture("jeddah2026_notpaired_midevent.html"))
 
     def test_round_one_is_marked(self, jeddah):

@@ -35,7 +35,8 @@ def played(british):
 
 class TestPlayerLine:
     @pytest.fixture(scope="class")
-    def line(self, played):
+    @staticmethod
+    def line(played):
         text = to_trf(played, after=6, total_rounds=9)
         return next(line for line in text.splitlines() if "Mcshane" in line)
 

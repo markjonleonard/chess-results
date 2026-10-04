@@ -144,8 +144,8 @@ This tool can write your tournament as
 format FIDE pairing engines read, so that a program such as
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) can work out what
 the next round's pairings ought to be. **The engine is not included**: you build or
-download it separately, and the example script is in the repository, not the pip
-package.
+download it separately, and the example script is in the repository and the source
+distribution, but pip does not install it.
 
 Given the players each round was paired from, bbpPairings reproduced every round of
 the 2026 British Championship exactly, allowing for a substitution the arbiter made

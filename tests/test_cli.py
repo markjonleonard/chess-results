@@ -97,7 +97,7 @@ class TestBareInvocation:
     def test_prints_the_full_help_and_succeeds(self, capsys):
         assert main([]) == 0
         out = capsys.readouterr().out
-        assert "usage: chess-results [options] <command> <tournament-id>" in out
+        assert "usage: chess-results [options] <command> <tournament-number> [...]" in out
         assert "print the cross-round standings" in out
         assert "examples:" in out
 
@@ -111,7 +111,7 @@ def test_subcommand_usage_does_not_inherit_the_top_level_usage_line(capsys):
     """The custom top-level usage would otherwise become each child's prog."""
     with pytest.raises(SystemExit):
         build_parser().parse_args(["standings", "--help"])
-    assert capsys.readouterr().out.startswith("usage: chess-results [options] standings <tournament-id>")
+    assert capsys.readouterr().out.startswith("usage: chess-results [options] standings <tournament-number>")
 
 
 class TestStandingsDistinguishALiveRoundFromASettledOne:

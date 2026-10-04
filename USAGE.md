@@ -244,8 +244,9 @@ With `--pairs`, the sheet is built from a pairing engine's output instead of a
 published round. This is the case it exists for: the pairing computer has died and
 the wall still needs a sheet.
 
-The first command below needs the example script, which is in the repository and not
-in the pip package, and bbpPairings, which is installed separately. See
+The first command below needs the example script, which is in the repository and the
+source distribution but not installed by pip, and bbpPairings, which is installed
+separately. See
 [Predicting the next round](#predicting-the-next-round).
 
 ```bash
@@ -859,10 +860,9 @@ pairings.
 - **bbpPairings**, which you build or download separately and point at with
   `--engine`. **The engine is not included.** The script checks the path before it
   fetches anything, so a wrong one costs you a message rather than a dozen requests.
-- **The script**, which is in the
-  [repository](examples)
-  rather than in the pip package. Clone the repository, or download the file, and run
-  it with a Python that has `chess-results` installed.
+- **The script**, which is in the [repository](examples) and the source distribution,
+  but pip does not install it. Clone the repository, or download the file, and run it
+  with a Python that has `chess-results` installed.
 
 ### Running it
 

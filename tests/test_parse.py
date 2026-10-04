@@ -87,7 +87,8 @@ class TestBritishPairings:
     """A tournament that publishes no starting-rank columns."""
 
     @pytest.fixture(scope="class")
-    def round7(self):
+    @staticmethod
+    def round7():
         return parse_pairings(fixture("british2026_champ_r7_midround.html"), 7)
 
     def test_board_one(self, round7):
@@ -133,7 +134,8 @@ class TestThePgnColumn:
     alone dropped every one, which looked like chess-results deleting them."""
 
     @pytest.fixture(scope="class")
-    def round6(self):
+    @staticmethod
+    def round6():
         return parse_pairings(fixture("british2026_champ_r6_finished.html"), 6)
 
     def test_the_rows_without_a_game_are_read(self, round6):
@@ -163,7 +165,8 @@ class TestFromePairings:
     """A tournament that does publish starting-rank columns."""
 
     @pytest.fixture(scope="class")
-    def round1(self):
+    @staticmethod
+    def round1():
         return parse_pairings(fixture("frome2026_open_r1.html"), 1)
 
     def test_starting_numbers_are_read(self, round1):
@@ -183,7 +186,8 @@ class TestFromePairings:
 
 class TestStartingRank:
     @pytest.fixture(scope="class")
-    def entries(self):
+    @staticmethod
+    def entries():
         return parse_starting_rank(fixture("british2026_champ_startingrank.html"))
 
     def test_every_player_is_listed(self, entries):
@@ -248,7 +252,8 @@ class TestRoundNotYetPaired:
     """
 
     @pytest.fixture(scope="class")
-    def rows(self):
+    @staticmethod
+    def rows():
         return parse_pairings(fixture("british2026_champ_r8_unpaired_only.html"), 8)
 
     def test_the_table_parses_but_holds_no_games(self, rows):

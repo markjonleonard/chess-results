@@ -37,7 +37,8 @@ def test_no_legend_when_nobody_is_annotated():
 
 class TestPairingRows:
     @pytest.fixture(scope="class")
-    def round6(self):
+    @staticmethod
+    def round6():
         return parse_pairings(fixture("british2026_champ_r6_midround.html"), 6)
 
     def test_marked_player_is_flagged(self, round6):
