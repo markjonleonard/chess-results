@@ -284,7 +284,7 @@ reach an error that was knowable from a path.
 
 ```bash
 python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe \
-    --assume "Mcshane, Luke J=1"
+    --total-rounds 9 --assume "Mcshane, Luke J=1"
 ```
 
 `examples/validate_prediction.py` scores a prediction against the round the

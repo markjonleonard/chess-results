@@ -58,7 +58,7 @@ examples:
   chess-results standings 1452107 --json      any command, as JSON instead of a table
   chess-results sections 823027               every section of that event, and how many entered each
   chess-results sections 823027 --summary     the same on one line: Open 30; Major 25; ... (2023)
-  chess-results search "Derbyshire Congress"  find tournament numbers by name, newest first
+  chess-results search "Derbyshire Congress"  find tournament numbers by name
   chess-results standings 1452107 --limit 10  just the top ten, heading kept
 
 Run "chess-results <command> --help" for a command's own options.
@@ -69,10 +69,11 @@ predicting the next round's pairings:
   examples/predict_next_round.py in the source distribution, which writes FIDE
   TRF(x) and hands it to bbpPairings (https://github.com/BieremaBoyzProgramming/bbpPairings):
 
-    python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe
+    python examples/predict_next_round.py 1452107 --engine ~/bbpPairings/bbpPairings.exe --total-rounds 9
 
-  Full details, including how to fill in an unfinished game's result with
-  --assume, are in the README's "Predicting the next round" section.
+  Full details, including --assume for a game still in progress and how
+  withdrawals are handled, are in USAGE.md under "Predicting the next round":
+  https://github.com/markjonleonard/chess-results/blob/main/USAGE.md
 """
 
 
@@ -978,7 +979,7 @@ COMMANDS = (
         (),
         cmd_search,
         "find tournaments by name, organiser, director or place",
-        "Searches chess-results' tournament database, newest first, and prints "
+        "Searches chess-results' tournament database, most recently updated first, and prints "
         "each match's tournament number, dates and entrant count. Every filter is "
         "a case-insensitive substring match on the site's side, and they combine. "
         "The site can cut names at 50 characters or drop spaces from them in these results.",

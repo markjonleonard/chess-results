@@ -30,7 +30,7 @@ class PlayKind(str, Enum):
 
 
 class Preference(str, Enum):
-    """Strength of a colour preference (FIDE C.04.2.D)."""
+    """Strength of a colour preference (FIDE Dutch system, C.04.3 article 1.7)."""
 
     ABSOLUTE = "absolute"
     STRONG = "strong"
@@ -425,7 +425,7 @@ class Player:
         return sum(1 for c in cols if c is Colour.WHITE) - sum(1 for c in cols if c is Colour.BLACK)
 
     def colour_preference(self, after: int | None = None) -> tuple[Colour | None, Preference]:
-        """The player's due colour and how strongly it is due (FIDE C.04.2.D).
+        """The player's due colour and how strongly it is due (FIDE C.04.3, art. 1.7).
 
         Absolute when the colour difference is +/-2 or more, or when the two most
         recent games were the same colour. Strong at +/-1. Mild at 0, being the

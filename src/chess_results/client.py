@@ -372,8 +372,8 @@ class ChessResults:
         date a tournament *ended* (a ``date`` or ``"YYYY-MM-DD"``).
 
         At least one criterion is required: the alternative is the whole
-        database, newest first, which is never what was meant. Rows come back
-        newest first, and ``limit`` caps them -- the result's ``total`` is how
+        database, which is never what was meant. Rows come back most recently
+        updated first, and ``limit`` caps them -- the result's ``total`` is how
         many matched, so a cut-off list says so rather than reading as a small
         answer. Names can be cut or have spaces
         dropped by the site; see :attr:`SearchResult.name_inexact`.
@@ -417,7 +417,7 @@ class ChessResults:
         form.raise_for_status()
         data = {
             **parse_search_form(form.text),
-            # The selects the form posts back as they stand: everything, newest first.
+            # The selects the form posts back as they stand: everything, by last update.
             "ctl00$P1$combo_art": "5",
             "ctl00$P1$combo_sort": "1",
             "ctl00$P1$combo_land": "-",

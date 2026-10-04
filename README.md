@@ -18,7 +18,8 @@ engine. Every command can print JSON.
 What sets it apart from reading the site's tables is what happens after parsing. It
 assembles the round pages into a per-player history and corrects it, recovering the
 byes that chess-results.com deletes from earlier rounds' pages. Terms such as *float*
-and *pairing-allocated bye* are explained under [Terms](https://github.com/markjonleonard/chess-results#terms).
+and *pairing-allocated bye* are explained under
+[Terms](https://github.com/markjonleonard/chess-results#terms).
 
 > **Early days.** Version 0.1.0 is a first release. It works and is tested
 > on real tournaments, but it has only been tried on a handful of events.
@@ -61,8 +62,9 @@ If you only have a name, `search` finds the number:
 chess-results search "Derbyshire Congress"
 ```
 
-and `sections` lists every section of a congress from any one of its numbers. Both
-are described in the [usage guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md).
+and `sections` lists every section of a congress from any one of its numbers. Both are
+described in the
+[usage guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md).
 
 ## Using it
 
@@ -82,21 +84,10 @@ chess-results sections 823027                # every section of a congress, with
 chess-results search "Derbyshire Congress"   # find a tournament number by name
 ```
 
-Add `--json` to any of them for JSON instead of a table. A few examples, captured
-during the 2026 British Championship:
+Add `--json` to any of them for JSON instead of a table. Here is round 8 of the 2026
+British Championship as a pairing sheet, ready for the noticeboard:
 
-```bash
-chess-results standings 1452107 --after 6
-```
 
-```
-2026 British Chess Championships: Championship — after round 6
-  Rk  Pts   No      Name
-   1    5    1  GM  Mcshane, Luke J
-   2    5    2  GM  Adams, Michael
-   3    5    3  GM  Royal, Shreyas
-   …
-```
 
 ```bash
 chess-results pairing-sheet 1452107 --after 8 --subtitle "Starts 14:15 — Great Hall" | lpr
@@ -116,42 +107,31 @@ Starts 14:15 — Great Hall
 page 1 of 1
 ```
 
-```bash
-chess-results sections 1063614
-```
 
-```
-Derbyshire Congress — 2024-11-23 to 2024-11-24
- 1063614  Open             31
- 1063618  Major            28
- 1063620  Intermediate     40
- 1063621  Minor            31
- 1063623  Foundation       19
-          Total           149
-```
 
-`players` is the one command that works before the tournament has started. The rest
-need at least one round to have been paired.
+`players` is the one command that reads a tournament before it has started; the others
+that read a tournament need at least one round to have been paired. `sections` and
+`search` work from the site's search, so they work at any time.
 
-**The [usage guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md) covers each command's output and options, the JSON format,
-the Python API, tie-breaks and the pairing-engine example.**
+**Each command's output and options, the JSON format, the Python API, tie-breaks and
+the pairing-engine example are in the
+[usage guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md).**
 
 ## From Python
+
+Everything the commands print is available as objects:
 
 ```python
 from chess_results import ChessResults
 
-event = ChessResults().tournament(1452107)           # 2026 British Championship
-mcshane = event.players["Mcshane, Luke J"]
-
-mcshane.score(after=6)                              # 5.0
-"".join(c.value for c in mcshane.colours(after=6))  # 'bwbwbw'
-mcshane.colour_preference(after=6)                  # (Colour.BLACK, Preference.MILD)
+event = ChessResults(cache=True).tournament(1452107)
+event.players["Mcshane, Luke J"].score(after=6)      # 5.0
 ```
 
-Player names are keyed exactly as chess-results.com spells them. The
-[usage guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#from-python) also covers searching, congresses, flat rows for a
-DataFrame, tie-breaks and the pairing-sheet functions.
+The
+[usage guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#from-python)
+covers the API: players and rounds, searching, congresses, flat rows for a DataFrame,
+tie-breaks, the pairing-sheet functions and the exceptions.
 
 ## Predicting the next round
 
@@ -161,10 +141,11 @@ format FIDE pairing engines read, so that a program such as
 [bbpPairings](https://github.com/BieremaBoyzProgramming/bbpPairings) can work out what
 the next round's pairings ought to be. **The engine is not included**: you build or
 download it separately, and the example script is in the repository, not the pip
-package. Given the right list of players it reproduced rounds 7 to 9 of the 2026
-British Championship exactly. Without knowing who had withdrawn it got 37 of 51, 44 of
-51 and 42 of 50 boards right, so treat a prediction as a good guess, not an
-announcement. See [the guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round) for how to run it.
+package. Given the right list of players it reproduced three rounds of the 2026
+British Championship exactly; a live prediction cannot know for sure who has
+withdrawn, so treat it as a good guess, not an announcement. The
+[guide](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#predicting-the-next-round)
+covers how to run it, games still in progress, withdrawals and the figures.
 
 ## Terms
 
@@ -173,14 +154,28 @@ announcement. See [the guide](https://github.com/markjonleonard/chess-results/bl
 - **Scoregroup.** The players on the same score.
 - **Float.** A player paired against someone from a different scoregroup is said to
   float: *up* if the opponent is higher, *down* if lower. `U` and `D` in the output.
+- **Fixed board.** A board a player keeps for the whole event, usually for access
+  reasons. chess-results.com marks the player but does not say which board.
 - **Pairing-allocated bye.** The bye the pairing program gives the odd player out
   in a round with an odd number of players. Usually a full point.
 - **Requested bye.** A bye a player asks for in advance, commonly worth half a
   point. Shown by chess-results.com as `not paired` with a score.
+- **Forfeit.** A game decided without being played, usually because a player did
+  not turn up. Marked with an `F` after the result: `1-0F`, or `0F` for the loser.
 - **Crosstable.** The page that lists every player's every round. It is the one view
   that keeps byes after their round is superseded.
+- **Live and settled rounds.** A round is live while its results are coming in. It
+  is settled once every game has a result and the next round has been paired; only then is
+  every result in it final.
 - **Colour preference.** Which colour a player is due. Absolute, strong or mild, as
-  defined by [FIDE C.04.3](https://handbook.fide.com/chapter/C0403).
+  defined by FIDE's Dutch system ([C.04.3](https://handbook.fide.com/chapter/C0403),
+  article 1.7).
+- **Top scorer.** In the Dutch system, a player with more than half the possible
+  points when the final round is paired (article 1.8). Some colour rules do not
+  apply to them.
+- **Performance rating.** What a player's results were worth: their opponents'
+  average rating plus a figure from FIDE's table for the percentage they scored
+  (FIDE B.01, 1.4.8). An unrated opponent counts as 1400.
 - **TRF(x).** The file format for a tournament report that FIDE pairing engines read.
 
 ## A note on byes
@@ -204,12 +199,14 @@ tournament.
 often appears months ahead of the first game, and "this has not started yet" is more
 use than a table of zeroes.
 
-**Most of the tournament's own metadata.** Every command reads the name; `players`
-also prints the dates and time control, but only when the organiser published them
-and only before the event has been paired. That header disappears from the same page
-once a round exists. Nothing here reads the organiser, the chief arbiter, the
-playing schedule, or the tie-break columns of the final ranking. Everything is built
-around who played whom, so that is what it collects.
+**Most of the tournament's own metadata.** The commands that read a tournament take
+its name from its pages, and `players` also prints the dates and time control, but
+only when the organiser published them and only before the event has been paired.
+`search` reports what the site's search index holds for each tournament: dates and
+entrants in its table, and the organiser, director, chief arbiter, venue and time
+control as well in JSON and from Python. Nothing here reads the playing schedule or
+the tie-break columns of the final ranking. Everything is built around who played
+whom, so that is what it collects.
 
 ## Related projects
 
@@ -228,8 +225,9 @@ is where to look.
 ## Being a good guest
 
 chess-results.com is a free service run for the chess community. This tool pauses
-between requests, remembers pages it has already fetched so it does not ask twice,
-and identifies itself. Please leave those defaults alone unless you have a reason,
+between requests, identifies itself, and on the command line keeps the pages it has
+fetched so it does not ask twice; from Python, pass `ChessResults(cache=True)` for
+the same. Please leave those defaults alone unless you have a reason,
 and do not point it at large numbers of tournaments at once. `search` is never cached,
 so each call goes to the site: go easy with it, and prefer `sections` over looping
 through searches.
@@ -244,9 +242,9 @@ how byes are recovered, and how the pairing predictions were tested.
 
 If something looks wrong, please
 [open an issue](https://github.com/markjonleonard/chess-results/issues) and include
-the tournament number and the command you ran. That is usually enough to reproduce
-it. Tournaments vary more than you would expect in which columns they publish, so the
-most likely cause is a column layout this tool has not seen before.
+the tournament number and the command you ran. That is usually enough to reproduce it.
+Tournaments vary more than you would expect in which columns they publish, so the most
+likely cause is a column layout this tool has not seen before.
 
 Bug reports and pull requests are both welcome.
 

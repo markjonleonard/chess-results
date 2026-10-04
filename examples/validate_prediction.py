@@ -8,11 +8,12 @@ ordering, so comparing board by board understates the match badly.
     python validate_prediction.py 1452107 --round 8 \
         --engine ~/repos/other/bbpPairings/bbpPairings.exe
 
-Each round is scored twice: once with no withdrawal information, which is what a
-genuine live prediction has to work with, and once with the absent players read
-back out of the published round. The second figure uses hindsight and is an upper
-bound, not a live result. The gap between the two is the cost of not knowing who
-has withdrawn.
+Each round is scored three times: with no withdrawal information; with
+withdrawals inferred by ``Tournament.likely_withdrawn``, which is what a live
+prediction can achieve; and with the absent players read back out of the
+published round. The last uses hindsight and is an upper bound, not a live
+result. The gap between it and the others is the cost of not knowing who has
+withdrawn.
 
 Two traps this script exists to avoid, both of which produce plausible but wrong
 numbers:
