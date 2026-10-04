@@ -282,6 +282,9 @@ _PLAYERS_TRAILING = len(f" {'Rtg':>4}  Fed")
 
 _PLAYERS_FIXED = _PLAYERS_PREFIX + _PLAYERS_TRAILING
 
+#: The space between the federation and a team column, when there is one.
+_TEAM_GAP = 2
+
 
 def cmd_players(args: argparse.Namespace) -> int:
     """Print the field from the starting-rank list.
@@ -312,12 +315,22 @@ def cmd_players(args: argparse.Namespace) -> int:
     if entrants.time_control:
         print(f"Time control: {entrants.time_control}")
     print(f"{len(entries)} player(s)")
-    width = _PLAYERS_PREFIX + _name_width(args.name_width, _PLAYERS_FIXED)
-    print(f"{_fit(_rank_heading('Name'), width)} {'Rtg':>4}  Fed")
+    # A team event's players carry their team, which shares the room with names.
+    teams = any(entry.team for entry in entries)
+    if teams:
+        name_width = _name_width(args.name_width, _PLAYERS_FIXED + _TEAM_GAP, columns=2)
+    else:
+        name_width = _name_width(args.name_width, _PLAYERS_FIXED)
+    width = _PLAYERS_PREFIX + name_width
+    team_heading = f"{'':<{_TEAM_GAP}}Team" if teams else ""
+    print(f"{_fit(_rank_heading('Name'), width)} {'Rtg':>4}  Fed{team_heading}")
     shown, dropped = _limited(entries, args.limit)
     for entry in shown:
         rating = "" if entry.rating is None else str(entry.rating)
-        print(f"{_fit(_rank_row(entry), width)} {rating:>4}  {entry.federation or ''}".rstrip())
+        trailing = entry.federation or ""
+        if teams:
+            trailing = f"{trailing:<3}{'':<{_TEAM_GAP}}{_fit(entry.team or '', name_width)}"
+        print(f"{_fit(_rank_row(entry), width)} {rating:>4}  {trailing}".rstrip())
     _and_the_rest(dropped)
     return 0
 

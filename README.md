@@ -208,8 +208,9 @@ the event moves on.
 this tool does not read. A team round pairs teams rather than players, and a round
 robin puts every round on one page with a crosstable of opponents rather than of
 rounds. Point a command that reads rounds at either and it says so and stops, rather
-than reporting an empty tournament. `players`, `sections` and `search` read no rounds,
-so they work on both.
+than reporting an empty tournament. `sections` and `search` read the site's search, so
+they work on both. `players` works on both too, reading a team event's players from
+the page that lists them, since its entry list names teams.
 
 **Tournaments that have not started.** The commands that read rounds treat these the
 same way. An entry list often appears months ahead of the first game, and "this has

@@ -92,6 +92,8 @@ class StartingRankEntry:
     local_id: str | None = None
     sex: str | None = None
     type: str | None = None
+    #: The player's team, on a team event's player list (``art=16``).
+    team: str | None = None
 
 
 @dataclass(frozen=True)

@@ -529,6 +529,12 @@ full `zeilen=99999` page.
 started, which is why `is_team_pairings` exists and `tournament()` raises
 `TeamTournamentError` rather than returning an empty event. Note `cnyt2026_g14_boards_r1.html`
 (`art=3`) opens with a `Bo.` column, so `has_pairings` says True and only parsing finds out.
+The field *is* read: a team event's `art=0` lists teams (`SNo | Team | ...`, no `Name`), so
+`entrants` asks `is_team_list` and, when it says so, reads the players from `art=16`
+(`cnyt2026_g14_playerrank.html`), which `parse_starting_rank` handles as it stands.
+`cnyt2026_g14_startingrank.html` is that `art=0`, captured on 2026-10-04 after the event had
+finished, by when it had become a team ranking; the other `cnyt2026_g14_*` fixtures are from
+round 1.
 
 To add a fixture, save the page with `curl -sL` (the `-L` matters), `lan=1` and
 `zeilen=99999`. Leave any of the three off and you get a redirect page, a German one, or a

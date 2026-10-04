@@ -103,7 +103,9 @@ Time control: Standard: 90min +30sec increment per move starting from move 1
 ```
 
 This second event is a round robin, which the round-reading commands refuse. `players`
-only reads the field, so it works on any event. Names appear as each event publishes
+only reads the field, so it works there too, and on a team event, whose entry list
+names teams: there it reads the players from the event's player list instead, which
+costs one more request, and adds a `Team` column. Names appear as each event publishes
 them: some organisers write "Surname, Forename" and some do not.
 
 ### standings
@@ -500,7 +502,7 @@ What each command's document holds:
 
 | Command | Top-level keys |
 | --- | --- |
-| `players` | `id`, `name`, `dates`, `time_control`, `total`, `truncated`, `players` |
+| `players` | `id`, `name`, `dates`, `time_control`, `total`, `truncated`, `players` (each with `team`, `null` except on a team event) |
 | `standings` | `id`, `name`, `after`, progress, `live`, `total`, `truncated`, `players` (`rank`, `score`, `start_no`, `title`, `name`, `state`) |
 | `pairings` | `id`, `name`, `round`, progress, `total`, `truncated`, `boards` |
 | `colours` | `id`, `name`, `after`, `total`, `truncated`, `players` (`colours`, `floats`, `due`, `strength`) |
@@ -788,10 +790,11 @@ fields are documented in the source as well.
   `--bye-value`; `crosstable=False` is `--no-crosstable`, and skips the cross-check
   and the filling in of any round a page leaves a player out of.
 - `entrants(id)` returns `Entrants`, the starting-rank list alone, as `players` reads
-  it. It works before round 1. Its fields are `id`, `name`, `dates` and
-  `time_control` (the last two only when the event published them) and `players`, a
-  list of `StartingRankEntry` (`start_no`, `name`, `rating`, `title`, `federation`,
-  `fide_id`, `sex` and a few more).
+  it (for a team event, the player list, one request more). It works before round 1.
+  Its fields are `id`, `name`, `dates` and `time_control` (the last two only when the
+  event published them) and `players`, a list of `StartingRankEntry` (`start_no`,
+  `name`, `rating`, `title`, `federation`, `fide_id`, `sex`, `team` on a team event,
+  and a few more).
 - `search(...)` returns `SearchResults`, and `sections(id)` returns `EventSections`;
   see
   [Finding sections and tournaments](#finding-sections-and-tournaments).

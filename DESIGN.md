@@ -414,7 +414,10 @@ of `TournamentError`, so a caller catches one thing and the CLI prints one line.
 - **Team tournaments** (`TeamTournamentError`). The round page pairs *teams*,
   carrying match points and naming no player; the individual boards sit on a
   second view as one sub-table per match. `parse_pairings` reads nothing from
-  either, which is safe — no team is mistaken for a player.
+  either, which is safe — no team is mistaken for a player. The field is still
+  readable: the starting-rank page lists teams, but `art=16` lists the players
+  in the starting-rank layout, so `entrants` reads that instead when
+  `is_team_list` says the first page holds teams.
 - **Round robins** (`RoundRobinError`). Two views differ from their Swiss
   equivalents. The pairings page holds **every round at once**, under repeated
   "Round N on …" headings in a single table, and ignores `rd` — so a parser

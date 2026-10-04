@@ -29,6 +29,7 @@ from chess_results.client import (
 from chess_results.parse import (
     has_pairings,
     is_combined_pairings,
+    is_team_list,
     is_team_pairings,
     parse_crosstable,
     parse_pairings,
@@ -58,11 +59,113 @@ class TestTheShapeOfThesePages:
         assert parse_pairings(fixture("cnyt2026_g14_boards_r1.html"), 1) == []
 
     def test_the_player_list_does_parse(self):
-        """A team event still publishes an ordinary list of players, so the
-        players are reachable even though their games are not."""
+        """A team event still publishes an ordinary list of players (``art=16``),
+        so the players are reachable even though their games are not."""
         rank = parse_starting_rank(fixture("cnyt2026_g14_playerrank.html"))
         assert len(rank) == 32
         assert (rank[0].name, rank[0].title, rank[0].rating) == ("Xue, Tianhao", "WIM", 2218)
+
+
+class TestATeamEventsPlayers:
+    """`players` reads a team event's field from ``art=16``.
+
+    Its ``art=0`` lists teams, with no ``Name`` column, so the starting-rank
+    parser reads nobody from it. ``cnyt2026_g14_startingrank.html`` was captured
+    on 2026-10-04, after the event finished, when that page had become a team
+    ranking; the other cnyt fixtures are from round 1.
+    """
+
+    @staticmethod
+    def _serve(calls):
+        pages = {0: "cnyt2026_g14_startingrank.html", 16: "cnyt2026_g14_playerrank.html"}
+
+        def fetch(tournament_id, art, **kwargs):
+            calls.append(art)
+            return fixture(pages[art])
+
+        return fetch
+
+    def test_the_starting_rank_page_lists_teams(self):
+        assert parse_starting_rank(fixture("cnyt2026_g14_startingrank.html")) == []
+        assert is_team_list(fixture("cnyt2026_g14_startingrank.html"))
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "british2026_champ_startingrank.html",
+            "arad2026_a_startingrank.html",
+            "jeddah2026_startingrank.html",
+            "ussa2026_roundrobin_startingrank.html",
+            "warsaw2026_notstarted_startingrank.html",
+            "cnyt2026_g14_playerrank.html",
+        ],
+    )
+    def test_a_list_of_players_is_not_mistaken_for_one(self, name):
+        assert not is_team_list(fixture(name))
+
+    def test_entrants_reads_the_players_page(self, monkeypatch):
+        from chess_results.client import ChessResults
+
+        calls = []
+        client = ChessResults()
+        monkeypatch.setattr(client, "fetch", self._serve(calls))
+        entrants = client.entrants(1472122)
+        assert entrants.name == "Chinese National Youth Chess Team Championship 2026(G14)"
+        assert len(entrants.players) == 32
+        assert entrants.players[0].name == "Xue, Tianhao"
+        assert calls == [0, 16]
+
+    def test_an_individual_event_costs_one_request(self, monkeypatch):
+        from chess_results.client import ChessResults
+
+        calls = []
+        client = ChessResults()
+
+        def fetch(tournament_id, art, **kwargs):
+            calls.append(art)
+            return fixture("british2026_champ_startingrank.html")
+
+        monkeypatch.setattr(client, "fetch", fetch)
+        assert len(client.entrants(1452107).players) == 108
+        assert calls == [0]
+
+    def test_the_players_command_lists_them(self, monkeypatch, capsys):
+        from chess_results.cli import main
+
+        fetch = self._serve([])
+        monkeypatch.setattr(
+            "chess_results.client.ChessResults.fetch",
+            lambda client, tournament_id, art, **kwargs: fetch(tournament_id, art, **kwargs),
+        )
+        assert main(["--no-cache", "players", "1472122"]) == 0
+        out = capsys.readouterr().out
+        assert "32 player(s)" in out
+        heading, first = out.splitlines()[2:4]
+        assert heading.endswith("Fed  Team")
+        assert "Xue, Tianhao" in first and first.endswith("CHN  Shanghai Chess Academy")
+
+    def test_each_player_carries_their_team(self):
+        rank = parse_starting_rank(fixture("cnyt2026_g14_playerrank.html"))
+        assert rank[0].team == "Shanghai Chess Academy"
+        assert len({entry.team for entry in rank}) == 16
+        assert all(entry.team for entry in rank)
+
+    def test_an_individual_event_has_none(self):
+        assert {e.team for e in parse_starting_rank(fixture("british2026_champ_startingrank.html"))} == {None}
+
+    def test_the_json_carries_it(self, monkeypatch, capsys):
+        import json
+
+        from chess_results.cli import main
+
+        fetch = self._serve([])
+        monkeypatch.setattr(
+            "chess_results.client.ChessResults.fetch",
+            lambda client, tournament_id, art, **kwargs: fetch(tournament_id, art, **kwargs),
+        )
+        assert main(["--no-cache", "--json", "players", "1472122"]) == 0
+        players = json.loads(capsys.readouterr().out)["players"]
+        assert players[0]["team"] == "Shanghai Chess Academy"
 
 
 class TestTheScrapeRefusesRatherThanReturnsNothing:
@@ -75,7 +178,7 @@ class TestTheScrapeRefusesRatherThanReturnsNothing:
         def fetch(self, tournament_id, art, **kwargs):
             self.calls += 1
             if art == 0:
-                return fixture("cnyt2026_g14_playerrank.html")
+                return fixture("cnyt2026_g14_startingrank.html")
             return fixture("cnyt2026_g14_teams_r1.html")
 
     def test_tournament_raises(self, monkeypatch):

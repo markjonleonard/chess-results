@@ -43,6 +43,7 @@ from .models import (
 from .parse import (
     has_pairings,
     is_combined_pairings,
+    is_team_list,
     is_team_pairings,
     parse_crosstable,
     parse_not_paired,
@@ -63,6 +64,9 @@ USER_AGENT = "chess-results (+https://github.com/markjonleonard/chess-results)"
 #: chess-results "art" view identifiers.
 ART_STARTING_RANK = 0
 ART_ROUND_PAIRINGS = 2
+#: A team event's players. Its ``art=0`` lists teams instead, so this is where
+#: ``entrants`` goes for the field.
+ART_TEAM_PLAYERS = 16
 #: Starting-rank crosstable: every player's every round, keyed by starting
 #: number. The cross-check on every round page, and the fallback for one without
 #: its bye and "not paired" rows.
@@ -495,13 +499,17 @@ class ChessResults:
         return self.entrants(tournament_id).players
 
     def entrants(self, tournament_id: str | int) -> Entrants:
-        """The field and tournament header, from the starting-rank page alone.
+        """The field and tournament header, from the starting-rank page.
 
         One fetch serves all of it, rather than a separate request per piece
-        of the same page.
+        of the same page. A team event is the exception: its starting-rank page
+        lists teams, so the players take a second request, to ``art=16``.
         """
         html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
         name, players = parse_tournament_name(html), parse_starting_rank(html)
+        if not players and is_team_list(html):
+            team_players = self.fetch(tournament_id, ART_TEAM_PLAYERS, expire_after=STARTING_RANK_TTL)
+            players = parse_starting_rank(team_players)
         if _no_such_tournament(name, players):
             raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
         details = parse_tournament_details(html)

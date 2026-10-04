@@ -327,6 +327,7 @@ def parse_starting_rank(html: str) -> list[StartingRankEntry]:
                     local_id=cols.value(cells, cols.index("ID")) or None,
                     sex=cols.value(cells, cols.index("sex")) or None,
                     type=cols.value(cells, cols.index("Typ")) or None,
+                    team=cols.value(cells, cols.index("Team")) or None,
                 )
             )
     return entries
@@ -498,6 +499,21 @@ def is_combined_pairings(html: str) -> bool:
         )
         if headings > 1:
             return True
+    return False
+
+
+def is_team_list(html: str) -> bool:
+    """True if a starting-rank page (``art=0``) lists teams rather than players.
+
+    A team event's ``art=0`` is a table of teams, ``SNo | Team | ...``, with no
+    ``Name`` column, so :func:`parse_starting_rank` reads nobody from it. The
+    players are on ``art=16``, which it reads as it stands.
+    """
+    for table in _data_tables(html):
+        for row in table.select("tr"):
+            header = [_text(c) for c in _cells(row)]
+            if "Team" in header and "SNo" in header:
+                return "Name" not in header
     return False
 
 
