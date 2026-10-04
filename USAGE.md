@@ -361,15 +361,18 @@ Performance: 2606
 ### unfinished
 
 The games in the current round that have no result yet, with the scores each player
-brought into the round. This output was captured during round 6, so on the finished
-event it now prints `round 9: all results in`.
+brought into the round. The heading says how far the round has got, in the same
+words as `standings`. This output was captured during round 6; on the finished
+event it now says `after round 9` and `all results in`.
 
 ```bash
 chess-results unfinished 1452107
 ```
 
 ```
-round 6: 6 game(s) still unfinished
+2026 British Chess Championships: Championship — during round 6: 46 of 52 results in
+6 game(s) still unfinished
+
   bd2    Mcshane, Luke J (4) vs Waldhausen Gordon, Frederick (4)
   bd18   Yao, Lan (3) vs Cancedda-Dupuis, Livio (3)
   bd20   Balaji, Aaravamudhan (3) vs Fellowes, Billy (3)
@@ -517,10 +520,8 @@ organiser's own free text, such as "2026/08/27 to 2026/08/31".
 JSON never clips a name, so `--name-width` has no effect on it. `--limit` still
 applies to a list, and `total` and `truncated` say what it left out, so a cut list is
 never mistaken for the whole. A command that fails still prints its one-line error on
-stderr and prints nothing on standard output. The exit code is 0 on success, 2 when
-the request cannot be answered (a tournament it cannot read or that has not started,
-an ambiguous or unknown player, a missing file) and 1 when chess-results.com did not
-return a usable search page.
+stderr and nothing on standard output; see
+[Errors and exit codes](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#errors-and-exit-codes).
 
 ### Options
 
@@ -533,7 +534,7 @@ one command alone, such as `--pairs` or `--women`, is described under that comma
 | --- | --- | --- |
 | `--after N` | Report the tournament as it stood after round N. A round it has not reached gives the latest. | `standings`, `colours`, `history`, `pairings`, `pairing-sheet` |
 | `--limit N` | Print the first N rows, then say how many were left out. | `players`, `standings`, `colours`, `pairings`, `unfinished`, `search` |
-| `--name-width N` | Room for a player's name before it is clipped and ends in `…`. Default 28, narrowed to fit a small terminal; anything under 8 counts as 8. `pairing-sheet` has its own, sized for paper. | `players`, `standings`, `colours`, `pairings`, `history` |
+| `--name-width N` | Room for a player's name before it is clipped and ends in `…`. Default 28, narrowed to fit a small terminal; anything under 8 counts as 8. On `pairing-sheet` it sizes names for paper and is never narrowed. | `players`, `standings`, `colours`, `pairings`, `history`, `pairing-sheet` |
 | `--json` | Print JSON instead of a table. See [JSON output](https://github.com/markjonleonard/chess-results/blob/main/USAGE.md#json-output). | every command |
 | `--rounds N` | Stop reading after round N. | the round-reading commands; ignored by `players` |
 | `--bye-value P` | What a pairing-allocated bye is worth, in points (default 1.0). | the round-reading commands; ignored by `players` |
@@ -556,15 +557,16 @@ all. To look at a past round, you want `--after`.
 
 **`--limit`** counts rows of data rather than lines, so the heading is never counted
 against it, whereas `| head -10` counts every line it prints. It saves no time, since
-the fetching is done before anything is printed. It is not offered on four commands:
-`dump`, because a cut-off export would corrupt the data; `pairing-sheet`, because a
-sheet missing its last boards sends players looking for a board that is not there;
-`history`, whose length is the number of rounds rather than the size of the field;
-and `sections`, whose total would no longer add up.
+the fetching is done before anything is printed. It is refused, with the reason, on
+four commands: `dump`, because a cut-off export would corrupt the data;
+`pairing-sheet`, because a sheet missing its last boards sends players looking for a
+board that is not there; `history`, whose length is the number of rounds rather than
+the size of the field; and `sections`, whose total would no longer add up.
 
-**`--name-width`** is not offered on `dump`, since clipping a name would corrupt
-data rather than tidy a table. `pairing-sheet` has a `--name-width` of its own that
-is sized for paper, so it is never narrowed to your terminal window. Widen it
+**`--name-width`** is refused on `dump`, since clipping a name would corrupt data
+rather than tidy a table, and on `unfinished`, `sections` and `search`, which print
+names in full or none at all. On `pairing-sheet` it sizes the names for paper, so it
+is never narrowed to your terminal window. Widen it
 when an event has long names you want in full:
 
 ```bash
@@ -579,7 +581,24 @@ option tells the tool what the real value is, and it rescores those byes to matc
 Requested byes, which are commonly half a point, are read as published and are not
 affected.
 
+### Errors and exit codes
+
+A command that cannot do what was asked prints one line on stderr, starting
+`chess-results:`, and nothing on standard output. The exit code says what kind of
+failure it was:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success. |
+| 1 | chess-results.com could not be reached, did not answer in time, kept answering with an error after the retries, or returned a search page that could not be read. Worth trying again later. |
+| 2 | The request cannot be answered as asked: no tournament by that number, a tournament this cannot read (a team event or a round robin) or one that has not started, an ambiguous or unknown player, a file that cannot be read, or an option the command does not take. |
+| 141 | The output was cut short by a closed pipe, as when piping into `head`. |
+
+Warnings, such as a disagreement between a round's page and the crosstable, go to
+stderr as well but do not change the exit code.
+
 ## From Python
+
 
 The same information, as objects:
 

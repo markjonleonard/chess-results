@@ -8,8 +8,11 @@ import json
 import os
 import shutil
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TypeVar
+
+import requests
 
 from . import __version__, sheet
 from .cache import DEFAULT_CACHE_DIR, LIVE_TTL
@@ -780,10 +783,11 @@ def cmd_unfinished(args: argparse.Namespace) -> int:
             }
         )
         return 0
+    print(f"{event.name or event.id} — {_how_far(event, event.last_round)}")
     if not games:
-        print(f"round {event.last_round}: all results in")
+        print("all results in")
         return 0
-    print(f"round {event.last_round}: {len(games)} game(s) still unfinished")
+    print(f"{len(games)} game(s) still unfinished")
     shown, dropped = _limited(games, args.limit)
     for game in shown:
         print(
@@ -865,7 +869,7 @@ def cmd_pairing_sheet(args: argparse.Namespace) -> int:
     text = sheet.render(
         made,
         after=after,
-        name_width=args.name_width,
+        name_width=sheet.NAME_WIDTH if args.name_width is None else args.name_width,
         lines_per_page=0 if args.no_pages else args.lines_per_page,
         subtitle=args.subtitle,
         results=not args.no_results,
@@ -931,6 +935,24 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
         default=default(False),
         help="print JSON instead of a table. Names are never clipped and --name-width is "
         "ignored; a list report honours --limit and says so in its total and truncated fields",
+    )
+    group.add_argument(
+        "--limit",
+        type=int,
+        default=default(None),
+        metavar="ROWS",
+        help="print at most this many rows, then say how many were left out (for "
+        "search: at most this many matches, default 100). Not taken by " + ", ".join(REFUSED["limit"]),
+    )
+    group.add_argument(
+        "--name-width",
+        type=int,
+        default=default(None),
+        metavar="CHARS",
+        help=f"room to give a player's name before clipping it (default {DEFAULT_NAME_WIDTH}, "
+        f"narrowed to fit the terminal; anything under {MIN_NAME_WIDTH} is treated as "
+        f"{MIN_NAME_WIDTH}). pairing-sheet sizes its names for paper instead, default "
+        f"{sheet.NAME_WIDTH}, never narrowed. Not taken by " + ", ".join(REFUSED["name_width"]),
     )
     group.add_argument(
         "--no-cache", action="store_true", default=default(False), help="always refetch, ignoring the cache"
@@ -1062,8 +1084,46 @@ USAGE_ARGS = {
 }
 
 
+#: Shared options a command refuses, and why. Refused rather than accepted and
+#: ignored: a flag that quietly does nothing reads as though it worked.
+REFUSED = {
+    "limit": {
+        "dump": "a cut-off export would corrupt the data",
+        "pairing-sheet": "a sheet missing its last boards sends players looking for a "
+        "board that is not there",
+        "history": "its length is the number of rounds, not the size of the field",
+        "sections": "a cut-off list would no longer add up to its total",
+    },
+    "name_width": {
+        "dump": "JSON has no columns, and clipping a name there would corrupt the data",
+        "unfinished": "it prints every name in full",
+        "sections": "it prints no player names",
+        "search": "it prints no player names",
+    },
+}
+
+
+class _Parser(argparse.ArgumentParser):
+    """The top-level parser, which also refuses a shared option a command cannot use.
+
+    Checked after parsing because a shared option may come before the command
+    name, when the command is not yet known.
+    """
+
+    def parse_known_args(  # type: ignore[override]
+        self, args: Sequence[str] | None = None, namespace: argparse.Namespace | None = None
+    ) -> tuple[argparse.Namespace, list[str]]:
+        parsed, extras = super().parse_known_args(args, namespace)
+        command = getattr(parsed, "command_name", None)
+        for option, refusing in REFUSED.items():
+            if command in refusing and getattr(parsed, option, None) is not None:
+                flag = "--" + option.replace("_", "-")
+                self.error(f"{flag} is not available for {command}: {refusing[command]}")
+        return parsed, extras
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="chess-results",
         usage="chess-results [options] <command> <tournament-id>",
         description=DESCRIPTION,
@@ -1075,7 +1135,12 @@ def build_parser() -> argparse.ArgumentParser:
     # prog is spelled out because the custom usage above would otherwise become
     # the children's prog, giving "chess-results [options] <command> ... standings".
     sub = parser.add_subparsers(
-        dest="command", required=True, title="commands", metavar="<command>", prog="chess-results"
+        dest="command",
+        required=True,
+        title="commands",
+        metavar="<command>",
+        prog="chess-results",
+        parser_class=argparse.ArgumentParser,
     )
 
     for name, aliases, handler, help_text, description in COMMANDS:
@@ -1121,41 +1186,6 @@ def build_parser() -> argparse.ArgumentParser:
                 )
                 child.add_argument(
                     "--finished", "--finished-only", action="store_true", help="only finished tournaments"
-                )
-                child.add_argument(
-                    "--limit",
-                    type=int,
-                    metavar="ROWS",
-                    help="at most this many matches (default 100; the total is always reported)",
-                )
-        else:
-            if name not in ("pairing-sheet", "history"):
-                # Off dump because truncated JSON is not JSON, off the sheet
-                # because a pairing sheet missing its last boards is worse than
-                # no sheet: the players on them go looking for a board that is
-                # not there, and off history because one player has no rows to
-                # cut -- its length is the round count, not the field size.
-                # Left off the top-level parser for the same reason, so
-                # `dump --limit` is an error rather than a flag that quietly
-                # does nothing.
-                child.add_argument(
-                    "--limit",
-                    type=int,
-                    metavar="ROWS",
-                    help="print at most this many rows, then say how many were left out",
-                )
-            if name != "pairing-sheet":
-                # Off dump for the same reason as --limit: JSON has no columns
-                # to align, and clipping a name there would corrupt data rather
-                # than tidy a table. The sheet keeps a --name-width of its own,
-                # since it is sized for paper rather than for the terminal.
-                child.add_argument(
-                    "--name-width",
-                    type=int,
-                    metavar="CHARS",
-                    help=f"room to give a player's name before clipping it "
-                    f"(default {DEFAULT_NAME_WIDTH}, narrowed to fit the terminal; "
-                    f"anything under {MIN_NAME_WIDTH} is treated as {MIN_NAME_WIDTH})",
                 )
         if name == "standings":
             child.add_argument(
@@ -1203,16 +1233,6 @@ def build_parser() -> argparse.ArgumentParser:
             )
             child.add_argument("-o", "--output", metavar="FILE", help="write the sheet here")
             child.add_argument(
-                "--name-width",
-                type=int,
-                default=sheet.NAME_WIDTH,
-                metavar="CHARS",
-                help=f"room to give a player's name before clipping it (default "
-                f"{sheet.NAME_WIDTH}, which keeps two name columns inside 80 "
-                "columns; unlike the other commands this is not narrowed to the "
-                "terminal, the sheet being bound for a printer)",
-            )
-            child.add_argument(
                 "--subtitle",
                 metavar="TEXT",
                 help="a line under the heading, for what no page publishes: "
@@ -1237,7 +1257,7 @@ def build_parser() -> argparse.ArgumentParser:
                 action="store_true",
                 help="one continuous sheet, no page breaks or page numbers",
             )
-        child.set_defaults(func=handler)
+        child.set_defaults(func=handler, command_name=name)
     return parser
 
 
@@ -1272,6 +1292,22 @@ def main(argv: list[str] | None = None) -> int:
         # argument to fix, not a bug to show a traceback for.
         print(f"chess-results: {exc}", file=sys.stderr)
         return 2
+    except requests.Timeout:
+        print("chess-results: chess-results.com did not answer in time; try again", file=sys.stderr)
+        return 1
+    except requests.ConnectionError:
+        print(
+            "chess-results: could not reach chess-results.com; check the network connection",
+            file=sys.stderr,
+        )
+        return 1
+    except (requests.HTTPError, requests.exceptions.RetryError):
+        # A 404 or a 5xx that outlasted the retries: the site's answer, not ours.
+        print("chess-results: chess-results.com answered with an error; try again later", file=sys.stderr)
+        return 1
+    except requests.RequestException as exc:
+        print(f"chess-results: the request to chess-results.com failed: {exc}", file=sys.stderr)
+        return 1
     except SearchError as exc:
         # The site's fault and not the user's, and worth trying again in a moment.
         print(f"chess-results: {exc}", file=sys.stderr)

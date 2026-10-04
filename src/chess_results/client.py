@@ -75,6 +75,11 @@ ART_NOT_PAIRED = 40
 #: rather than one we chose; no chess tournament comes near it.
 ALL_ROWS = 99999
 
+#: The title chess-results gives the page for a number with no tournament behind
+#: it. A real event carries its own name even before anyone has entered, so this
+#: name with an empty field means there is nothing there, not an empty event.
+NO_TOURNAMENT_TITLE = "Tournament-Database"
+
 #: The tournament search form, and the page sizes it offers (its "Maximum number
 #: of lines" select, in the order of its option values).
 SEARCH_PAGE = "TurnierSuche.aspx"
@@ -106,7 +111,11 @@ class SearchError(RuntimeError):
 
 
 class TournamentNotFoundError(TournamentError):
-    """The search has no tournament by that number."""
+    """chess-results has no tournament by that number.
+
+    Raised before any round is fetched: the site answers such a number with a
+    placeholder page, not an error, so it is recognised by that page.
+    """
 
 
 class TeamTournamentError(TournamentError):
@@ -169,6 +178,10 @@ def retrying_adapter(retries: int = RETRIES, backoff_factor: float = BACKOFF_FAC
 
 def _iso(day: datetime.date | str | None) -> str:
     return day.isoformat() if isinstance(day, datetime.date) else (day or "")
+
+
+def _no_such_tournament(name: str | None, players: list[StartingRankEntry]) -> bool:
+    return name == NO_TOURNAMENT_TITLE and not players
 
 
 def settled_rounds(event: Tournament) -> set[int]:
@@ -487,13 +500,16 @@ class ChessResults:
         of the same page.
         """
         html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
+        name, players = parse_tournament_name(html), parse_starting_rank(html)
+        if _no_such_tournament(name, players):
+            raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
         details = parse_tournament_details(html)
         return Entrants(
             id=str(tournament_id),
-            name=parse_tournament_name(html),
+            name=name,
             time_control=details.get("Time control"),
             dates=details.get("Date"),
-            players=parse_starting_rank(html),
+            players=players,
         )
 
     def round_ttl(self, tournament_id: str | int, rnd: int) -> int:
@@ -568,8 +584,13 @@ class ChessResults:
         wrong for anyone who took one.
         """
         html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
-        event = Tournament(id=str(tournament_id), name=parse_tournament_name(html), bye_value=bye_value)
-        event.add_starting_rank(parse_starting_rank(html))
+        name, players = parse_tournament_name(html), parse_starting_rank(html)
+        if _no_such_tournament(name, players):
+            # Before any round page: there are none to fetch, and probing thirty
+            # of them would end in "not started", which is the wrong answer.
+            raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
+        event = Tournament(id=str(tournament_id), name=name, bye_value=bye_value)
+        event.add_starting_rank(players)
 
         wanted = range(1, rounds + 1) if isinstance(rounds, int) else rounds
         previous: object = None
@@ -649,10 +670,6 @@ class ChessResults:
             event.check_published_totals(parsed, parse_published_totals(html))
             self.coverage.record(tournament_id, event.last_round)
 
-        # A round that settled during this run was cached with the short
-        # lifetime, and requests-cache cannot be told otherwise after the fact.
-        # Extend the stored entries in place rather than spending a request each
-        # to fetch pages that have not changed and never will again.
         if not event.rounds:
             # Every reason for this is the same to a reader: a field, and no
             # games. Saying so beats reporting a tournament of zero rounds.
@@ -660,6 +677,10 @@ class ChessResults:
                 f"tournament {tournament_id} has no played rounds; it has probably not started yet"
             )
 
+        # A round that settled during this run was cached with the short
+        # lifetime, and requests-cache cannot be told otherwise after the fact.
+        # Extend the stored entries in place rather than spending a request each
+        # to fetch pages that have not changed and never will again.
         now_settled = settled_rounds(event)
         for rnd in sorted(now_settled - self.settled.rounds(tournament_id)):
             self._extend_cached_lifetime(tournament_id, ART_ROUND_PAIRINGS, {"rd": rnd}, SETTLED_TTL)

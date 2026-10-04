@@ -259,3 +259,59 @@ class TestTheErrorsAreImportableFromTheTopLevel:
 
         missing = [n for n in chess_results.__all__ if not hasattr(chess_results, n)]
         assert missing == []
+
+
+class TestANumberWithNoTournament:
+    """chess-results answers a number with no tournament behind it with a placeholder
+    page titled "Tournament-Database" and an empty field, not an error. Reading it as
+    an event gave "0 player(s)" from players and "probably not started yet" from the
+    rest; both are wrong answers to a mistyped number."""
+
+    class _Client:
+        def __init__(self):
+            self.calls = []
+
+        def fetch(self, tournament_id, art, **kwargs):
+            self.calls.append(art)
+            return fixture("missing_tournament_startingrank.html")
+
+    def test_tournament_says_so_before_fetching_any_round(self, monkeypatch):
+        from chess_results.client import ChessResults, TournamentNotFoundError
+
+        stub = self._Client()
+        client = ChessResults()
+        monkeypatch.setattr(client, "fetch", stub.fetch)
+        with pytest.raises(TournamentNotFoundError, match="no tournament 99999999"):
+            client.tournament(99999999)
+        assert stub.calls == [0]  # the starting rank, and not thirty round probes
+
+    def test_entrants_says_so_too(self, monkeypatch):
+        from chess_results.client import ChessResults, TournamentNotFoundError
+
+        client = ChessResults()
+        monkeypatch.setattr(client, "fetch", self._Client().fetch)
+        with pytest.raises(TournamentNotFoundError):
+            client.entrants(99999999)
+
+    def test_an_event_with_nobody_entered_yet_is_not_mistaken_for_one(self, monkeypatch):
+        """A real event keeps its own name with an empty field."""
+        from chess_results.client import ChessResults
+
+        page = fixture("missing_tournament_startingrank.html").replace("Tournament-Database", "Spring Open")
+        client = ChessResults()
+        monkeypatch.setattr(client, "fetch", lambda tournament_id, art, **kwargs: page)
+        entrants = client.entrants(1)
+        assert (entrants.name, entrants.players) == ("Spring Open", [])
+
+    def test_players_is_an_error_on_the_command_line(self, monkeypatch, capsys):
+        from chess_results.client import ChessResults
+
+        monkeypatch.setattr(
+            ChessResults,
+            "fetch",
+            lambda self, tid, art, **kwargs: fixture("missing_tournament_startingrank.html"),
+        )
+        assert main(["players", "99999999", "--no-cache"]) == 2
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err.strip() == "chess-results: chess-results has no tournament 99999999"

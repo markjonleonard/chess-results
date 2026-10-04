@@ -7,6 +7,7 @@ import re
 from typing import ClassVar
 
 import pytest
+import requests
 
 from chess_results import sheet
 from chess_results.cli import (
@@ -16,10 +17,12 @@ from chess_results.cli import (
     DEFAULT_NAME_WIDTH,
     MAX_WARNINGS,
     MIN_NAME_WIDTH,
+    REFUSED,
     _fit,
     _how_far,
     _limited,
     _name_width,
+    _progress,
     _requested_round,
     _round,
     _state,
@@ -600,7 +603,14 @@ class TestPlayers:
 
 
 class TestUnfinished:
-    """What is still being played in the latest round."""
+    """What is still being played in the latest round.
+
+    The heading says how far the round has got with `_how_far`, the same words
+    every other report uses, so a paired round, a live one and a settled one each
+    read correctly; the line under it says what is left.
+    """
+
+    NAME = "2026 British Chess Championships: Championship"
 
     def _run(self, event, monkeypatch, capsys, limit=None):
         monkeypatch.setattr("chess_results.cli._fetch", lambda args: event)
@@ -609,19 +619,32 @@ class TestUnfinished:
 
     def test_a_paired_round_with_no_results_lists_every_board(self, british, monkeypatch, capsys):
         lines = self._run(british, monkeypatch, capsys)
-        assert lines[0] == "round 7: 51 game(s) still unfinished"
-        assert len(lines) == 52
-        assert lines[1].startswith("  bd1   ")
+        assert lines[0] == f"{self.NAME} — round 7 paired, no results yet"
+        assert lines[1] == "51 game(s) still unfinished"
+        assert len(lines) == 53
+        assert lines[2].startswith("  bd1   ")
+
+    def test_a_live_round_says_how_many_results_are_in(self, monkeypatch, capsys):
+        from conftest import _british
+
+        live = _british(crosstable=True, rounds=6)  # round 6 caught with six games in progress
+        lines = self._run(live, monkeypatch, capsys)
+        done, total = _progress(live, 6)
+        assert lines[0] == f"{self.NAME} — during round 6: {done} of {total} results in"
+        assert lines[1] == f"{total - done} game(s) still unfinished"
 
     def test_each_row_names_both_players_and_their_scores(self, british, monkeypatch, capsys):
-        assert re.fullmatch(r"  bd1\s+\S.*\(\S+\) vs .*\(\S+\)", self._run(british, monkeypatch, capsys)[1])
+        assert re.fullmatch(r"  bd1\s+\S.*\(\S+\) vs .*\(\S+\)", self._run(british, monkeypatch, capsys)[2])
 
     def test_a_settled_round_says_so_instead(self, british_played_out, monkeypatch, capsys):
-        assert self._run(british_played_out, monkeypatch, capsys) == ["round 8: all results in"]
+        assert self._run(british_played_out, monkeypatch, capsys) == [
+            f"{self.NAME} — after round 8",
+            "all results in",
+        ]
 
     def test_limit_truncates_and_says_how_many_are_left(self, british, monkeypatch, capsys):
         lines = self._run(british, monkeypatch, capsys, limit=3)
-        assert len(lines) == 5
+        assert len(lines) == 6
         assert lines[-1] == "… and 48 more"
 
 
@@ -1121,3 +1144,72 @@ class TestJsonEverywhere:
 
     def test_dump_is_json_whether_or_not_it_is_asked_to_be(self):
         assert build_parser().parse_args(["dump", "1", "--json"]).func is cmd_dump
+
+
+class TestSharedRowOptions:
+    """--limit and --name-width parse either side of the command, like every other
+    shared option, and a command that cannot use one refuses it with the reason."""
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--limit", "3", "standings", "1"],
+            ["standings", "1", "--limit", "3"],
+            ["--name-width", "20", "standings", "1"],
+            ["standings", "1", "--name-width", "20"],
+        ],
+    )
+    def test_either_side_of_the_command(self, argv):
+        args = build_parser().parse_args(argv)
+        assert (args.limit, args.name_width) in ((3, None), (None, 20))
+
+    def test_both_default_to_unset(self):
+        args = build_parser().parse_args(["standings", "1"])
+        assert (args.limit, args.name_width) == (None, None)
+
+    @pytest.mark.parametrize(
+        ("option", "command"),
+        [(option, command) for option, refusing in REFUSED.items() for command in refusing],
+    )
+    @pytest.mark.parametrize("before", [True, False])
+    def test_a_command_that_cannot_use_one_refuses_it(self, option, command, before, capsys):
+        flag = ["--" + option.replace("_", "-"), "3"]
+        target = ["x"] if command == "search" else ["1"] + (["someone"] if command == "history" else [])
+        argv = [*flag, command, *target] if before else [command, *target, *flag]
+        with pytest.raises(SystemExit) as exit_info:
+            build_parser().parse_args(argv)
+        assert exit_info.value.code == 2
+        assert f"is not available for {command}: {REFUSED[option][command]}" in capsys.readouterr().err
+
+    def test_the_sheet_keeps_its_own_default_width(self, british, monkeypatch, capsys):
+        monkeypatch.setattr("chess_results.cli._fetch", lambda args: british)
+        common = {"round": 5, "round_flag": None, "pairs": None, "output": None, "subtitle": None}
+        common |= {"lines_per_page": 0, "no_pages": True, "no_results": False}
+        assert cmd_pairing_sheet(_args(name_width=None, **common)) == 0
+        unset = capsys.readouterr().out
+        assert cmd_pairing_sheet(_args(name_width=sheet.NAME_WIDTH, **common)) == 0
+        assert unset == capsys.readouterr().out
+
+
+class TestNetworkFailuresAreOneLine:
+    """No traceback for what the user can do nothing about but wait or reconnect."""
+
+    @pytest.mark.parametrize(
+        ("error", "words"),
+        [
+            (requests.ConnectionError("refused"), "could not reach chess-results.com"),
+            (requests.Timeout("slow"), "did not answer in time"),
+            (requests.HTTPError("503"), "answered with an error"),
+            (requests.exceptions.RetryError("too many 503s"), "answered with an error"),
+            (requests.exceptions.InvalidURL("bad"), "the request to chess-results.com failed"),
+        ],
+    )
+    def test_exit_1_and_one_line(self, error, words, monkeypatch, capsys):
+        def fail(args):
+            raise error
+
+        monkeypatch.setattr("chess_results.cli._fetch", fail)
+        assert main(["standings", "1452107"]) == 1
+        err = capsys.readouterr().err
+        assert err.startswith("chess-results: ") and words in err
+        assert err.count("\n") == 1
