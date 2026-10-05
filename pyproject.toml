@@ -43,6 +43,7 @@ chess-results = "chess_results.cli:main"
 [project.urls]
 Homepage = "https://github.com/markjonleonard/chess-results"
 Issues = "https://github.com/markjonleonard/chess-results/issues"
+Changelog = "https://github.com/markjonleonard/chess-results/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
 path = "src/chess_results/__init__.py"
