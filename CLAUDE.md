@@ -450,7 +450,7 @@ default.
 
 `.github/workflows/ci.yml`, on push to `main`, every pull request and `workflow_dispatch`.
 `lint` runs `ruff check`, `ruff format --check` and `mypy --strict` (the last against both
-`src/chess_results` and `examples`) on 3.13; `test` runs `pytest` across 3.10-3.13 with
+`src/chess_results` and `examples`) on 3.13; `test` runs `pytest` across 3.10-3.14 with
 `fail-fast: false`. No secrets and no network allowance -- the suite is fixtures only.
 
 **The dev extra is unpinned on purpose, so expect CI to break without a commit.**

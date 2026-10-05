@@ -7,7 +7,9 @@ get the results back as text you can read, or as data you can work with.
 
 > **Early days.** It works and is tested on real tournaments, but it has only
 > been tried on a handful of events. Expect rough edges, and expect commands and
-> options to change before 1.0. If you rely on it for something that matters,
+> options to change before 1.0;
+> [CHANGELOG.md](https://github.com/markjonleonard/chess-results/blob/main/CHANGELOG.md)
+> says what each release changed. If you rely on it for something that matters,
 > check its answers against the tournament's own pages.
 
 For each player it collects who they played, which colour they had, whether they
