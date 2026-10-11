@@ -101,10 +101,14 @@ class Entrants:
     """The starting-rank page (art=0), read once.
 
     Works before round 1 is paired, unlike `Tournament`, which needs at least
-    one round assembled. ``time_control`` and ``dates`` are only ever set when
-    the organiser filled in Swiss-Manager's or ChessManager's tournament
-    parameters -- many events, the 2026 British Championship among them,
-    publish neither.
+    one round assembled. Everything but ``id`` and ``players`` comes from the
+    page's tournament details, which hold only what the organiser filled in, so
+    any of it may be ``None``.
+
+    The people are the organiser's own free text, unsplit: one event writes
+    "Constable, John 415855" and another "IA Matthew Carr, FA Richard Buxton", so
+    a comma separates names in one and surname from forename in the other.
+    ``arbiters`` is every arbiter below the deputy chief, as one string.
     """
 
     id: str
@@ -112,6 +116,11 @@ class Entrants:
     time_control: str | None
     dates: str | None
     players: list[StartingRankEntry]
+    organizer: str | None = None
+    director: str | None = None
+    chief_arbiter: str | None = None
+    deputy_chief_arbiter: str | None = None
+    arbiters: str | None = None
 
 
 @dataclass(frozen=True)

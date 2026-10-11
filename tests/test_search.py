@@ -7,7 +7,7 @@ import pytest
 
 from chess_results import ChessResults, SearchError, TournamentNotFoundError
 from chess_results.models import Entrants, SearchResult, SearchResults
-from chess_results.parse import parse_search_form, parse_search_results
+from chess_results.parse import parse_form_state, parse_search_results
 from chess_results.sections import (
     event_name,
     group_sections,
@@ -92,7 +92,7 @@ class TestParseSearchResults:
 
 
 def test_the_form_is_posted_back_with_its_view_state():
-    fields = parse_search_form(fixture("search_form.html"))
+    fields = parse_form_state(fixture("search_form.html"))
     assert set(fields) == {"__VIEWSTATE", "__VIEWSTATEGENERATOR", "__EVENTVALIDATION"}
 
 
@@ -327,16 +327,18 @@ class TestSections:
             "1346571": "Milton Keynes Chess Congress 28th-29th Mar 2026 - U1400 ECF @ MK4 1NA",
         }
         client, _ = _client("search_milton_keynes2026.html", "search_milton_keynes2026.html")
-        monkeypatch.setattr(
-            client,
-            "entrants",
-            lambda tid: Entrants(
-                id=str(tid), name=by_id[str(tid)], time_control=None, dates=None, players=[]
-            ),
-        )
+        asked = []
+
+        def entrants(tid, *, details=True):
+            asked.append(details)
+            return Entrants(id=str(tid), name=by_id[str(tid)], time_control=None, dates=None, players=[])
+
+        monkeypatch.setattr(client, "entrants", entrants)
         event = client.sections(1346570)
         assert event.summary() == "FIDE OPEN 14; FIDE U1900 33; FIDE U1600 19; U1400 ECF 20 (2026)"
         assert event.total == 86
+        # A name is all it wants, so an old congress must not pay for the details postback.
+        assert asked and not any(asked)
 
     def test_an_unknown_number_is_an_error(self):
         client, _ = _client("search_no_results.html")

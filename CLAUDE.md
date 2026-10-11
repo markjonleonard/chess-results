@@ -305,23 +305,41 @@ would have to come first.
 paired" rows. Round auto-detection therefore requires at least one `PlayKind.GAME`; without
 that check the scraper invents rounds and makes the whole active field look withdrawn.
 
-**The starting-rank page's tournament-details table (organiser, time control, dates, ...)
-is only there before the event starts.** `parse_tournament_details` reads it where present,
-but "present" is not "whenever the organiser filled it in" — it is "whenever the organiser
-filled it in *and* the event has not yet been paired". Confirmed on tnr1449763 (MEGA BIG
-NORMS WARSAW SUMMER '26 IM ROUND-ROBIN - B): the pre-event fixture
-(`warsaw2026_notstarted_startingrank.html`) carries the whole block (`Organizer`,
-`Federation`, `Chief Arbiter`, `Time control`, `Location`, `Number of rounds`,
-`Tournament type`, `Rating calculation`, `Date`, `Rating-Ø`, `Pairing program`), and a
-live re-fetch of the same tournament after it had finished carries none of it: `Time
-control` and `Organizer` are both absent from the raw response. The 2026 British and every
-other mid-or-post-event fixture in the suite already carry none of it either, which used to
-read as "this organiser didn't fill the parameters in" -- Warsaw shows that is not the whole
-story. Not confirmed: whether it disappears the moment round 1 is paired, or only once the
-event is further along — nobody has caught a mid-event organiser who'd filled the block in,
-so there's nothing yet to check against. Either way it is harmless for `players`, which is
-exactly the command that runs before a round exists and therefore the one place this data
-is most likely to still be there.
+**The tournament-details table (organiser, arbiters, time control, dates, ...) has to be
+asked for, and on an old event unlocked.** `entrants()` fetches the starting rank with
+`turdet=ALL`, and `parse_tournament_details` reads the block from that. Three things, all
+checked live on 2026-10-11:
+
+- **Without `turdet` the starting-rank page usually omits it.** A live event (Spilimbergo
+  GM, tnr1509396), one not yet started (Ganja Open, tnr1479684) and one in its last round
+  (Rosario's Torneo Mayor, tnr1502126) printed nothing until asked. Some pages print it
+  anyway: Warsaw's pre-event starting rank, and the British and Arad crosstables and round
+  pages. `ALL` rather than `YES` because `YES` cuts a long arbiter list short with an
+  "All arbiters" link (Rosario's `_details_cut` fixture is that page).
+- **More than five days after an event ends, a button replaces it.** The page prints a
+  note about search engines and an `<input name="cb_alleDetails">` "Show tournament
+  details" button in place of the details and the nav bar, `turdet` or not. This is what
+  made Warsaw look as if the block vanished once the event was under way; it never did.
+  Pressing the button is an ASP.NET postback, and `_show_details` does it: it fetches a
+  fresh copy of the page for its view state and posts back. No cookie is needed. The post
+  must go to the **mirror that served the page** (`response.url`): posted to the bare
+  domain it is 302'd, the redirect turns it into a GET, and the answer is the hidden page
+  again. Only the response knows its mirror, and `fetch` returns text, which is why the
+  postback refetches rather than reusing the cached page. `details=False` skips the two
+  requests, and `sections()`'s name lookup, `starting_rank()` and `players` without
+  `-v` all pass it, which is why plain `players` on an old event shows no dates.
+- **A page can carry the button and nothing else.** `cnyt2026_g14_startingrank.html` is
+  one, so any test that feeds it to `entrants` through a stubbed `fetch` must also stub
+  `_show_details`, or it posts to chess-results for real. That passes on a laptop and
+  fails in CI, which has no network. Run the suite with
+  `HTTPS_PROXY=http://127.0.0.1:9` to catch that.
+
+The values are the organiser's free text and `Entrants` keeps each as one string. Frome writes
+"Constable, John 415855" (a FIDE ID after the name) where the British lists "IA Matthew
+Carr, FA Richard Buxton, ..." in one `Arbiter` field, so a comma means different things in
+each. The labels are `Organizer(s)`, `Tournament director`, `Chief Arbiter`, `Deputy Chief
+Arbiter` and `Arbiter`. The time control's label carries its rate on most pages (`Time
+control (Standard)`) and not on Warsaw's, so it is matched by prefix.
 
 **Parsing is header-driven, never by fixed offsets.** chess-results emits one header row
 mixing `<th>` (labelled columns) with `<td>` (the two player-name columns), so `_cells`
@@ -446,6 +464,16 @@ would spend the request the fix exists to avoid.
 The library is uncached by default (`ChessResults(cache=True)` opts in); the CLI caches by
 default.
 
+**An old event's pressed details are kept in a third sidecar, `details.json`
+(`PressedDetails`), with no expiry.** The button is two requests requests-cache cannot
+keep: the post is not cached, and the page before it must not be, since its view state is
+what the post replays. The button appears only once an event is over, so the answer is
+final and is recorded once per event. An event with nothing filled in is recorded as
+`{}`, told apart from never pressed (`None`), so it is not pressed again on every run.
+A press whose answer still shows the button is not recorded, since an empty record
+would hide the details for good. Only a caching client reads or writes it, and
+`--no-cache` therefore presses afresh.
+
 ## CI
 
 `.github/workflows/ci.yml`, on push to `main`, every pull request and `workflow_dispatch`.
@@ -538,6 +566,12 @@ The field *is* read: a team event's `art=0` lists teams (`SNo | Team | ...`, no 
 `cnyt2026_g14_startingrank.html` is that `art=0`, captured on 2026-10-04 after the event had
 finished, by when it had become a team ranking; the other `cnyt2026_g14_*` fixtures are from
 round 1.
+
+`frome2026_major_startingrank_gated.html` and `_details.html` are one starting-rank page
+(tnr1393522, captured 2026-10-11, five months after the event) before and after its "Show
+tournament details" button was posted back. The `rosario2026_mayor_*` pair is a live event's
+starting rank with `turdet=ALL` and with `turdet=YES`, the second cutting its arbiter list
+short. See `test_tournament_details.py`.
 
 To add a fixture, save the page with `curl -sL` (the `-L` matters), `lan=1` and
 `zeilen=99999`. Leave any of the three off and you get a redirect page, a German one, or a

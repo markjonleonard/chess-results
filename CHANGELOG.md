@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `players -v` (`--verbose`) prints the organiser, tournament director, chief arbiter,
+  deputy chief arbiter and arbiters where the event publishes them, and its JSON
+  carries them as `organizer`, `director`, `chief_arbiter`, `deputy_chief_arbiter` and
+  `arbiters`. For an event that ended more than five days ago this costs two requests
+  more the first time, because chess-results hides the details behind a button, and
+  the answer is cached for good, since the event is over. `-v` also brings
+  back that event's dates and time control. They are fields of `Entrants` too;
+  `entrants(id, details=False)` skips the button.
+- The time control is read where the page labels it with its rate, such as
+  "Time control (Standard)", and a live event's dates and time control are read
+  wherever its page publishes them, not only on the few pages that printed them
+  unasked.
+
 ## 0.2.0 (2026-10-04)
 
 ### Fixes worth upgrading for

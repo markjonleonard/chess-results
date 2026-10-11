@@ -91,8 +91,8 @@ an ordered list of them.
 
 A scrape walks the rounds from 1 upward until a page has no games, then fetches
 the crosstable. The starting rank supplies numbers, titles, ratings and
-federations, which pairing pages often omit — and, before the event starts,
-the tournament's own name, dates and time control (see
+federations, which pairing pages often omit — and the tournament's own name,
+dates, time control, organiser and arbiters (see
 [What this does not read](#what-this-does-not-read)).
 
 `art=40` lists only the players who have missed a round, as a grid of one column
@@ -446,15 +446,19 @@ of `TournamentError`, so a caller catches one thing and the CLI prints one line.
   begun.
 
 Also unread, but no error, since most of it is simply outside what this collects:
-no organiser, chief arbiter, playing schedule, or the tie-break columns of the
-final ranking. **Time control and dates are a partial exception** — `players`
-surfaces them (`parse_tournament_details`, `Entrants.time_control`/`.dates`),
-but only when the organiser filled in Swiss-Manager's or ChessManager's
-parameters *and* the event has not yet been paired. Confirmed on tnr1449763:
-the pre-event page carries the whole details block, and a fresh fetch of the
-same tournament after it finished carries none of it — not the crosstable, not
-the round pages, nothing rereads it once a round exists, so no other command
-sees it either.
+the playing schedule and the tie-break columns of the final ranking. **The
+tournament details are read**, but only by `players` (`parse_tournament_details`,
+`Entrants`): dates and time control, and with `-v` the organiser, director and
+arbiters. The starting-rank page prints them when asked with `turdet=ALL` (`YES`
+cuts a long arbiter list short with an "All arbiters" link). For an event more than five days
+over, the page swaps them, and its nav bar, for a "Show tournament details" button,
+to keep search engines off old pages. Pressing it is an ASP.NET postback, so it takes
+the page's view state, and the post must go to the mirror that served the page: sent
+to the bare domain it is redirected, and the redirect makes it a GET. Confirmed on
+Frome 2026's Major (tnr1393522) on 2026-10-11, months after it ended. The details are
+the organiser's free text and are passed on as written. No rule could split the
+arbiters, because Frome writes "Constable, John 415855" where the British lists "IA
+Matthew Carr, FA Richard Buxton" in one field.
 
 For the site's tables as published, including the fuller metadata and
 tie-breaks this still skips, [chessResults](https://cran.r-project.org/package=chessResults)

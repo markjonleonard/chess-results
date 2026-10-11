@@ -38,3 +38,6 @@ tibble
 venv
 [Ll]int(ed|er|ers|ing)?
 [Vv]endor(ed|ing)?
+Spilimbergo
+Torneo
+postback

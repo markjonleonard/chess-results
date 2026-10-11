@@ -75,6 +75,14 @@ class TestATeamEventsPlayers:
     ranking; the other cnyt fixtures are from round 1.
     """
 
+    @pytest.fixture(autouse=True)
+    def _details_stay_hidden(self, monkeypatch):
+        """The ``art=0`` capture is over five days old, so `entrants` would press its button."""
+        monkeypatch.setattr(
+            "chess_results.client.ChessResults._show_details",
+            lambda client, tournament_id: fixture("cnyt2026_g14_startingrank.html"),
+        )
+
     @staticmethod
     def _serve(calls):
         pages = {0: "cnyt2026_g14_startingrank.html", 16: "cnyt2026_g14_playerrank.html"}

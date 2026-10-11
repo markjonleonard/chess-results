@@ -68,18 +68,17 @@ once you have seen what the commands print.
 ### players
 
 Starting number, title, name, rating and federation for every entrant: the field,
-straight off the starting-rank list. When the organiser filled in Swiss-Manager's or
-ChessManager's tournament parameters, `players` also prints the event's dates and time
-control in its heading. That information disappears from the same page once the event
-is under way.
+straight off the starting-rank list, under the event's dates and time control where the
+page gives them.
 
 ```bash
 chess-results players 1489496
 ```
 
 ```
-Trowbridge Rapidplay 2026-2027
-18 player(s)
+Trowbridge Rapidplay 2026-2027 — 2026/09/17 to 2027/06/03
+Time control: 15 min + 10s
+20 player(s)
   No      Name                          Rtg  Fed
    1      Dave Elkin                   1900
    2      Mark J Leonard               1829
@@ -88,17 +87,16 @@ Trowbridge Rapidplay 2026-2027
 ```
 
 ```bash
-chess-results players 1449763   # before the event starts
+chess-results players 1449763
 ```
 
 ```
-MEGA BIG NORMS WARSAW SUMMER ‘26 IM ROUND-ROBIN - B — 2026/08/27 to 2026/08/31
-Time control: Standard: 90min +30sec increment per move starting from move 1
+MEGA BIG NORMS WARSAW SUMMER ‘26 IM ROUND-ROBIN - B
 10 player(s)
   No      Name                          Rtg  Fed
-   1  IM  Miś, Mieszko                 2401
-   2  IM  Gnojek, Petr                 2399
-   3  CM  Terkiewicz, Bruno            2369
+   2  IM  Miś, Mieszko                 2401
+   8  IM  Gnojek, Petr                 2399
+   7  CM  Terkiewicz, Bruno            2369
    …
 ```
 
@@ -108,6 +106,31 @@ names teams: there it reads the page chess-results.com calls "Starting rank list
 players" instead, which costs one more request, and adds a `Team` column. Names
 appear as each event publishes them: some organisers write "Surname, Forename" and some
 do not.
+
+Warsaw prints no dates or time control because the event ended more than five days
+ago, and chess-results then hides its tournament details behind a "Show tournament
+details" button. `-v` (`--verbose`) presses it, at the cost of two more requests the
+first time (the answer is cached, and `--no-cache` asks again), and
+adds the organiser, tournament director and arbiters as far as the organiser filled
+them in:
+
+```bash
+chess-results players 1393522 -v
+```
+
+```
+Frome Chess Congress 2026 - Major — 2026/05/15 to 2026/05/17
+Time control: 90 minutes + 30s from move 1
+Director: Chris Lamming and Sally Hunt
+Chief arbiter: Constable, John 415855
+Deputy chief arbiter: FA Walker, Derrick 343417094
+Arbiters: Leonard, Mark 343404405
+50 player(s)
+   …
+```
+
+Each is the organiser's own text, so names come in whatever form they were typed, FIDE
+IDs included, and a role the organiser left empty prints no line.
 
 ### standings
 
@@ -504,7 +527,7 @@ What each command's document holds:
 
 | Command | Top-level keys |
 | --- | --- |
-| `players` | `id`, `name`, `dates`, `time_control`, `total`, `truncated`, `players` (each with `team`, `null` except on a team event) |
+| `players` | `id`, `name`, `dates`, `time_control`, with `-v` `organizer`, `director`, `chief_arbiter`, `deputy_chief_arbiter` and `arbiters`, then `total`, `truncated`, `players` (each with `team`, `null` except on a team event) |
 | `standings` | `id`, `name`, `after`, progress, `live`, `total`, `truncated`, `players` (`rank`, `score`, `start_no`, `title`, `name`, `state`) |
 | `pairings` | `id`, `name`, `round`, progress, `total`, `truncated`, `boards` |
 | `colours` | `id`, `name`, `after`, `total`, `truncated`, `players` (`colours`, `floats`, `due`, `strength`) |
@@ -793,10 +816,15 @@ fields are documented in the source as well.
   and the filling in of any round a page leaves a player out of.
 - `entrants(id)` returns `Entrants`, the starting-rank list alone, as `players` reads
   it (for a team event, the player list, one request more). It works before round 1.
-  Its fields are `id`, `name`, `dates` and `time_control` (the last two only when the
-  event published them) and `players`, a list of `StartingRankEntry` (`start_no`,
+  Its fields are `id`, `name`, `players`, a list of `StartingRankEntry` (`start_no`,
   `name`, `rating`, `title`, `federation`, `fide_id`, `sex`, `team` on a team event,
-  and a few more).
+  and a few more), and the tournament details: `dates`, `time_control`, `organizer`,
+  `director`, `chief_arbiter`, `deputy_chief_arbiter` and `arbiters`, each the
+  organiser's free text or `None`. `arbiters` is everyone below the deputy chief in one
+  string, as written, because a comma separates names in one event and surname from
+  forename in the next. `entrants(id, details=False)` skips the two requests that an
+  event over five days old takes for its details; a caching client pays them once per
+  event.
 - `search(...)` returns `SearchResults`, and `sections(id)` returns `EventSections`;
   see
   [Finding sections and tournaments](#finding-sections-and-tournaments).

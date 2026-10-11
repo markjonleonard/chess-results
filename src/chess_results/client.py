@@ -25,6 +25,7 @@ from .cache import (
     SETTLED_TTL,
     STARTING_RANK_TTL,
     CrosstableCoverage,
+    PressedDetails,
     SettledRounds,
     cached_session,
 )
@@ -41,15 +42,17 @@ from .models import (
     StartingRankEntry,
 )
 from .parse import (
+    DETAILS_BUTTON,
+    has_details_button,
     has_pairings,
     is_combined_pairings,
     is_team_list,
     is_team_pairings,
     parse_crosstable,
+    parse_form_state,
     parse_not_paired,
     parse_pairings,
     parse_published_totals,
-    parse_search_form,
     parse_search_results,
     parse_starting_rank,
     parse_tournament_details,
@@ -74,6 +77,10 @@ ART_CROSSTABLE = 5
 #: "not paired": one row per player who has missed a round. Linked in the nav
 #: bar, undocumented, and it ignores ``rd`` -- there is only ever the current one.
 ART_NOT_PAIRED = 40
+
+#: ``turdet`` value that makes a tournament page print its details table, and
+#: every arbiter in it: ``YES`` cuts a long list short with an "All arbiters" link.
+ALL_DETAILS = "ALL"
 
 #: Rows to ask a list view for. chess-results paginates at 150 and offers
 #: ``zeilen=99999`` as its own "show all" link, so this is the site's number
@@ -245,6 +252,7 @@ class ChessResults:
         self.live_ttl = live_ttl
         self.settled = SettledRounds(cache_dir)
         self.coverage = CrosstableCoverage(cache_dir)
+        self.pressed = PressedDetails(cache_dir)
         self._last_request = 0.0
 
     @property
@@ -434,7 +442,7 @@ class ChessResults:
         self._last_request = time.monotonic()
         form.raise_for_status()
         data = {
-            **parse_search_form(form.text),
+            **parse_form_state(form.text),
             # The selects the form posts back as they stand: everything, by last update.
             "ctl00$P1$combo_art": "5",
             "ctl00$P1$combo_sort": "1",
@@ -493,33 +501,96 @@ class ChessResults:
         """The tournament's own name: the search's may have been cut or lost its spaces."""
         if not result.name_inexact:
             return result.name
-        return self.entrants(result.id).name or result.name
+        return self.entrants(result.id, details=False).name or result.name
 
     def starting_rank(self, tournament_id: str | int) -> list[StartingRankEntry]:
-        return self.entrants(tournament_id).players
+        return self.entrants(tournament_id, details=False).players
 
-    def entrants(self, tournament_id: str | int) -> Entrants:
-        """The field and tournament header, from the starting-rank page.
+    def entrants(self, tournament_id: str | int, *, details: bool = True) -> Entrants:
+        """The field and tournament details, from the starting-rank page.
 
         One fetch serves all of it, rather than a separate request per piece
-        of the same page. A team event is the exception: its starting-rank page
-        lists teams, so the players take a second request, to ``art=16``.
+        of the same page. Two things cost more. A team event's starting-rank
+        page lists teams, so the players take a second request, to ``art=16``.
+        And an event more than five days over hides its details behind a
+        button, which takes two more: a fresh copy of the page and the
+        postback (see `_show_details`). A caching client pays them once per
+        event and keeps the answer (`PressedDetails`). ``details=False`` skips
+        them, for a caller that wants only the field or the name.
         """
-        html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
+        html = self.fetch(
+            tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL, turdet=ALL_DETAILS
+        )
         name, players = parse_tournament_name(html), parse_starting_rank(html)
         if not players and is_team_list(html):
             team_players = self.fetch(tournament_id, ART_TEAM_PLAYERS, expire_after=STARTING_RANK_TTL)
             players = parse_starting_rank(team_players)
         if _no_such_tournament(name, players):
             raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
-        details = parse_tournament_details(html)
+        found = parse_tournament_details(html)
+        if not found and details and has_details_button(html):
+            found = self._pressed_details(tournament_id)
         return Entrants(
             id=str(tournament_id),
             name=name,
-            time_control=details.get("Time control"),
-            dates=details.get("Date"),
+            # Labelled "Time control" on some pages and "Time control (Standard)"
+            # -- or Rapid, or Blitz -- on others.
+            time_control=next((v for k, v in found.items() if k.startswith("Time control")), None),
+            dates=found.get("Date"),
             players=players,
+            organizer=found.get("Organizer(s)"),
+            director=found.get("Tournament director"),
+            chief_arbiter=found.get("Chief Arbiter"),
+            deputy_chief_arbiter=found.get("Deputy Chief Arbiter"),
+            arbiters=found.get("Arbiter"),
         )
+
+    def _pressed_details(self, tournament_id: str | int) -> dict[str, str]:
+        """An old event's details, from the record if a cached client has one.
+
+        A press whose answer still shows the button did not take, so it is not
+        recorded: an empty record would hide the details for good.
+        """
+        if self.caching and (recorded := self.pressed.get(tournament_id)) is not None:
+            return recorded
+        page = self._show_details(tournament_id)
+        found = parse_tournament_details(page)
+        if self.caching and not has_details_button(page):
+            self.pressed.record(tournament_id, found)
+        return found
+
+    def _show_details(self, tournament_id: str | int) -> str:
+        """The starting-rank page with its "Show tournament details" button pressed.
+
+        chess-results hides an old event's details behind that button, and
+        pressing it is an ASP.NET postback, so it takes the page's view state.
+        That page is fetched afresh rather than from the cache, for two
+        reasons. A stale view state may be refused, as with `search`. And the
+        post has to go to the mirror that issued it: posted to the bare domain
+        it is redirected, and the redirect turns it into a GET, which answers
+        with the hidden page again. Only the response knows its mirror, and the
+        cached page is plain text by the time `entrants` sees it.
+        """
+        options: dict[str, Any] = {"expire_after": 0} if self.caching else {}
+        self._pace()
+        page = self.session.get(
+            f"{self.base_url}/tnr{tournament_id}.aspx",
+            params=self._query(ART_STARTING_RANK, {"turdet": ALL_DETAILS}),
+            timeout=self.timeout,
+            allow_redirects=True,
+            **options,
+        )
+        self._last_request = time.monotonic()
+        page.raise_for_status()
+        self._pace()
+        response = self.session.post(
+            page.url,
+            data={**parse_form_state(page.text), DETAILS_BUTTON: "Show tournament details"},
+            timeout=self.timeout,
+        )
+        self._last_request = time.monotonic()
+        response.raise_for_status()
+        return response.text
 
     def round_ttl(self, tournament_id: str | int, rnd: int) -> int:
         """How long this round's page may be reused."""

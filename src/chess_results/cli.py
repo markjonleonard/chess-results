@@ -104,12 +104,14 @@ def _entrants(args: argparse.Namespace) -> Entrants:
 
     Separate from ``_fetch``, which assembles a full ``Tournament`` and refuses
     an event with no played rounds — ``players`` is the one report that must
-    work on the morning of the event, before that.
+    work on the morning of the event, before that. Only ``--verbose`` presses an
+    old event's details button, since most readers want the field, not the
+    two requests it costs to name the arbiters.
     """
     client = ChessResults(
         delay=args.delay, cache=not args.no_cache, cache_dir=args.cache_dir, live_ttl=args.cache_ttl
     )
-    return client.entrants(args.tournament_id)
+    return client.entrants(args.tournament_id, details=args.verbose)
 
 
 def _client(args: argparse.Namespace) -> ChessResults:
@@ -287,6 +289,15 @@ _PLAYERS_FIXED = _PLAYERS_PREFIX + _PLAYERS_TRAILING
 #: The space between the federation and a team column, when there is one.
 _TEAM_GAP = 2
 
+#: The people ``players --verbose`` prints under its heading, as (label, `Entrants` field).
+_PEOPLE = (
+    ("Organiser", "organizer"),
+    ("Director", "director"),
+    ("Chief arbiter", "chief_arbiter"),
+    ("Deputy chief arbiter", "deputy_chief_arbiter"),
+    ("Arbiters", "arbiters"),
+)
+
 
 def cmd_players(args: argparse.Namespace) -> int:
     """Print the field from the starting-rank list.
@@ -305,6 +316,9 @@ def cmd_players(args: argparse.Namespace) -> int:
                 "name": entrants.name,
                 "dates": entrants.dates,
                 "time_control": entrants.time_control,
+                # Left out rather than null without --verbose, where null would
+                # claim the event published no arbiters.
+                **({field: getattr(entrants, field) for _, field in _PEOPLE} if args.verbose else {}),
                 **_list_payload(list(shown), len(entries)),
                 "players": [dataclasses.asdict(e) for e in shown],
             }
@@ -316,6 +330,9 @@ def cmd_players(args: argparse.Namespace) -> int:
     print(heading)
     if entrants.time_control:
         print(f"Time control: {entrants.time_control}")
+    for label, field in _PEOPLE if args.verbose else ():
+        if value := getattr(entrants, field):
+            print(f"{label}: {value}")
     print(f"{len(entries)} player(s)")
     # A team event's players carry their team, which shares the room with names.
     teams = any(entry.team for entry in entries)
@@ -996,8 +1013,9 @@ COMMANDS = (
         cmd_players,
         "list the field from the starting-rank list",
         "Starting number, title, name, rating and federation for every entrant, "
-        "read from the starting-rank list alone. Works before the first round is "
-        "paired, unlike every other command here.",
+        "read from the starting-rank list alone, under the event's dates and time "
+        "control where it publishes them. Works before the first round is paired, "
+        "unlike every other command here.",
     ),
     (
         "sections",
@@ -1203,6 +1221,16 @@ def build_parser() -> argparse.ArgumentParser:
                 child.add_argument(
                     "--finished", "--finished-only", action="store_true", help="only finished tournaments"
                 )
+        if name == "players":
+            child.add_argument(
+                "-v",
+                "--verbose",
+                action="store_true",
+                help="also the organiser, tournament director and arbiters, as far as "
+                "the event publishes them. An event more than five days over hides "
+                "them, with its dates and time control, behind a button that takes "
+                "two more requests to press, once: the answer is cached.",
+            )
         if name == "standings":
             child.add_argument(
                 "--women",

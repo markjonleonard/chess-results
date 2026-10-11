@@ -11,7 +11,14 @@ import pytest
 import requests
 from tests.conftest import _round_fixture, fixture
 
-from chess_results.cache import LIVE_TTL, SETTLED_TTL, STARTING_RANK_TTL, CrosstableCoverage, SettledRounds
+from chess_results.cache import (
+    LIVE_TTL,
+    SETTLED_TTL,
+    STARTING_RANK_TTL,
+    CrosstableCoverage,
+    PressedDetails,
+    SettledRounds,
+)
 from chess_results.client import ChessResults, settled_rounds
 from chess_results.parse import parse_pairings
 from chess_results.tournament import Tournament
@@ -289,6 +296,27 @@ class TestCrosstableCoverageRecord:
         """Rather than trusting whatever the file happens to hold."""
         (tmp_path / "crosstable.json").write_text('{"1452107": "eight"}')
         assert CrosstableCoverage(cache_dir).rounds(1452107) == 0
+
+
+class TestPressedDetailsRecord:
+    def test_it_starts_empty(self, cache_dir):
+        assert PressedDetails(cache_dir).get(1393522) is None
+
+    def test_it_survives_between_runs(self, cache_dir):
+        PressedDetails(cache_dir).record(1393522, {"Chief Arbiter": "Constable, John 415855"})
+        assert PressedDetails(cache_dir).get(1393522) == {"Chief Arbiter": "Constable, John 415855"}
+
+    def test_nothing_filled_in_is_recorded_and_told_apart_from_never_pressed(self, cache_dir):
+        PressedDetails(cache_dir).record(1393522, {})
+        assert PressedDetails(cache_dir).get(1393522) == {}
+
+    def test_a_corrupt_file_is_treated_as_empty(self, cache_dir, tmp_path):
+        (tmp_path / "details.json").write_text("{not json")
+        assert PressedDetails(cache_dir).get(1393522) is None
+
+    def test_an_unreadable_value_is_treated_as_never_pressed(self, cache_dir, tmp_path):
+        (tmp_path / "details.json").write_text('{"1393522": ["Constable"]}')
+        assert PressedDetails(cache_dir).get(1393522) is None
 
 
 class TestASettledRoundIsNotFetchedAgainToLearnNothing:

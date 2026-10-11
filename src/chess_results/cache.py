@@ -124,3 +124,41 @@ class CrosstableCoverage:
             self.path.write_text(json.dumps(self._data, indent=0, sort_keys=True))
         except OSError:  # a cache that cannot be written is not an error
             pass
+
+
+class PressedDetails:
+    """Tournament details read by pressing an old event's "Show tournament details" button.
+
+    Pressing it is a fresh page and a postback, two requests requests-cache
+    cannot keep: a post is not cached, and the page it follows must not be,
+    since its view state is what the post replays. The button only appears
+    once an event is more than five days over, so what it reveals is final,
+    and a record is kept here with no expiry. An event whose organiser filled
+    nothing in is recorded as an empty mapping, so it is not pressed again
+    to learn that again.
+    """
+
+    def __init__(self, directory: str | Path | None = None) -> None:
+        self.path = Path(directory or DEFAULT_CACHE_DIR) / "details.json"
+        try:
+            self._data: dict[str, dict[str, str]] = json.loads(self.path.read_text())
+        except (OSError, ValueError):
+            self._data = {}
+
+    def get(self, tournament_id: str | int) -> dict[str, str] | None:
+        """The recorded details, or None when this event has never been pressed."""
+        value = self._data.get(str(tournament_id))
+        if not isinstance(value, dict) or not all(isinstance(v, str) for v in value.values()):
+            return None
+        return dict(value)
+
+    def record(self, tournament_id: str | int, details: dict[str, str]) -> None:
+        key = str(tournament_id)
+        if self._data.get(key) == details:
+            return
+        self._data[key] = dict(details)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self._data, indent=1, sort_keys=True, ensure_ascii=False))
+        except OSError:  # a cache that cannot be written is not an error
+            pass

@@ -18,6 +18,7 @@ from chess_results.cli import (
     MAX_WARNINGS,
     MIN_NAME_WIDTH,
     REFUSED,
+    _entrants,
     _fit,
     _how_far,
     _limited,
@@ -61,7 +62,15 @@ def _args(**kwargs):
     — which is exactly what --name-width would otherwise have cost.
     """
     return argparse.Namespace(
-        **{"after": None, "limit": None, "name_width": None, "women": False, "json": False, **kwargs}
+        **{
+            "after": None,
+            "limit": None,
+            "name_width": None,
+            "women": False,
+            "json": False,
+            "verbose": False,
+            **kwargs,
+        }
     )
 
 
@@ -73,6 +82,11 @@ def test_shared_options_parse_before_the_subcommand():
 def test_shared_options_parse_after_the_subcommand():
     args = build_parser().parse_args(["colours", "1452107", "--after", "6"])
     assert (args.after, args.tournament_id) == (6, "1452107")
+
+
+def test_verbose_is_a_players_option():
+    assert build_parser().parse_args(["players", "1", "-v"]).verbose is True
+    assert build_parser().parse_args(["players", "1"]).verbose is False
 
 
 def test_bye_value_defaults_to_a_full_point():
@@ -537,6 +551,8 @@ class TestPlayers:
         name=None,
         time_control=None,
         dates=None,
+        verbose=False,
+        **people,
     ):
         entrants = Entrants(
             id="1489496",
@@ -544,9 +560,10 @@ class TestPlayers:
             time_control=time_control,
             dates=dates,
             players=entries if entries is not None else self.ENTRIES,
+            **people,
         )
         monkeypatch.setattr("chess_results.cli._entrants", lambda args: entrants)
-        assert cmd_players(_args(limit=limit, name_width=name_width)) == 0
+        assert cmd_players(_args(limit=limit, name_width=name_width, verbose=verbose)) == 0
         return capsys.readouterr().out.splitlines()
 
     def test_never_goes_through_fetch(self, monkeypatch, capsys):
@@ -587,6 +604,55 @@ class TestPlayers:
     def test_time_control_line_is_omitted_when_the_page_does_not_publish_one(self, monkeypatch, capsys):
         lines = self._run(monkeypatch, capsys)
         assert not any(line.startswith("Time control:") for line in lines)
+
+    PEOPLE: ClassVar[dict[str, str]] = {
+        "director": "Chris Lamming and Sally Hunt",
+        "chief_arbiter": "Constable, John 415855",
+        "deputy_chief_arbiter": "FA Walker, Derrick 343417094",
+        "arbiters": "Leonard, Mark 343404405",
+    }
+
+    def test_the_people_are_left_out_without_verbose(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys, time_control="90+30", **self.PEOPLE)
+        assert lines[1:3] == ["Time control: 90+30", "3 player(s)"]
+
+    def test_verbose_asks_for_the_details_and_plain_does_not(self, monkeypatch):
+        """Pressing an old event's button costs two requests, so only --verbose does."""
+        asked = []
+
+        def entrants(self, tournament_id, *, details=True):
+            asked.append(details)
+            return Entrants(id="1", name=None, time_control=None, dates=None, players=[])
+
+        monkeypatch.setattr("chess_results.client.ChessResults.entrants", entrants)
+        client_options = {"delay": 0, "no_cache": True, "cache_dir": None, "cache_ttl": 300}
+        for verbose in (False, True):
+            _entrants(_args(tournament_id="1", verbose=verbose, **client_options))
+        assert asked == [False, True]
+
+    def test_the_people_follow_the_time_control(self, monkeypatch, capsys):
+        lines = self._run(
+            monkeypatch,
+            capsys,
+            verbose=True,
+            time_control="90+30",
+            director="Chris Lamming and Sally Hunt",
+            chief_arbiter="Constable, John 415855",
+            deputy_chief_arbiter="FA Walker, Derrick 343417094",
+            arbiters="Leonard, Mark 343404405",
+        )
+        assert lines[1:6] == [
+            "Time control: 90+30",
+            "Director: Chris Lamming and Sally Hunt",
+            "Chief arbiter: Constable, John 415855",
+            "Deputy chief arbiter: FA Walker, Derrick 343417094",
+            "Arbiters: Leonard, Mark 343404405",
+        ]
+
+    def test_a_role_the_page_leaves_empty_prints_no_line(self, monkeypatch, capsys):
+        lines = self._run(monkeypatch, capsys, verbose=True, chief_arbiter="IA Lara Barnes")
+        assert lines[1] == "Chief arbiter: IA Lara Barnes"
+        assert not any(line.startswith(("Organiser:", "Director:", "Arbiters:")) for line in lines)
 
     def test_title_is_shown(self, monkeypatch, capsys):
         assert "WCM" in self._run(monkeypatch, capsys)[5]
@@ -1109,6 +1175,7 @@ class TestJsonEverywhere:
             name="Event",
             time_control="90+30",
             dates="1 Jan",
+            chief_arbiter="IA Lara Barnes",
             players=[
                 StartingRankEntry(start_no=1, name="A", rating=1500),
                 StartingRankEntry(start_no=2, name="B"),
@@ -1120,6 +1187,13 @@ class TestJsonEverywhere:
         assert (data["total"], data["truncated"], len(data["players"])) == (2, True, 1)
         assert data["players"][0]["rating"] == 1500
         assert data["time_control"] == "90+30"
+        # Absent, not null: null would say the event named no chief arbiter.
+        assert "chief_arbiter" not in data
+        assert cmd_players(_args(json=True, limit=1, verbose=True)) == 0
+        data = json.loads(capsys.readouterr().out)
+        assert data["chief_arbiter"] == "IA Lara Barnes"
+        assert data["organizer"] is None
+        assert {"director", "deputy_chief_arbiter", "arbiters"} <= data.keys()
 
     def test_pairing_sheet(self, british, monkeypatch, capsys):
         data = self._run(cmd_pairing_sheet, british, monkeypatch, capsys, round=5)

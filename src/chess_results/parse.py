@@ -436,15 +436,16 @@ def parse_tournament_name(html: str) -> str | None:
 
 
 def parse_tournament_details(html: str) -> dict[str, str]:
-    """The tournament-details table on the starting-rank page (organiser,
-    time control, dates, and the like).
+    """The tournament-details table (organiser, arbiters, time control, dates,
+    and the like), label to value as the page prints them.
 
-    Printed only when the organiser filled in Swiss-Manager's or
-    ChessManager's tournament parameters -- the 2026 British Championship
-    carries none of it, so an empty dict is a normal result, not a parse
-    failure. The table has no id or class of its own, so it is recognised by
-    shape instead: every row exactly two ``<td class="CR">`` cells, label
-    then value.
+    The starting-rank page prints it only when asked with ``turdet``, and for an
+    event that ended more than five days ago only after its "Show tournament
+    details" button is posted back -- see `has_details_button`. Even then it holds
+    only what the organiser filled in, so an empty dict is a normal result, not a
+    parse failure. The table has no id or class of its own, so it is recognised by
+    shape instead: every row exactly two ``<td class="CR">`` cells, label then
+    value.
     """
     soup = BeautifulSoup(html, "html.parser")
     for table in soup.find_all("table"):
@@ -461,6 +462,16 @@ def parse_tournament_details(html: str) -> dict[str, str]:
         if details:
             return details
     return {}
+
+
+#: The button chess-results puts in place of the details and the nav bar once an
+#: event is more than five days over, to keep search engines off old pages.
+DETAILS_BUTTON = "cb_alleDetails"
+
+
+def has_details_button(html: str) -> bool:
+    """True if the page hides its tournament details behind a postback button."""
+    return BeautifulSoup(html, "html.parser").find("input", {"name": DETAILS_BUTTON}) is not None
 
 
 def has_pairings(html: str) -> bool:
@@ -688,11 +699,13 @@ def _name_is_inexact(name: str) -> bool:
 _SEARCH_TOTAL = re.compile(r"With this selection (\d+) tournaments? w(?:as|ere) found")
 
 
-def parse_search_form(html: str) -> dict[str, str]:
-    """The hidden fields the search form must be posted back with.
+def parse_form_state(html: str) -> dict[str, str]:
+    """The hidden fields a page's form must be posted back with.
 
     ASP.NET refuses a postback that does not carry the view state it issued, so
     these are read off the page the form came from rather than known in advance.
+    Both the search form and a tournament page's "Show tournament details"
+    button need them.
     """
     soup = BeautifulSoup(html, "html.parser")
     return {
