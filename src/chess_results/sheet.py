@@ -406,7 +406,9 @@ def _paginate(
     """Break the body across pages, repeating the heading on each.
 
     The footer goes on the last page only -- it is a note about the sheet, not
-    about the page -- and takes its own room out of that page's rows.
+    about the page -- and takes its own room out of that page's rows. A footer
+    too long to share a page with even one row gets pages of its own after the
+    pairings, under the same heading, rather than running off the paper.
     """
     top = [*heading, "", columns, rule]
     tail = ["", *footer] if footer else []
@@ -418,11 +420,20 @@ def _paginate(
     if room < 1:
         raise SheetError(f"lines_per_page={lines_per_page} leaves no room for a single pairing")
 
+    # A footer that leaves no room for a row on the final page goes on pages of
+    # its own instead, and the rows then have every page to themselves.
+    notes: list[list[str]] = []
+    if len(tail) >= room:
+        notes_top = [*heading, ""]
+        notes_room = lines_per_page - len(notes_top) - 1
+        notes = [[*notes_top, *footer[i : i + notes_room]] for i in range(0, len(footer), notes_room)]
+        tail = []
+
     # The footer competes with rows for space on the final page, so that page
     # holds fewer. Rows are then spread evenly rather than packed from the
     # front: packing can fill the early pages so completely that the last one
     # has no room left for the footer, or nothing on it but the footer.
-    last_room = max(1, room - len(tail))
+    last_room = room - len(tail)
     total = 1
     while True:
         base, extra = divmod(len(body), total)
@@ -438,11 +449,11 @@ def _paginate(
         chunks.append(body[taken : taken + size])
         taken += size
 
+    pages = [[*top, *chunk] for chunk in chunks]
+    pages[-1].extend(tail)
+    pages.extend(notes)
     rendered = []
-    for number, chunk in enumerate(chunks, start=1):
-        page = [*top, *chunk]
-        if number == len(chunks):
-            page.extend(tail)
-        page.append(f"page {number} of {len(chunks)}")
+    for number, page in enumerate(pages, start=1):
+        page.append(f"page {number} of {len(pages)}")
         rendered.append("\n".join(page))
     return (FORM_FEED + "\n").join(rendered) + "\n"

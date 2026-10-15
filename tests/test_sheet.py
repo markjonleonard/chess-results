@@ -334,6 +334,28 @@ class TestRender:
         made = PairingSheet(base.event, base.round, base.rows, ["board 1 is contested"])
         assert "! board 1 is contested" in sheet.render(made, after=1)
 
+    def test_a_footer_too_long_for_the_last_page_gets_pages_of_its_own(self):
+        base = self._sheet(5)
+        warnings = [f"warning {n}" for n in range(1, 41)]
+        text = sheet.render(
+            PairingSheet(base.event, base.round, base.rows, warnings), after=1, lines_per_page=24
+        )
+        pages = text.split(sheet.FORM_FEED)
+        assert all(len(page.strip("\n").splitlines()) <= 24 for page in pages)
+        assert all("Round 2 pairings" in page for page in pages)
+        assert sum(line.startswith("! warning ") for line in text.splitlines()) == 40
+        assert "Bd " in pages[0] and "! warning 1\n" not in pages[0]
+        assert f"page {len(pages)} of {len(pages)}" in pages[-1]
+
+    def test_a_footer_that_fits_stays_on_the_last_page_of_pairings(self):
+        base = self._sheet(5)
+        warnings = [f"warning {n}" for n in range(1, 4)]
+        text = sheet.render(
+            PairingSheet(base.event, base.round, base.rows, warnings), after=1, lines_per_page=24
+        )
+        assert sheet.FORM_FEED not in text
+        assert "! warning 3" in text
+
     def test_a_pinned_board_is_marked_and_explained(self):
         base = self._sheet(2)
         rows = [SheetRow(1, base.rows[0].white, base.rows[0].black, pinned=True), base.rows[1]]
