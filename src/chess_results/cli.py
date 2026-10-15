@@ -181,13 +181,6 @@ def _requested_round(args: argparse.Namespace) -> int | None:
     return positional if positional is not None else getattr(args, "round_flag", None)
 
 
-def _points(value: float | None) -> str:
-    if value is None:
-        return "-"
-    whole, half = divmod(value * 2, 2)
-    return f"{int(whole) if whole or not half else ''}{'½' if half else ''}" or "0"
-
-
 def _progress(event: Tournament, rnd: int) -> tuple[int, int]:
     """Games decided and games in the round; equal once the round has settled.
 
@@ -247,7 +240,7 @@ def _state(play: Play | None) -> str:
         return "not paired" if play.kind is PlayKind.UNPAIRED else "bye"
     if play.score is None:
         return "playing"
-    return _points(play.score) + ("F" if play.forfeit else "")
+    return sheet.format_points(play.score) + ("F" if play.forfeit else "")
 
 
 def cmd_dump(args: argparse.Namespace) -> int:
@@ -504,7 +497,7 @@ def cmd_standings(args: argparse.Namespace) -> int:
     players, dropped = _limited(ranked, args.limit)
     for rank, player in enumerate(players, start=1):
         line = (
-            f"{rank:>4} {_points(player.score(after)):>4} "
+            f"{rank:>4} {sheet.format_points(player.score(after)):>4} "
             f"{player.start_no or '':>4}  {player.title or '':<3} {player.name}"
         )
         print(f"{_fit(line, width)} {_state(player.play(after))}".rstrip() if live else line)
@@ -563,7 +556,8 @@ def _result(pairing: Pairing) -> str:
     """The score line of one game, as ``1-0``, ``½-½``, ``0-1``, ``1-0F`` or ``-``."""
     if pairing.white_score is None:
         return "-"
-    return f"{_points(pairing.white_score)}-{_points(pairing.black_score)}{'F' if pairing.forfeit else ''}"
+    white, black = sheet.format_points(pairing.white_score), sheet.format_points(pairing.black_score)
+    return f"{white}-{black}{'F' if pairing.forfeit else ''}"
 
 
 def _side(event: Tournament, player: PlayerRef, points: float | None) -> str:
@@ -575,7 +569,7 @@ def _side(event: Tournament, player: PlayerRef, points: float | None) -> str:
     known = event.players.get(player.name)
     start_no = player.start_no or (known.start_no if known else None)
     title = player.title or (known.title if known else None)
-    return f"{_points(points):>4} {start_no or '':>4}  {title or '':<3} {player.name}"
+    return f"{sheet.format_points(points):>4} {start_no or '':>4}  {title or '':<3} {player.name}"
 
 
 def _side_heading(label: str) -> str:
@@ -627,7 +621,7 @@ def cmd_pairings(args: argparse.Namespace) -> int:
         else:
             # A bye or a withdrawal: no opponent, so the result column carries
             # whatever the player was awarded for the round, if anything.
-            result = "" if pairing.kind is PlayKind.UNPAIRED else _points(pairing.white_score)
+            result = "" if pairing.kind is PlayKind.UNPAIRED else sheet.format_points(pairing.white_score)
             black = f"{'':>4} {'':>4}  {'':<3} {_STANDING_IN[pairing.kind]}"
         print(f"{pairing.board:>4} {_fit(white, side)} {result:<5} {_fit(black, side)}".rstrip())
     _and_the_rest(dropped)
@@ -704,7 +698,7 @@ def _history_result(play: Play | None) -> str:
     otherwise look identical on two different rows of the same table.
     """
     if play is not None and play.kind in (PlayKind.PAIRING_BYE, PlayKind.REQUESTED_BYE):
-        return f"bye ({_points(play.score)})"
+        return f"bye ({sheet.format_points(play.score)})"
     return _state(play)
 
 
@@ -747,7 +741,7 @@ def cmd_history(args: argparse.Namespace) -> int:
     for rnd in range(1, after + 1):
         play = player.play(rnd)
         print(f"{_fit(_history_row(rnd, play), total)} {_history_result(play)}".rstrip())
-    print(f"Total: {_points(player.score(after))}")
+    print(f"Total: {sheet.format_points(player.score(after))}")
     performance = event.performance_rating(player.name, after)
     if performance is not None:
         print(f"Performance: {performance}")
@@ -794,7 +788,7 @@ def cmd_colours(args: argparse.Namespace) -> int:
         due, strength = player.colour_preference(after)
         due_text = f"{due.value.upper()} ({strength.value})" if due else "-"
         print(
-            f"{_points(player.score(after)):>4} {player.start_no or '':>4}  "
+            f"{sheet.format_points(player.score(after)):>4} {player.start_no or '':>4}  "
             f"{_fit(player.name, width)} {colours:<10} {floats:<10} {due_text}"
         )
     _and_the_rest(dropped)
@@ -823,8 +817,8 @@ def cmd_unfinished(args: argparse.Namespace) -> int:
     shown, dropped = _limited(games, args.limit)
     for game in shown:
         print(
-            f"  bd{game.board:<4} {game.white.name} ({_points(game.white_points_before)}) "
-            f"vs {game.black.name if game.black else '?'} ({_points(game.black_points_before)})"
+            f"  bd{game.board:<4} {game.white.name} ({sheet.format_points(game.white_points_before)}) "
+            f"vs {game.black.name if game.black else '?'} ({sheet.format_points(game.black_points_before)})"
         )
     _and_the_rest(dropped)
     return 0

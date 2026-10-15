@@ -429,3 +429,15 @@ class TestAgainstRealPairings:
         text = sheet.render(made, after=0)
         assert "Round 1 pairings" in text
         assert made.boards == len(frome_round_one.games(1))
+
+
+class TestFormatPoints:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [(0.0, "0"), (0.5, "½"), (1.0, "1"), (2.5, "2½"), (10.0, "10"), (None, "-")],
+    )
+    def test_scores_read_as_an_arbiter_writes_them(self, value, expected):
+        assert sheet.format_points(value) == expected
+
+    def test_a_score_a_hair_off_a_half_still_reads_as_one(self):
+        assert sheet.format_points(2.4999999999999996) == "2½"

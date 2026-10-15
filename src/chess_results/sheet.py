@@ -298,8 +298,10 @@ def read_engine_pairs(text: str) -> list[tuple[int, int]]:
     return pairs
 
 
-def _points(value: float) -> str:
-    """Scores as an arbiter writes them: 2½, not 2.5."""
+def format_points(value: float | None) -> str:
+    """Scores as an arbiter writes them: 2½, not 2.5, and ``-`` for no score at all."""
+    if value is None:
+        return "-"
     whole, half = divmod(round(value * 2), 2)
     return f"{whole if whole or not half else ''}{'½' if half else ''}" or "0"
 
@@ -313,13 +315,13 @@ def _result(pairing: Pairing) -> str:
     if pairing.kind is not PlayKind.GAME or pairing.white_score is None:
         return ""
     forfeit = "F" if pairing.forfeit else ""
-    return f"{_points(pairing.white_score)}-{_points(pairing.black_score or 0)}{forfeit}"
+    return f"{format_points(pairing.white_score)}-{format_points(pairing.black_score or 0)}{forfeit}"
 
 
 def _describe(player: Player, after: int | None) -> tuple[str, str]:
     """A player's name and carried-in score, as the two columns want them."""
     title = f"{player.title} " if player.title else ""
-    return f"{title}{player.name}", _points(player.score(after))
+    return f"{title}{player.name}", format_points(player.score(after))
 
 
 def render(
