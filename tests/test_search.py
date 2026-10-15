@@ -115,6 +115,9 @@ class TestSectionLabels:
     def test_a_lone_tournament_keeps_its_name(self):
         assert section_labels(["Hastings Masters"]) == ["Hastings Masters"]
 
+    def test_no_names_give_no_labels(self):
+        assert section_labels([]) == []
+
     def test_a_name_with_nothing_of_its_own_keeps_its_full_name(self):
         assert section_labels(["Congress", "Congress Open"]) == ["Congress", "Open"]
 

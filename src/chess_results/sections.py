@@ -118,7 +118,7 @@ def section_labels(names: list[str]) -> list[str]:
     as another's, keeps its full name instead -- a label that is empty or
     ambiguous is worse than a long one.
     """
-    if len(names) == 1:
+    if len(names) <= 1:
         return list(names)
     parsed = [_words(n) for n in names]
     common = set.intersection(*({k for k, _ in words} for words in parsed))
