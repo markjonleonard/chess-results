@@ -35,6 +35,19 @@ class TestPlayerHistories:
         assert event.players["Matilal, Tamal"].start_no == 43
         assert event.players["Matilal, Tamal"].sex == "w"
 
+    def test_a_refetched_starting_rank_updates_a_rating(self):
+        """An arbiter's mid-event correction to a rating is picked up on refetch."""
+        event = Tournament(id="x")
+        event.add_starting_rank([StartingRankEntry(start_no=1, name="Doe, Jane", rating=1500)])
+        event.add_starting_rank([StartingRankEntry(start_no=1, name="Doe, Jane", rating=1600)])
+        assert event.players["Doe, Jane"].rating == 1600
+
+    def test_a_refetched_starting_rank_without_a_rating_keeps_the_one_held(self):
+        event = Tournament(id="x")
+        event.add_starting_rank([StartingRankEntry(start_no=1, name="Doe, Jane", rating=1500)])
+        event.add_starting_rank([StartingRankEntry(start_no=1, name="Doe, Jane", rating=None)])
+        assert event.players["Doe, Jane"].rating == 1500
+
     def test_colour_history(self, british):
         mcshane = british.players["Mcshane, Luke J"]
         assert "".join(c.value for c in mcshane.colours(after=6)) == "bwbwbw"

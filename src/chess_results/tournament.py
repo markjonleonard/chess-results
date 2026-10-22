@@ -174,7 +174,7 @@ class Tournament:
         for e in entries:
             p = self.player(e.name)
             p.start_no = e.start_no
-            p.rating = p.rating or e.rating
+            p.rating = e.rating or p.rating
             p.title = p.title or e.title
             p.federation = e.federation
             p.fide_id = e.fide_id

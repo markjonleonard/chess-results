@@ -17,6 +17,12 @@
   wherever its page publishes them, not only on the few pages that printed them
   unasked.
 
+### Fixes
+
+- **A refetched starting rank updates ratings.** While an event is live the starting rank
+  is fetched again, and a rating an arbiter had corrected was ignored in favour of the
+  first one read.
+
 ## 0.2.0 (2026-10-04)
 
 ### Fixes worth upgrading for
