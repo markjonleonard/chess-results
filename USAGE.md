@@ -563,7 +563,7 @@ one command alone, such as `--pairs` or `--women`, is described under that comma
 | `--name-width N` | Room for a player's name before it is clipped and ends in `…`. Default 28, narrowed to fit a small terminal; anything under 8 counts as 8. On `pairing-sheet` it sizes names for paper and is never narrowed. | `players`, `standings`, `colours`, `pairings`, `history`, `pairing-sheet` |
 | `--json` | Print JSON instead of a table. See [JSON output](#json-output). | every command |
 | `--rounds N` | Stop reading after round N. | the round-reading commands; ignored by `players` |
-| `--bye-value P` | What a pairing-allocated bye is worth, in points (default 1.0). | the round-reading commands; ignored by `players` |
+| `--bye-value P` | What a pairing-allocated bye is worth, in points (default: read from the pre-round scores, else 1.0). | the round-reading commands; ignored by `players` |
 | `--no-crosstable` | Skip the crosstable request. The round pages are then not cross-checked, and a player a page leaves out of a round is not filled in. | the round-reading commands; ignored by `players` |
 | `--delay S` | Seconds to wait between requests (default 1.0). | every command |
 | `--no-cache` | Always refetch, ignoring the cache. | every command |
@@ -602,10 +602,17 @@ chess-results pairings 1452107 6 --name-width 40
 **`--bye-value`** matters if your event scores the pairing-allocated bye at less
 than a point. A *pairing-allocated bye* is the one the pairing program gives the
 odd player out; it is not the bye a player asks for. The crosstable prints every
-pairing-allocated bye as a full point whatever the event actually awards, so this
-option tells the tool what the real value is, and it rescores those byes to match.
-Requested byes, which are commonly half a point, are read as published and are not
-affected.
+pairing-allocated bye as a full point whatever the event actually awards, so the
+tool needs the real value, and it rescores those byes to match. Requested byes,
+which are commonly half a point, are read as published and are not affected.
+
+You normally do not need the option. Each round page prints every player's score
+going into the round, which includes any bye already awarded, so once someone has had
+a pairing-allocated bye the tool works the value out from the next round's page, with
+no extra request. When it reads something other than a full point it says so on
+stderr. It falls back to a full point when no one has had a bye yet, or when the event
+prints no pre-round scores, and it reports a disagreement and does the same when
+players' scores imply different values. Give `--bye-value` to override all of that.
 
 ### Errors and exit codes
 
@@ -810,9 +817,10 @@ fields are documented in the source as well.
 
 **Its methods:**
 
-- `tournament(id, *, rounds=None, bye_value=1.0, crosstable=True)` returns a
+- `tournament(id, *, rounds=None, bye_value=None, crosstable=True)` returns a
   `Tournament`. `rounds` is a count or a `range`, as `--rounds`; `bye_value` is as
-  `--bye-value`; `crosstable=False` is `--no-crosstable`, and skips the cross-check
+  `--bye-value`, and `None` reads it from the round pages (`Tournament.bye_value_inferred`
+  says whether it did); `crosstable=False` is `--no-crosstable`, and skips the cross-check
   and the filling in of any round a page leaves a player out of.
 - `entrants(id)` returns `Entrants`, the starting-rank list alone, as `players` reads
   it (for a team event, the player list, one request more). It works before round 1.
@@ -828,7 +836,7 @@ fields are documented in the source as well.
 - `search(...)` returns `SearchResults`, and `sections(id)` returns `EventSections`;
   see
   [Finding sections and tournaments](#finding-sections-and-tournaments).
-- `congress(sections, *, name=None, rounds=None, bye_value=1.0, crosstable=True,
+- `congress(sections, *, name=None, rounds=None, bye_value=None, crosstable=True,
   skip_unreadable=False)` returns a `Congress`.
 
 **`Tournament`** has `id`, `name`, `players` (a dict keyed by name), `rounds` (round
@@ -960,8 +968,8 @@ announcement.
 ### The other options
 
 - `--bye-value P`: what a pairing-allocated bye is worth, as on the command line
-  (default 1.0). It is written into the file, and bbpPairings refuses a file whose
-  scores do not add up, so it has to be right.
+  (by default read from the event, else 1.0). It is written into the file, and
+  bbpPairings refuses a file whose scores do not add up, so it has to be right.
 - `--initial-color white1|black1`: the colour the top seed has in round 1, which FIDE
   calls the initial colour. It is needed only to predict round 1 of an event that has
   not started, since there is no colour history yet to infer it from.

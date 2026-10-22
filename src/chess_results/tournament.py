@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
@@ -157,6 +158,9 @@ class Tournament:
     #: full point; some congresses award a half. The crosstable always prints a
     #: PAB as 1, so a round recovered from it has to be rescored by this.
     bye_value: float = 1.0
+    #: True when :attr:`bye_value` was read off the pre-round scores
+    #: (:meth:`infer_bye_value`) rather than supplied by the caller.
+    bye_value_inferred: bool = False
     #: Where a round page and the crosstable contradicted each other. Filled by
     #: :meth:`add_crosstable`; empty on every fixture in the suite.
     disagreements: list[Disagreement] = field(default_factory=list)
@@ -241,6 +245,78 @@ class Tournament:
                     float_direction=b_float,
                 )
             )
+
+    def bye_value_evidence(self) -> dict[str, float]:
+        """What each player's own pre-round score says a pairing-allocated bye is worth.
+
+        A round page prints every player's score going *into* the round, and that
+        score includes whatever the arbiter awarded for a bye in an earlier one.
+        So once a player has had a pairing-allocated bye, the first later round
+        they have a pre-round score for gives the bye as that score less the
+        results published for their other rounds. Keyed by player name, one
+        figure each.
+
+        A player is left out unless every round before that one is on record with
+        a result, since a missing round would be mistaken for a bye's worth. With
+        several byes before it the figure is their average. A figure outside
+        0 to 1 is not a bye's value, so it is not evidence either.
+        """
+        found: dict[str, float] = {}
+        for name, player in self.players.items():
+            by_round = {play.round: play for play in player.plays}
+            for rnd in sorted(by_round):
+                before = by_round[rnd].points_before
+                earlier = [by_round.get(r) for r in range(1, rnd)]
+                if before is None or any(play is None or play.score is None for play in earlier):
+                    continue
+                byes = sum(1 for play in earlier if play is not None and play.kind is PlayKind.PAIRING_BYE)
+                if not byes:
+                    continue
+                others = sum(
+                    play.score or 0.0
+                    for play in earlier
+                    if play is not None and play.kind is not PlayKind.PAIRING_BYE
+                )
+                value = round((before - others) / byes, 3)
+                if 0.0 <= value <= 1.0:
+                    found[name] = value
+                break
+        return found
+
+    def infer_bye_value(self) -> float | None:
+        """The value of a pairing-allocated bye, if the pre-round scores agree on one.
+
+        Returns None when no player has the evidence (no pairing-allocated bye
+        yet, or an event that prints no pre-round scores), and also when the
+        players disagree, in which case each one out of line with the most common
+        figure is recorded in :attr:`disagreements`. A guess among conflicting
+        figures would be worse than the default, since a wrong value makes
+        bbpPairings refuse the file.
+        """
+        evidence = self.bye_value_evidence()
+        if not evidence:
+            return None
+        usual = Counter(evidence.values()).most_common(1)[0][0]
+        odd = {name: value for name, value in evidence.items() if value != usual}
+        for name, value in odd.items():
+            self.disagreements.append(
+                Disagreement(
+                    player=name, round=0, field="bye_value", from_round_page=value, from_crosstable=usual
+                )
+            )
+        return None if odd else usual
+
+    def set_bye_value(self, value: float) -> None:
+        """Change what a pairing-allocated bye is worth, rescoring the ones already read."""
+        self.bye_value = value
+        for pairings in self.rounds.values():
+            for pairing in pairings:
+                if pairing.kind is PlayKind.PAIRING_BYE:
+                    pairing.white_score = value
+        for player in self.players.values():
+            for play in player.plays:
+                if play.kind is PlayKind.PAIRING_BYE:
+                    play.score = value
 
     def add_crosstable(self, crosstable: dict[int, list[CrosstableEntry]]) -> list[Play]:
         """Fill any round a player is missing, and return what was added.

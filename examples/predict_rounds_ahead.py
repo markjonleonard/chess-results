@@ -59,7 +59,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "to infer from)",
     )
     parser.add_argument("--total-rounds", type=int, help="rounds in the tournament (XXR)")
-    parser.add_argument("--bye-value", type=float, default=1.0)
+    parser.add_argument("--bye-value", type=float, default=None)
     parser.add_argument("--trf", help="keep the final round's generated TRF here")
     parser.add_argument(
         "--sheet",
@@ -221,7 +221,9 @@ def main(argv: list[str] | None = None) -> int:
             ) from None
         html = client.fetch(args.tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL)
         event = Tournament(
-            id=str(args.tournament_id), name=parse_tournament_name(html), bye_value=args.bye_value
+            id=str(args.tournament_id),
+            name=parse_tournament_name(html),
+            bye_value=1.0 if args.bye_value is None else args.bye_value,
         )
         event.add_starting_rank(parse_starting_rank(html))
     print(f"{event.name} — {len(event.players)} players, {event.last_round} rounds scraped", file=sys.stderr)

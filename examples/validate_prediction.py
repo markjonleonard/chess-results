@@ -56,7 +56,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--round", type=int, required=True, help="the round to reproduce")
     parser.add_argument("--engine", required=True, help="path to bbpPairings.exe")
     parser.add_argument("--total-rounds", type=int, help="rounds in the tournament (XXR)")
-    parser.add_argument("--bye-value", type=float, default=1.0)
+    parser.add_argument("--bye-value", type=float, default=None)
     parser.add_argument(
         "--consecutive",
         type=int,

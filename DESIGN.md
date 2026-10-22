@@ -480,8 +480,11 @@ is an R package covering that ground.
   bye and keeps what the page displays. The crosstable is unambiguous about what
   happened and is the authority wherever a round page has no row for a player, but it
   prints every pairing-allocated bye as a full point regardless of what the event
-  awards, so a bye recovered from it is rescored to `Tournament.bye_value`. That
-  is a correctness matter, not a display one: `to_trf` declares a non-standard
+  awards, so a bye recovered from it is rescored to `Tournament.bye_value`. The value
+  is read from the round pages when not given: a pre-round score includes any bye
+  already awarded, so `bye_value_evidence` takes a player's first such score after a
+  pairing-allocated bye and subtracts their other results, and `infer_bye_value`
+  accepts only a unanimous answer. That is a correctness matter, not a display one: `to_trf` declares a non-standard
   value as bbpPairings' `BBU` line, and the engine recomputes every score from the
   results and refuses the file if the totals disagree.
 - **Points are written two ways in one tournament.** Round-by-round cells use `½`;

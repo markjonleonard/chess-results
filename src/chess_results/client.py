@@ -649,7 +649,7 @@ class ChessResults:
         tournament_id: str | int,
         *,
         rounds: int | range | None = None,
-        bye_value: float = 1.0,
+        bye_value: float | None = None,
         crosstable: bool = True,
     ) -> Tournament:
         """Fetch a whole tournament.
@@ -657,6 +657,11 @@ class ChessResults:
         ``rounds`` may be a count, a range, or None to fetch until the rounds run
         out. Rounds that have been paired but not yet played are included, with
         results left as None.
+
+        ``bye_value`` is what a pairing-allocated bye is worth. Left as None it is
+        read off the round pages' pre-round scores once a player has had one
+        (:meth:`Tournament.infer_bye_value`), at no cost in requests, and is a
+        full point where that cannot be told. A number given is used as it stands.
 
         ``crosstable`` adds one request for the crosstable, which cross-checks
         the round pages and fills any round a player has no row for. Without it
@@ -669,7 +674,9 @@ class ChessResults:
             # Before any round page: there are none to fetch, and probing thirty
             # of them would end in "not started", which is the wrong answer.
             raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
-        event = Tournament(id=str(tournament_id), name=name, bye_value=bye_value)
+        # Read as a full point until the rounds say otherwise.
+        provisional = 1.0 if bye_value is None else bye_value
+        event = Tournament(id=str(tournament_id), name=name, bye_value=provisional)
         event.add_starting_rank(players)
 
         wanted = range(1, rounds + 1) if isinstance(rounds, int) else rounds
@@ -696,7 +703,7 @@ class ChessResults:
                 )
             if not has_pairings(page):
                 break
-            pairings = parse_pairings(page, rnd, bye_value=bye_value)
+            pairings = parse_pairings(page, rnd, bye_value=provisional)
             # A round that has not been paired yet still renders a table, holding
             # only the withdrawn players' "not paired" rows. No games means the
             # tournament has not reached this round.
@@ -732,6 +739,14 @@ class ChessResults:
             # has settled, only while it has not.
             html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL, refresh=True)
             event.add_starting_rank(parse_starting_rank(html))
+
+        if bye_value is None and event.rounds:
+            # Before the crosstable, which rescores any bye it recovers by this.
+            inferred = event.infer_bye_value()
+            if inferred is not None:
+                event.bye_value_inferred = True
+                if inferred != event.bye_value:
+                    event.set_bye_value(inferred)
 
         if crosstable and event.rounds:
             # Fetched once and parsed twice: the round-by-round cells, and the
@@ -773,7 +788,7 @@ class ChessResults:
         *,
         name: str | None = None,
         rounds: int | range | None = None,
-        bye_value: float = 1.0,
+        bye_value: float | None = None,
         crosstable: bool = True,
         skip_unreadable: bool = False,
         progress: Callable[[str, str], None] | None = None,
@@ -789,8 +804,9 @@ class ChessResults:
         Every other argument is passed to :meth:`tournament` unchanged and
         applies to all sections. ``bye_value`` in particular is a property of
         the congress rather than of a section -- one set of conditions of entry
-        governs the lot -- so a single value is the right shape. Check it
-        against the crosstable's published totals before trusting it.
+        governs the lot -- so a single value is the right shape. Left as None,
+        each section reads its own from its pre-round scores, as
+        :meth:`tournament` does.
 
         ``skip_unreadable`` records a section that raises
         :class:`TournamentError` in :attr:`Congress.unreadable` and carries on,

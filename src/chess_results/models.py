@@ -255,7 +255,8 @@ class Disagreement:
     player: str
     round: int
     #: The attribute that differs: "kind", "colour", "opponent", "score",
-    #: "forfeit", or "total" for a published total that our cells do not sum to.
+    #: "forfeit", "total" for a published total that our cells do not sum to, or
+    #: "bye_value" for a player whose pre-round scores imply a different bye value.
     field: str
     from_round_page: object = None
     from_crosstable: object = None
@@ -270,6 +271,12 @@ class Disagreement:
             return (
                 f"{self.player}: the crosstable's rounds sum to "
                 f"{show(self.from_round_page)} but it publishes {show(self.from_crosstable)}"
+            )
+        if self.field == "bye_value":
+            # No crosstable involved: one player's pre-round scores against the others'.
+            return (
+                f"{self.player}: the pre-round scores imply a pairing-allocated bye worth "
+                f"{show(self.from_round_page)}, against {show(self.from_crosstable)} for most players"
             )
         return (
             f"round {self.round}: {self.player}: {self.field} is "

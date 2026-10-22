@@ -89,10 +89,6 @@ def test_verbose_is_a_players_option():
     assert build_parser().parse_args(["players", "1"]).verbose is False
 
 
-def test_bye_value_defaults_to_a_full_point():
-    assert build_parser().parse_args(["standings", "1"]).bye_value == 1.0
-
-
 def test_players_is_registered_on_the_parser():
     args = build_parser().parse_args(["players", "1489496"])
     assert args.func is cmd_players

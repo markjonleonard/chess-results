@@ -96,6 +96,7 @@ def _fetch(args: argparse.Namespace) -> Tournament:
         crosstable=not args.no_crosstable,
     )
     _warn_disagreements(event)
+    _note_inferred_bye_value(event)
     return event
 
 
@@ -139,6 +140,20 @@ def _list_payload(rows: list[object], total: int) -> dict[str, object]:
     return {"total": total, "truncated": total > len(rows)}
 
 
+def _note_inferred_bye_value(event: Tournament) -> None:
+    """Say so when a bye's value was worked out rather than the usual full point.
+
+    A bye scored at less than a point changes every figure below it, so the
+    reader should not have to wonder why. On stderr, like the warnings.
+    """
+    if event.bye_value_inferred and event.bye_value != 1.0:
+        print(
+            f"note: a pairing-allocated bye is worth {sheet.format_points(event.bye_value)} here, "
+            "read from the pre-round scores (--bye-value overrides)",
+            file=sys.stderr,
+        )
+
+
 def _warn_disagreements(event: Tournament) -> None:
     """Say so when the round pages and the crosstable contradict each other.
 
@@ -149,8 +164,8 @@ def _warn_disagreements(event: Tournament) -> None:
     if not event.disagreements:
         return
     print(
-        f"warning: {len(event.disagreements)} disagreement(s) between the round "
-        "pages and the crosstable; the figures below may be wrong",
+        f"warning: {len(event.disagreements)} disagreement(s) within the published "
+        "pages; the figures below may be wrong",
         file=sys.stderr,
     )
     for item in event.disagreements[:MAX_WARNINGS]:
@@ -936,9 +951,9 @@ def _shared(defaults: bool = True) -> argparse.ArgumentParser:
     group.add_argument(
         "--bye-value",
         type=float,
-        default=default(1.0),
+        default=default(None),
         metavar="POINTS",
-        help="points a pairing-allocated bye is worth (default 1.0)",
+        help="points a pairing-allocated bye is worth (default: read from the pre-round scores, else 1.0)",
     )
     group.add_argument(
         "--after",

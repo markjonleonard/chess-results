@@ -17,6 +17,15 @@
   wherever its page publishes them, not only on the few pages that printed them
   unasked.
 
+### Changed
+
+- `--bye-value` is no longer needed. What a pairing-allocated bye is worth is read from
+  the round pages' pre-round scores once a player has had one, at no cost in requests,
+  and a value other than a full point is reported on stderr. Without evidence it is a
+  full point as before, and a value you give still wins. `tournament()` and
+  `congress()` take `bye_value=None` for this; `Tournament.bye_value_inferred` says
+  whether it was read.
+
 ### Fixes
 
 - **A refetched starting rank updates ratings.** While an event is live the starting rank

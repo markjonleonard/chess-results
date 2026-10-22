@@ -590,6 +590,15 @@ a bye recovered from it is rescored to `Tournament.bye_value`, and `to_trf` decl
 non-standard value as a `BBU` line. Get either half wrong and the engine rejects the file
 outright.
 
+`bye_value=None` (the default) reads it from the round pages: a pre-round `Pts.` includes any
+bye already awarded, so `Tournament.infer_bye_value` takes a player's first such score after a
+pairing-allocated bye and subtracts their other results. It needs the `Pts.` columns and a
+bye with a later round, and falls back to 1.0 without either. **It is verified only on a
+full-point event** (the British: 3 players, all 1.0); no fixture comes from an event that
+awards less, so the half-point path is covered by hand-built rounds in `test_bye_value.py`.
+Replace those with a real capture when one turns up. The ranking list (`art=1`) is a possible
+second source (its totals should carry the awarded value) but has no fixture and was not built.
+
 Two more things that have already caused wrong conclusions:
 
 - **Engines emit a set of pairs, not an ordering.** Board numbers come from the arbiter's
