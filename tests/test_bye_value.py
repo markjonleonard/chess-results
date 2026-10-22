@@ -10,12 +10,13 @@ awards less.
 import copy
 
 import pytest
-from tests.conftest import _british
+from tests.conftest import _british, fixture
 from tests.test_cache import FakeSession, pages
 
 from chess_results.cli import _note_inferred_bye_value, build_parser
 from chess_results.client import ChessResults
 from chess_results.models import Pairing, PlayerRef, PlayKind
+from chess_results.parse import parse_crosstable, parse_pairings, parse_starting_rank
 from chess_results.tournament import Tournament
 
 
@@ -204,3 +205,67 @@ class TestTheCommandLine:
     def test_a_value_the_user_gave_is_not(self, capsys):
         _note_inferred_bye_value(Tournament(id="x", bye_value=0.5))
         assert capsys.readouterr().err == ""
+
+
+def _wells(crosstable=True):
+    """The 2024 Wells Congress Minor section: a half-point bye the page calls ``bye``.
+
+    Round 2 lists Chris Whitehead against ``bye`` with ``½`` in the Result cell;
+    rounds 4 and 5 list Glasbey and Moseley against ``bye`` with ``1``. The
+    crosstable calls the first a requested bye and the other two pairing-allocated.
+    """
+    event = Tournament(id="895964", name="Wells Minor")
+    event.add_starting_rank(parse_starting_rank(fixture("wells2024_minor_startingrank.html")))
+    for rnd in range(1, 6):
+        event.add_round(parse_pairings(fixture(f"wells2024_minor_r{rnd}.html"), rnd))
+    if crosstable:
+        event.add_crosstable(parse_crosstable(fixture("wells2024_minor_crosstable.html")))
+    return event
+
+
+class TestAPageThatPrintsTheByesValue:
+    def test_the_result_cell_scores_the_bye(self):
+        scores = {
+            p.white.name: p.white_score
+            for rnd in range(1, 6)
+            for p in parse_pairings(fixture(f"wells2024_minor_r{rnd}.html"), rnd)
+            if p.kind is PlayKind.PAIRING_BYE
+        }
+        assert scores == {"Chris Whitehead": 0.5, "Billy Glasbey": 1.0, "Marlowe Moseley": 1.0}
+
+    def test_an_empty_cell_falls_back_to_a_full_point(self):
+        byes = [
+            p for p in parse_pairings(fixture("british2026_champ_r7_midround.html"), 7) if p.black is None
+        ]
+        assert {p.white_score for p in byes if p.kind is PlayKind.PAIRING_BYE} == {1.0}
+
+    def test_a_value_given_wins_over_the_page(self):
+        pairings = parse_pairings(fixture("wells2024_minor_r4.html"), 4, bye_value=0.25)
+        assert [p.white_score for p in pairings if p.kind is PlayKind.PAIRING_BYE] == [0.25]
+
+    def test_the_crosstable_says_the_half_point_one_was_requested(self):
+        event = _wells()
+        play = event.players["Chris Whitehead"].play(2)
+        assert (play.kind, play.score, play.float_direction) == (PlayKind.REQUESTED_BYE, 0.5, None)
+        assert [p.kind for p in event.rounds[2] if p.black is None and p.white.name == "Chris Whitehead"] == [
+            PlayKind.REQUESTED_BYE
+        ]
+
+    def test_that_is_no_disagreement_and_the_total_is_the_published_one(self):
+        event = _wells()
+        assert event.disagreements == []
+        assert event.players["Chris Whitehead"].score(5) == 0.5
+
+    def test_the_real_pairing_byes_stay_pairing_byes(self):
+        event = _wells()
+        assert event.players["Billy Glasbey"].play(4).kind is PlayKind.PAIRING_BYE
+        assert event.players["Marlowe Moseley"].play(5).kind is PlayKind.PAIRING_BYE
+
+    def test_without_the_crosstable_the_printed_score_is_still_right(self):
+        event = _wells(crosstable=False)
+        assert event.players["Chris Whitehead"].play(2).score == 0.5
+
+    def test_only_the_pairing_allocated_byes_are_evidence(self):
+        event = _wells()
+        assert event.bye_value_evidence() == {"Billy Glasbey": 1.0}
+        assert event.infer_bye_value() == 1.0

@@ -618,7 +618,9 @@ class ChessResults:
         """
         return self.coverage.rounds(tournament_id) < event.last_round or bool(event.unfinished())
 
-    def pairings(self, tournament_id: str | int, rnd: int, *, bye_value: float = 1.0) -> list[Pairing]:
+    def pairings(
+        self, tournament_id: str | int, rnd: int, *, bye_value: float | None = None
+    ) -> list[Pairing]:
         html = self.fetch(
             tournament_id,
             ART_ROUND_PAIRINGS,
@@ -675,8 +677,9 @@ class ChessResults:
             # of them would end in "not started", which is the wrong answer.
             raise TournamentNotFoundError(f"chess-results has no tournament {tournament_id}")
         # Read as a full point until the rounds say otherwise.
-        provisional = 1.0 if bye_value is None else bye_value
-        event = Tournament(id=str(tournament_id), name=name, bye_value=provisional)
+        event = Tournament(
+            id=str(tournament_id), name=name, bye_value=1.0 if bye_value is None else bye_value
+        )
         event.add_starting_rank(players)
 
         wanted = range(1, rounds + 1) if isinstance(rounds, int) else rounds
@@ -703,7 +706,7 @@ class ChessResults:
                 )
             if not has_pairings(page):
                 break
-            pairings = parse_pairings(page, rnd, bye_value=provisional)
+            pairings = parse_pairings(page, rnd, bye_value=bye_value)
             # A round that has not been paired yet still renders a table, holding
             # only the withdrawn players' "not paired" rows. No games means the
             # tournament has not reached this round.
@@ -740,14 +743,6 @@ class ChessResults:
             html = self.fetch(tournament_id, ART_STARTING_RANK, expire_after=STARTING_RANK_TTL, refresh=True)
             event.add_starting_rank(parse_starting_rank(html))
 
-        if bye_value is None and event.rounds:
-            # Before the crosstable, which rescores any bye it recovers by this.
-            inferred = event.infer_bye_value()
-            if inferred is not None:
-                event.bye_value_inferred = True
-                if inferred != event.bye_value:
-                    event.set_bye_value(inferred)
-
         if crosstable and event.rounds:
             # Fetched once and parsed twice: the round-by-round cells, and the
             # totals the page publishes, which are the check on our reading of them.
@@ -764,6 +759,15 @@ class ChessResults:
             event.add_crosstable(parsed)
             event.check_published_totals(parsed, parse_published_totals(html))
             self.coverage.record(tournament_id, event.last_round)
+
+        if bye_value is None and event.rounds:
+            # After the crosstable, which says which of a page's byes were requested
+            # ones, and whose recovered byes this then rescores along with the rest.
+            inferred = event.infer_bye_value()
+            if inferred is not None:
+                event.bye_value_inferred = True
+                if inferred != event.bye_value:
+                    event.set_bye_value(inferred)
 
         if not event.rounds:
             # Every reason for this is the same to a reader: a field, and no

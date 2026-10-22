@@ -318,6 +318,24 @@ class Tournament:
                 if play.kind is PlayKind.PAIRING_BYE:
                     play.score = value
 
+    def _reclassify_requested_bye(self, name: str, play: Play, entry: CrosstableEntry) -> None:
+        """Take the crosstable's word that a round page's ``bye`` was a requested one.
+
+        A round page labels some half-point byes ``bye`` -- the 2024 Wells Congress
+        Minor section has one beside two real pairing-allocated byes -- where the
+        crosstable prints ``-½`` and so says which kind it was. It is the only view
+        that does, and its reading is the one that matters: a requested bye is not
+        a downfloat, and a pairing-allocated one is what ``bye_value`` rescores.
+        The score is left as the page printed it.
+        """
+        if play.kind is not PlayKind.PAIRING_BYE or entry.kind is not PlayKind.REQUESTED_BYE:
+            return
+        play.kind = PlayKind.REQUESTED_BYE
+        play.float_direction = None
+        for pairing in self.rounds.get(play.round, []):
+            if pairing.white.name == name and pairing.black is None:
+                pairing.kind = PlayKind.REQUESTED_BYE
+
     def add_crosstable(self, crosstable: dict[int, list[CrosstableEntry]]) -> list[Play]:
         """Fill any round a player is missing, and return what was added.
 
@@ -349,6 +367,7 @@ class Tournament:
                     continue
                 existing = player.play(entry.round)
                 if existing is not None:
+                    self._reclassify_requested_bye(player.name, existing, entry)
                     self.disagreements.extend(_compare(player.name, existing, entry, names))
                     continue
                 play = Play(

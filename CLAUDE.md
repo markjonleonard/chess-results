@@ -593,11 +593,21 @@ outright.
 `bye_value=None` (the default) reads it from the round pages: a pre-round `Pts.` includes any
 bye already awarded, so `Tournament.infer_bye_value` takes a player's first such score after a
 pairing-allocated bye and subtracts their other results. It needs the `Pts.` columns and a
-bye with a later round, and falls back to 1.0 without either. **It is verified only on a
-full-point event** (the British: 3 players, all 1.0); no fixture comes from an event that
-awards less, so the half-point path is covered by hand-built rounds in `test_bye_value.py`.
-Replace those with a real capture when one turns up. The ranking list (`art=1`) is a possible
-second source (its totals should carry the awarded value) but has no fixture and was not built.
+bye with a later round, and falls back to 1.0 without either. **Every event checked awards a
+full point**: the British, and an offline sweep of the 97 round-paged events in the HTTP cache
+found 79 consistent at 1.0 and none at any other value (the rest had no usable bye). No fixture
+comes from an event whose pairing-allocated bye is worth less, so that path is covered by
+hand-built rounds in `test_bye_value.py`; replace them with a real capture when one turns up.
+The ranking list (`art=1`) is a possible second source but has no fixture and was not built.
+
+**A round page can print the bye's value, and can call a requested bye `bye`.** The Result
+cell of a `bye` row is empty on the British and holds `1` or `½` on the Wells Congress, and
+`parse_pairings` scores the bye with what is printed, falling back to `bye_value` (an explicit
+one wins). Wells Minor round 2 lists Whitehead against `bye` with `½`; the crosstable prints
+that as `-½`, a requested bye, so `add_crosstable` reclassifies the play (and its `Pairing`)
+as `REQUESTED_BYE` rather than reporting a disagreement. Only the crosstable can tell the two
+kinds apart, which is why inference runs after it in `client.tournament()`. The fixtures are
+`wells2024_minor_*` (rounds 1-5, starting rank and crosstable).
 
 Two more things that have already caused wrong conclusions:
 

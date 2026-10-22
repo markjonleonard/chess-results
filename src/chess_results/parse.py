@@ -187,13 +187,16 @@ def _header_row(table: Tag, first_label: str) -> tuple[list[str], int] | None:
     return None
 
 
-def parse_pairings(html: str, rnd: int, *, bye_value: float = 1.0) -> list[Pairing]:
+def parse_pairings(html: str, rnd: int, *, bye_value: float | None = None) -> list[Pairing]:
     """Parse a round's pairing table (``art=2``).
 
-    ``bye_value`` is what a pairing-allocated bye is worth in this tournament.
-    FIDE-rated Swisses award a full point; some congresses award a half. The
-    value chess-results shows for a *requested* bye is read from the page and is
-    not affected by this setting.
+    A row against ``bye`` is scored with the value its Result cell prints, which
+    some events do (the 2024 Wells Congress prints ``1`` and ``½``) and others
+    leave empty (the British). ``bye_value`` is what a pairing-allocated bye is
+    worth in this tournament -- FIDE-rated Swisses award a full point, some
+    congresses a half -- and is used where the cell is empty. Given explicitly it
+    wins over what the page prints, since a caller who passes it means it. The
+    value chess-results shows for a *requested* bye is always read from the page.
     """
     legend = parse_legend(html)
     fixed_board_markers = {marker for marker, text in legend.items() if _FIXED_BOARD in text.lower()}
@@ -264,7 +267,10 @@ def parse_pairings(html: str, rnd: int, *, bye_value: float = 1.0) -> list[Pairi
 
             if label == BYE_LABEL:
                 kind, black = PlayKind.PAIRING_BYE, None
-                white_score, black_score = bye_value, None
+                # A page that prints a value for the bye has said what it is worth.
+                printed = white_score
+                white_score = bye_value if bye_value is not None else (1.0 if printed is None else printed)
+                black_score = None
             elif label == UNPAIRED_LABEL or not black_name:
                 black = None
                 if white_score:

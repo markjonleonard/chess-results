@@ -28,6 +28,10 @@
 
 ### Fixes
 
+- **A requested half-point bye that a round page calls `bye` is read as one.** Both the
+  score and the kind were wrong: it counted a full point and was reported as a pairing
+  bye, disagreeing with the crosstable. The Result cell's printed value is now used for a
+  `bye` row where there is one, and the crosstable's `-½` marks the bye as requested.
 - **A refetched starting rank updates ratings.** While an event is live the starting rank
   is fetched again, and a rating an arbiter had corrected was ignored in favour of the
   first one read.

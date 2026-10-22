@@ -609,7 +609,7 @@ which are commonly half a point, are read as published and are not affected.
 You normally do not need the option. Each round page prints every player's score
 going into the round, which includes any bye already awarded, so once someone has had
 a pairing-allocated bye the tool works the value out from the next round's page, with
-no extra request. When it reads something other than a full point it says so on
+no extra request. (Where a round page prints the bye's value, that is used as printed.) When it reads something other than a full point it says so on
 stderr. It falls back to a full point when no one has had a bye yet, or when the event
 prints no pre-round scores, and it reports a disagreement and does the same when
 players' scores imply different values. Give `--bye-value` to override all of that.
