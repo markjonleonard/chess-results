@@ -257,8 +257,12 @@ def main(argv: list[str] | None = None) -> int:
     for board, line in enumerate(lines[1:], start=1):
         white_no, black_no = (int(x) for x in line.split())
         white = by_no[white_no]
-        black = by_no[black_no].name if black_no else "bye"
-        print(f"{board:>3}  {white.name:<32} {white.score():>4}  -  {black}")
+        if black_no:
+            black = by_no[black_no]
+            opponent = f"{black.score():>4}  {black.name}"
+        else:
+            opponent = "      bye"
+        print(f"{board:>3}  {white.name:<32} {white.score():>4}  -  {opponent}")
     print(
         "\nBoard numbers are this script's, not the arbiter's: a pairing engine "
         "emits a set of pairs, not an ordering.",
